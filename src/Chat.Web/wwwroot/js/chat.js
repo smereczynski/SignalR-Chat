@@ -1,64 +1,6 @@
 ﻿$(document).ready(function () {
-    var connection = new signalR.HubConnectionBuilder().withUrl("/chatHub").build();
-
-    connection.start().then(function () {
-        console.log('SignalR Started...')
-        viewModel.roomList();
-        viewModel.userList();
-    }).catch(function (err) {
-        return console.error(err);
-    });
-
-    connection.on("newMessage", function (messageView) {
-        var isMine = messageView.fromUserName === viewModel.myProfile().userName();
-        var message = new ChatMessage(messageView.id, messageView.content, messageView.timestamp, messageView.fromUserName, messageView.fromFullName, isMine, messageView.avatar);
-        viewModel.chatMessages.push(message);
-        $(".messages-container").animate({ scrollTop: $(".messages-container")[0].scrollHeight }, 1000);
-    });
-
-    connection.on("getProfileInfo", function (user) {
-        viewModel.myProfile(new ProfileInfo(user.userName, user.fullName, user.avatar));
-        viewModel.isLoading(false);
-    });
-
-    connection.on("addUser", function (user) {
-        viewModel.userAdded(new ChatUser(user.userName, user.fullName, user.avatar, user.currentRoom, user.device));
-    });
-
-    connection.on("removeUser", function (user) {
-        viewModel.userRemoved(user.userName);
-    });
-
-    connection.on("addChatRoom", function (room) {
-        viewModel.roomAdded(new ChatRoom(room.id, room.name, room.admin));
-    });
-
-    connection.on("updateChatRoom", function (room) {
-        viewModel.roomUpdated(new ChatRoom(room.id, room.name, room.admin));
-    });
-
-    connection.on("removeChatRoom", function (id) {
-        viewModel.roomDeleted(id);
-    });
-
-    connection.on("removeChatMessage", function (id) {
-        viewModel.messageDeleted(id);
-    });
-
-    connection.on("onError", function (message) {
-        viewModel.serverInfoMessage(message);
-        $("#errorAlert").removeClass("d-none").show().delay(5000).fadeOut(500);
-    });
-
-    connection.on("onRoomDeleted", function () {
-        if (viewModel.chatRooms().length == 0) {
-            viewModel.joinedRoom(null);
-        }
-        else {
-            // Join to the first room from the list
-            viewModel.joinRoom(viewModel.chatRooms()[0]);
-        }
-    });
+    var connection = null; // created on demand after auth
+    var connectionHandlersWired = false;
 
     function AppViewModel() {
         var self = this;
@@ -267,22 +209,97 @@
             self.chatUsers.remove(temp);
         }
 
-        self.uploadFiles = function () {
-            var form = document.getElementById("uploadForm");
-            $.ajax({
-                type: "POST",
-                url: '/api/Upload',
-                data: new FormData(form),
-                contentType: false,
-                processData: false,
-                success: function () {
-                    $("#UploadedFile").val("");
-                },
-                error: function (error) {
-                    alert('Error: ' + error.responseText);
-                }
-            });
+        // upload removed
+    }
+
+    function wireConnectionHandlers() {
+        if (!connection || connectionHandlersWired) return;
+        connection.on("newMessage", function (messageView) {
+            var isMine = messageView.fromUserName === viewModel.myProfile().userName();
+            var message = new ChatMessage(messageView.id, messageView.content, messageView.timestamp, messageView.fromUserName, messageView.fromFullName, isMine, messageView.avatar);
+            viewModel.chatMessages.push(message);
+            $(".messages-container").animate({ scrollTop: $(".messages-container")[0].scrollHeight }, 1000);
+        });
+        connection.on("getProfileInfo", function (user) {
+            viewModel.myProfile(new ProfileInfo(user.userName, user.fullName, user.avatar));
+            viewModel.isLoading(false);
+        });
+        connection.on("addUser", function (user) {
+            viewModel.userAdded(new ChatUser(user.userName, user.fullName, user.avatar, user.currentRoom, user.device));
+        });
+        connection.on("removeUser", function (user) {
+            viewModel.userRemoved(user.userName);
+        });
+        connection.on("addChatRoom", function (room) {
+            viewModel.roomAdded(new ChatRoom(room.id, room.name, room.admin));
+        });
+        connection.on("updateChatRoom", function (room) {
+            viewModel.roomUpdated(new ChatRoom(room.id, room.name, room.admin));
+        });
+        connection.on("removeChatRoom", function (id) {
+            viewModel.roomDeleted(id);
+        });
+        connection.on("removeChatMessage", function (id) {
+            viewModel.messageDeleted(id);
+        });
+        connection.on("onError", function (message) {
+            viewModel.serverInfoMessage(message);
+            $("#errorAlert").removeClass("d-none").show().delay(5000).fadeOut(500);
+        });
+        connection.on("onRoomDeleted", function () {
+            if (viewModel.chatRooms().length == 0) {
+                viewModel.joinedRoom(null);
+            }
+            else {
+                // Join to the first room from the list
+                viewModel.joinRoom(viewModel.chatRooms()[0]);
+            }
+        });
+        connectionHandlersWired = true;
+    }
+
+    function createConnection() {
+        if (connection) return connection;
+        connection = new signalR.HubConnectionBuilder().withUrl("/chatHub").build();
+        connectionHandlersWired = false;
+        wireConnectionHandlers();
+        return connection;
+    }
+
+    function startConnection() {
+        createConnection();
+        return connection.start().then(function () {
+            console.log('SignalR Started...');
+            viewModel.roomList();
+            viewModel.userList();
+        }).catch(function (err) {
+            console.error(err);
+        });
+    }
+
+    function stopConnection() {
+        if (connection) {
+            try { connection.stop(); } catch (_) { }
+            connection = null;
+            connectionHandlersWired = false;
         }
+    }
+
+    function isAuthenticated() {
+        // Call lightweight auth ping to avoid touching rooms
+        return fetch('/api/auth/me', { method: 'GET' })
+            .then(function (r) {
+                if (!r.ok) return false;
+                return r.json().then(function (u) {
+                    // Prime profile to avoid waiting for hub callback
+                    if (u && u.userName) {
+                        viewModel.myProfile(new ProfileInfo(u.userName, u.fullName, u.avatar));
+                        viewModel.isLoading(false);
+                    }
+                    return true;
+                });
+            })
+            .catch(function () { return false; });
     }
 
     function ChatRoom(id, name, admin) {
@@ -367,4 +384,32 @@
 
     var viewModel = new AppViewModel();
     ko.applyBindings(viewModel);
+
+    // Only connect if already authenticated; otherwise wait until OTP verification
+    isAuthenticated().then(function (authed) {
+        if (authed) {
+            startConnection();
+        } else {
+            // Keep UI in unauthenticated state
+            viewModel.isLoading(true);
+            viewModel.myProfile(null);
+        }
+    });
+
+    // Expose control hooks for login/logout without reload
+    window.chatApp = window.chatApp || {};
+    window.chatApp.onAuthenticated = function () {
+        // After successful OTP verify
+        startConnection();
+    };
+    window.chatApp.logoutCleanup = function () {
+        stopConnection();
+        // Clear state and return to unauthenticated UI
+        viewModel.chatRooms.removeAll();
+        viewModel.chatUsers.removeAll();
+        viewModel.chatMessages.removeAll();
+        viewModel.joinedRoom(null);
+        viewModel.myProfile(null);
+        viewModel.isLoading(true);
+    };
 });

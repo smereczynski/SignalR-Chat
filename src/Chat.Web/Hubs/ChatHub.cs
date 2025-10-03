@@ -1,6 +1,4 @@
-﻿using AutoMapper;
-using Chat.Web.Data;
-using Chat.Web.Models;
+﻿using Chat.Web.Models;
 using Chat.Web.ViewModels;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
@@ -18,13 +16,11 @@ namespace Chat.Web.Hubs
         public readonly static List<UserViewModel> _Connections = new List<UserViewModel>();
         private readonly static Dictionary<string, string> _ConnectionsMap = new Dictionary<string, string>();
 
-        private readonly ApplicationDbContext _context;
-        private readonly IMapper _mapper;
+        private readonly Repositories.IUsersRepository _users;
 
-        public ChatHub(ApplicationDbContext context, IMapper mapper)
+        public ChatHub(Repositories.IUsersRepository users)
         {
-            _context = context;
-            _mapper = mapper;
+            _users = users;
         }
 
         public async Task SendPrivate(string receiverName, string message)
@@ -94,8 +90,13 @@ namespace Chat.Web.Hubs
         {
             try
             {
-                var user = _context.Users.Where(u => u.UserName == IdentityName).FirstOrDefault();
-                var userViewModel = _mapper.Map<ApplicationUser, UserViewModel>(user);
+                var user = _users.GetByUserName(IdentityName);
+                var userViewModel = new UserViewModel
+                {
+                    UserName = user?.UserName ?? IdentityName,
+                    FullName = user?.FullName ?? IdentityName,
+                    Avatar = user?.Avatar
+                };
                 userViewModel.Device = GetDevice();
                 userViewModel.CurrentRoom = "";
 

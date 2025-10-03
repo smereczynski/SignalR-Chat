@@ -1,0 +1,54 @@
+using System;
+using System.Threading.Tasks;
+using Azure.Communication.Email;
+using Azure.Communication.Sms;
+using Chat.Web.Options;
+
+namespace Chat.Web.Services
+{
+    // Sends OTP via ACS Email if destination looks like an email; otherwise via ACS SMS if looks like phone.
+    public class AcsOtpSender : IOtpSender
+    {
+        private readonly AcsOptions _options;
+        private readonly EmailClient _emailClient;
+        private readonly SmsClient _smsClient;
+
+        public AcsOtpSender(AcsOptions options)
+        {
+            _options = options;
+            if (string.IsNullOrWhiteSpace(options?.ConnectionString))
+                throw new InvalidOperationException("ACS ConnectionString is required when using AcsOtpSender.");
+            _emailClient = new EmailClient(options.ConnectionString);
+            _smsClient = new SmsClient(options.ConnectionString);
+        }
+
+        public async Task SendAsync(string userName, string destination, string code)
+        {
+            if (string.IsNullOrWhiteSpace(destination))
+                throw new ArgumentException("Destination is required for ACS OTP sending", nameof(destination));
+
+            if (IsEmail(destination))
+            {
+                if (string.IsNullOrWhiteSpace(_options.EmailFrom))
+                    throw new InvalidOperationException("AcsOptions.EmailFrom is required to send email OTP.");
+
+                var subject = "Your verification code";
+                var body = $"Your verification code is: {code}";
+                await _emailClient.SendAsync(Azure.WaitUntil.Completed, _options.EmailFrom, destination, subject, body);
+            }
+            else
+            {
+                if (string.IsNullOrWhiteSpace(_options.SmsFrom))
+                    throw new InvalidOperationException("AcsOptions.SmsFrom is required to send SMS OTP.");
+
+                var body = $"Code: {code}";
+                await _smsClient.SendAsync(from: _options.SmsFrom, to: destination, message: body);
+            }
+        }
+
+        private static bool IsEmail(string s)
+        {
+            return s.Contains("@");
+        }
+    }
+}
