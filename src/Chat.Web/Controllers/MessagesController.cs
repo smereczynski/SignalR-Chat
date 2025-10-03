@@ -3,11 +3,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using Chat.Web.Data;
+using Chat.Web.Repositories;
 using Chat.Web.Models;
 using Microsoft.AspNetCore.Authorization;
-using AutoMapper;
 using Microsoft.AspNetCore.SignalR;
 using Chat.Web.Hubs;
 using Chat.Web.ViewModels;
@@ -20,56 +18,68 @@ namespace Chat.Web.Controllers
     [ApiController]
     public class MessagesController : ControllerBase
     {
-        private readonly ApplicationDbContext _context;
-        private readonly IMapper _mapper;
+        private readonly IMessagesRepository _messages;
+        private readonly IRoomsRepository _rooms;
+        private readonly IUsersRepository _users;
         private readonly IHubContext<ChatHub> _hubContext;
 
-        public MessagesController(ApplicationDbContext context,
-            IMapper mapper,
+        public MessagesController(IMessagesRepository messages,
+            IRoomsRepository rooms,
+            IUsersRepository users,
             IHubContext<ChatHub> hubContext)
         {
-            _context = context;
-            _mapper = mapper;
+            _messages = messages;
+            _rooms = rooms;
+            _users = users;
             _hubContext = hubContext;
         }
 
         [HttpGet("{id}")]
-        public async Task<ActionResult<Room>> Get(int id)
+        public ActionResult<Room> Get(int id)
         {
-            var message = await _context.Messages.FindAsync(id);
+            var message = _messages.GetById(id);
             if (message == null)
                 return NotFound();
 
-            var messageViewModel = _mapper.Map<Message, MessageViewModel>(message);
-            return Ok(messageViewModel);
+            var vm = new MessageViewModel
+            {
+                Id = message.Id,
+                Content = message.Content,
+                FromUserName = message.FromUser?.UserName,
+                FromFullName = message.FromUser?.FullName,
+                Avatar = message.FromUser?.Avatar,
+                Room = message.ToRoom?.Name,
+                Timestamp = message.Timestamp
+            };
+            return Ok(vm);
         }
 
         [HttpGet("Room/{roomName}")]
         public IActionResult GetMessages(string roomName)
         {
-            var room = _context.Rooms.FirstOrDefault(r => r.Name == roomName);
+            var room = _rooms.GetByName(roomName);
             if (room == null)
                 return BadRequest();
 
-            var messages = _context.Messages.Where(m => m.ToRoomId == room.Id)
-                .Include(m => m.FromUser)
-                .Include(m => m.ToRoom)
-                .OrderByDescending(m => m.Timestamp)
-                .Take(20)
-                .AsEnumerable()
-                .Reverse()
-                .ToList();
-
-            var messagesViewModel = _mapper.Map<IEnumerable<Message>, IEnumerable<MessageViewModel>>(messages);
-
-            return Ok(messagesViewModel);
+            var items = _messages.GetRecentByRoom(room.Name, 20)
+                .Select(m => new MessageViewModel
+                {
+                    Id = m.Id,
+                    Content = m.Content,
+                    FromUserName = m.FromUser?.UserName,
+                    FromFullName = m.FromUser?.FullName,
+                    Avatar = m.FromUser?.Avatar,
+                    Room = room.Name,
+                    Timestamp = m.Timestamp
+                });
+            return Ok(items);
         }
 
         [HttpPost]
         public async Task<ActionResult<Message>> Create(MessageViewModel viewModel)
         {
-            var user = _context.Users.FirstOrDefault(u => u.UserName == User.Identity.Name);
-            var room = _context.Rooms.FirstOrDefault(r => r.Name == viewModel.Room);
+            var user = _users.GetByUserName(User.Identity.Name);
+            var room = _rooms.GetByName(viewModel.Room);
             if (room == null)
                 return BadRequest();
 
@@ -81,11 +91,19 @@ namespace Chat.Web.Controllers
                 Timestamp = DateTime.Now
             };
 
-            _context.Messages.Add(msg);
-            await _context.SaveChangesAsync();
+            msg = _messages.Create(msg);
 
             // Broadcast the message
-            var createdMessage = _mapper.Map<Message, MessageViewModel>(msg);
+            var createdMessage = new MessageViewModel
+            {
+                Id = msg.Id,
+                Content = msg.Content,
+                FromUserName = msg.FromUser?.UserName,
+                FromFullName = msg.FromUser?.FullName,
+                Avatar = msg.FromUser?.Avatar,
+                Room = room.Name,
+                Timestamp = msg.Timestamp
+            };
             await _hubContext.Clients.Group(room.Name).SendAsync("newMessage", createdMessage);
 
             return CreatedAtAction(nameof(Get), new { id = msg.Id }, createdMessage);
@@ -94,16 +112,14 @@ namespace Chat.Web.Controllers
         [HttpDelete("{id}")]
         public async Task<IActionResult> Delete(int id)
         {
-            var message = await _context.Messages
-                .Include(u => u.FromUser)
-                .Where(m => m.Id == id && m.FromUser.UserName == User.Identity.Name)
-                .FirstOrDefaultAsync();
+            var message = _messages.GetById(id);
+            if (message?.FromUser?.UserName != User.Identity.Name)
+                message = null;
 
             if (message == null)
                 return NotFound();
 
-            _context.Messages.Remove(message);
-            await _context.SaveChangesAsync();
+            _messages.Delete(id, User.Identity.Name);
 
             await _hubContext.Clients.All.SendAsync("removeChatMessage", message.Id);
 

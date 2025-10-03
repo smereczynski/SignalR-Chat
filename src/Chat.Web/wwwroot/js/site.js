@@ -14,21 +14,7 @@
         input.focus();
     });
 
-    $('#emojis-container').on('click', 'button', function () {
-        var emojiValue = $(this).data("value");
-        var input = $('#message-input');
-        input.val(input.val() + emojiValue + " ");
-        input.focus();
-        input.change();
-    });
-
-    $("#btn-show-emojis").click(function () {
-        $("#emojis-container").toggleClass("d-none");
-    });
-
-    $("#message-input, .messages-container, #btn-send-message, #emojis-container button").click(function () {
-        $("#emojis-container").addClass("d-none");
-    });
+    // Emoji UI removed
 
     $("#expand-sidebar").click(function () {
         $(".sidebar").toggleClass("open");
@@ -78,5 +64,86 @@
 
     $(document).on("hidden.bs.dropdown", ".actions .dropdown", function () {
         $(this).closest(".actions").addClass("d-none");
+    });
+
+    // OTP login/logout handlers
+    function postJson(url, data) {
+        return fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify(data || {})
+        });
+    }
+
+    function setOtpError(msg) {
+        var $err = $('#otpError');
+        if ($err.length === 0) return;
+        if (msg) {
+            $err.text(msg).removeClass('d-none');
+        } else {
+            $err.text('').addClass('d-none');
+        }
+    }
+
+    $(document).on('click', '#btn-send-otp', function () {
+        setOtpError(null);
+        var userName = $('#otpUserName').val().trim();
+        var destination = ($('#otpDestination').val() || '').trim();
+        if (!userName) { setOtpError('Username is required'); return; }
+        postJson('/api/auth/start', { userName: userName, destination: destination || null })
+            .then(function (r) { if (!r.ok) throw new Error('Failed to send code'); return r.json().catch(function(){return {};}); })
+            .then(function () {
+                $('#otp-step1').addClass('d-none');
+                $('#otp-step2').removeClass('d-none');
+                $('#otpCode').focus();
+            })
+            .catch(function (e) { setOtpError(e.message || 'Error sending code'); });
+    });
+
+    $(document).on('click', '#btn-verify-otp', function () {
+        setOtpError(null);
+        var userName = $('#otpUserName').val().trim();
+        var code = $('#otpCode').val().trim();
+        if (!userName || !code) { setOtpError('Username and code are required'); return; }
+        postJson('/api/auth/verify', { userName: userName, code: code })
+            .then(function (r) { if (!r.ok) throw new Error('Invalid code'); return r.json().catch(function(){return {};}); })
+            .then(function () {
+                var modalEl = document.getElementById('otp-login-modal');
+                if (modalEl && window.bootstrap) {
+                    try {
+                        var modalInstance = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+                        modalInstance.hide();
+                    } catch (_) { }
+                }
+                if (window.chatApp && typeof window.chatApp.onAuthenticated === 'function') {
+                    window.chatApp.onAuthenticated();
+                } else {
+                    // Fallback if chatApp isn't ready
+                    console.warn('chatApp.onAuthenticated not available');
+                }
+            })
+            .catch(function (e) { setOtpError(e.message || 'Verification failed'); });
+    });
+
+    $(document).on('click', '#btn-logout', function () {
+        postJson('/api/auth/logout', {})
+            .then(function () {
+                if (window.chatApp && typeof window.chatApp.logoutCleanup === 'function') {
+                    window.chatApp.logoutCleanup();
+                }
+            })
+            .catch(function () {
+                if (window.chatApp && typeof window.chatApp.logoutCleanup === 'function') {
+                    window.chatApp.logoutCleanup();
+                }
+            });
+    });
+
+    $('#otp-login-modal').on('show.bs.modal', function(){
+        setOtpError(null);
+        $('#otp-step1').removeClass('d-none');
+        $('#otp-step2').addClass('d-none');
+        $('#otpCode').val('');
     });
 });

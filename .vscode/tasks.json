@@ -1,0 +1,15 @@
+{
+  // VS Code task to run the app using local Azure service connection strings from .env.local
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Run Chat (Azure local env)",
+      "type": "shell",
+      "command": "zsh",
+      "args": ["-lc", "set -a; [ -f .env.local ] && source .env.local; export ASPNETCORE_ENVIRONMENT=Development; dotnet run --project ./src/Chat.Web"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": ["$msCompile"],
+      "detail": "Loads secrets from .env.local and runs Chat.Web with Development environment."
+    }
+  ]
+}
