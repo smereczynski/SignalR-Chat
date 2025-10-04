@@ -3,6 +3,9 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Chat.Web.ViewModels
 {
+    /// <summary>
+    /// API + SignalR projection of a message delivered to clients (adds correlation for optimistic UI reconciliation).
+    /// </summary>
     public class MessageViewModel
     {
         public int Id { get; set; }
@@ -14,5 +17,9 @@ namespace Chat.Web.ViewModels
         [Required]
         public string Room { get; set; }
         public string Avatar { get; set; }
+        /// <summary>
+        /// Optional client-supplied unique identifier (temporary) used to reconcile optimistic messages with server echo.
+        /// </summary>
+        public string CorrelationId { get; set; }
     }
 }

@@ -2,6 +2,9 @@
 
 namespace Chat.Web.ViewModels
 {
+    /// <summary>
+    /// Lightweight representation of a chat room returned to clients and broadcast via hub events.
+    /// </summary>
     public class RoomViewModel
     {
         public int Id { get; set; }

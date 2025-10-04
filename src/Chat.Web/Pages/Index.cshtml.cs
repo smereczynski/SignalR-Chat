@@ -9,7 +9,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Chat.Web.Pages
 {
-    [Authorize]
+    // Removed [Authorize] to prevent redirect loop; auth handled client-side & via hub/controllers.
     public class IndexModel : PageModel
     {
         private readonly ILogger<IndexModel> _logger;
@@ -21,7 +21,6 @@ namespace Chat.Web.Pages
 
         public void OnGet()
         {
-
         }
     }
 }

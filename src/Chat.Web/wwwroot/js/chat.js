@@ -1,415 +1,269 @@
-﻿$(document).ready(function () {
-    var connection = null; // created on demand after auth
-    var connectionHandlersWired = false;
+﻿/**
+ * chat.js - Framework-free chat frontend.
+ * Responsibilities:
+ *  - Bootstraps auth probe and establishes SignalR hub connection with exponential backoff
+ *  - Maintains in-memory state (rooms, users, messages, profile) and DOM rendering
+ *  - Optimistic message sending (temporary negative IDs + correlationId reconciliation)
+ *  - Client-side pagination of historical messages (infinite scroll up)
+ *  - Emits reconnect telemetry to /api/telemetry/reconnect including failure classification
+ *  - Minimal DOM querying & mutation; no external framework dependency
+ *
+ * Reconnect Telemetry Fields (sent):
+ *  - attempt: sequential attempt number
+ *  - delayMs: backoff delay chosen for next attempt
+ *  - errorCategory: classified category of the previous failure (auth|timeout|transport|server|other|unknown)
+ *  - errorMessage: truncated error message for diagnostics
+ *
+ * Message Reconciliation Strategy:
+ * 1. When sending, assign a temporary negative id and a correlationId.
+ * 2. On hub echo, first match by correlationId; if absent, fallback to matching pending negative id by content.
+ * 3. Replace pending entry to preserve ordering & local timestamp until server timestamp merges.
+ */
+(function(){
+  const log = (lvl,msg,obj)=> (window.appLogger && window.appLogger[lvl]) ? window.appLogger[lvl](msg,obj) : console.log(`[${lvl}] ${msg}`, obj||'');
 
-    function AppViewModel() {
-        var self = this;
+  // ---------------- State ----------------
+  const state = { loading:true, profile:null, rooms:[], users:[], messages:[], joinedRoom:null, filter:'', oldestLoaded:null, canLoadMore:true, pageSize:20, loadingMore:false, lastSendAt:0, minSendIntervalMs:800 };
+  const els = {};
 
-        self.message = ko.observable("");
-        self.chatRooms = ko.observableArray([]);
-        self.chatUsers = ko.observableArray([]);
-        self.chatMessages = ko.observableArray([]);
-        self.joinedRoom = ko.observable();
-        self.serverInfoMessage = ko.observable("");
-        self.myProfile = ko.observable();
-        self.isLoading = ko.observable(true);
-
-        self.showAvatar = ko.computed(function () {
-            return self.isLoading() == false && self.myProfile().avatar() != null;
-        });
-
-        self.showRoomActions = ko.computed(function () {
-            return self.joinedRoom()?.admin() == self.myProfile()?.userName();
-        });
-
-        self.onEnter = function (d, e) {
-            if (e.keyCode === 13) {
-                self.sendNewMessage();
-            }
-            return true;
-        }
-        self.filter = ko.observable("");
-        self.filteredChatUsers = ko.computed(function () {
-            if (!self.filter()) {
-                return self.chatUsers();
-            } else {
-                return ko.utils.arrayFilter(self.chatUsers(), function (user) {
-                    var fullName = user.fullName().toLowerCase();
-                    return fullName.includes(self.filter().toLowerCase());
-                });
-            }
-        });
-
-        self.sendNewMessage = function () {
-            var text = self.message();
-            if (text.startsWith("/")) {
-                var receiver = text.substring(text.indexOf("(") + 1, text.indexOf(")"));
-                var message = text.substring(text.indexOf(")") + 1, text.length);
-                self.sendPrivate(receiver, message);
-            }
-            else {
-                self.sendToRoom(self.joinedRoom(), self.message());
-            }
-
-            self.message("");
-        }
-
-        self.sendToRoom = function (room, message) {
-            if (room.name()?.length > 0 && message.length > 0) {
-                fetch('/api/Messages', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ room: room.name(), content: message })
-                });
-            }
-        }
-
-        self.sendPrivate = function (receiver, message) {
-            if (receiver.length > 0 && message.length > 0) {
-                connection.invoke("SendPrivate", receiver.trim(), message.trim());
-            }
-        }
-
-        self.joinRoom = function (room) {
-            connection.invoke("Join", room.name()).then(function () {
-                self.joinedRoom(room);
-                self.userList();
-                self.messageHistory();
-            });
-        }
-
-        self.roomList = function () {
-            fetch('/api/Rooms')
-                .then(response => response.json())
-                .then(data => {
-                    self.chatRooms.removeAll();
-                    for (var i = 0; i < data.length; i++) {
-                        self.chatRooms.push(new ChatRoom(data[i].id, data[i].name, data[i].admin));
-                    }
-
-                    if (self.chatRooms().length > 0)
-                        self.joinRoom(self.chatRooms()[0]);
-                });
-        }
-
-        self.userList = function () {
-            connection.invoke("GetUsers", self.joinedRoom()?.name()).then(function (result) {
-                self.chatUsers.removeAll();
-                for (var i = 0; i < result.length; i++) {
-                    self.chatUsers.push(new ChatUser(result[i].userName,
-                        result[i].fullName,
-                        result[i].avatar,
-                        result[i].currentRoom,
-                        result[i].device))
-                }
-            });
-        }
-
-        self.createRoom = function () {
-            var roomName = $("#roomName").val();
-            fetch('/api/Rooms', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name: roomName })
-            });
-        }
-
-        self.editRoom = function () {
-            var roomId = self.joinedRoom().id();
-            var roomName = $("#newRoomName").val();
-            fetch('/api/Rooms/' + roomId, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id: roomId, name: roomName })
-            });
-        }
-
-        self.deleteRoom = function () {
-            fetch('/api/Rooms/' + self.joinedRoom().id(), {
-                method: 'DELETE',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id: self.joinedRoom().id() })
-            });
-        }
-
-        self.deleteMessage = function () {
-            var messageId = $("#itemToDelete").val();
-
-            fetch('/api/Messages/' + messageId, {
-                method: 'DELETE',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id: messageId })
-            });
-        }
-
-        self.messageHistory = function () {
-            fetch('/api/Messages/Room/' + viewModel.joinedRoom().name())
-                .then(response => response.json())
-                .then(data => {
-                    self.chatMessages.removeAll();
-                    for (var i = 0; i < data.length; i++) {
-                        var isMine = data[i].fromUserName == self.myProfile().userName();
-                        self.chatMessages.push(new ChatMessage(data[i].id,
-                            data[i].content,
-                            data[i].timestamp,
-                            data[i].fromUserName,
-                            data[i].fromFullName,
-                            isMine,
-                            data[i].avatar))
-                    }
-
-                    $(".messages-container").animate({ scrollTop: $(".messages-container")[0].scrollHeight }, 1000);
-                });
-        }
-
-        self.roomAdded = function (room) {
-            self.chatRooms.push(room);
-        }
-
-        self.roomUpdated = function (updatedRoom) {
-            var room = ko.utils.arrayFirst(self.chatRooms(), function (item) {
-                return updatedRoom.id() == item.id();
-            });
-
-            room.name(updatedRoom.name());
-
-            if (self.joinedRoom().id() == room.id()) {
-                self.joinRoom(room);
-            }
-        }
-
-        self.roomDeleted = function (id) {
-            var temp;
-            ko.utils.arrayForEach(self.chatRooms(), function (room) {
-                if (room.id() == id)
-                    temp = room;
-            });
-            self.chatRooms.remove(temp);
-        }
-
-        self.messageDeleted = function (id) {
-            var temp;
-            ko.utils.arrayForEach(self.chatMessages(), function (message) {
-                if (message.id() == id)
-                    temp = message;
-            });
-            self.chatMessages.remove(temp);
-        }
-
-        self.userAdded = function (user) {
-            self.chatUsers.push(user);
-        }
-
-        self.userRemoved = function (id) {
-            var temp;
-            ko.utils.arrayForEach(self.chatUsers(), function (user) {
-                if (user.userName() == id)
-                    temp = user;
-            });
-            self.chatUsers.remove(temp);
-        }
-
-        // upload removed
+  function cacheDom(){
+    els.app = document.querySelector('.app');
+    // Select the actual loading spinner container, not the outer layout wrapper.
+    // There are two elements with class 'vh-100': the layout wrapper and the loader div.
+    // Prefer the one that contains a spinner-border child.
+    const vhCandidates = Array.from(document.querySelectorAll('.vh-100'));
+    els.loaderWrapper = vhCandidates.find(el => el.querySelector('.spinner-border')) || document.querySelector('.d-flex.vh-100') || vhCandidates[0];
+    if(els.loaderWrapper === vhCandidates[0] && vhCandidates.length > 1){
+      // Safety: if we accidentally picked outer wrapper, but a second candidate exists, swap.
+      const loaderAlt = vhCandidates.find(el => el !== vhCandidates[0]);
+      if(loaderAlt) els.loaderWrapper = loaderAlt;
     }
+    els.roomsList = document.getElementById('rooms-list');
+    els.usersList = document.getElementById('users-list');
+    els.messagesList = document.getElementById('messages-list');
+    els.messageInput = document.getElementById('message-input');
+    els.joinedRoomTitle = document.getElementById('joinedRoom');
+    els.filterInput = document.querySelector('.users-container input[type=text]');
+    els.errorAlert = document.getElementById('errorAlert');
+    els.itemToDelete = document.getElementById('itemToDelete');
+  els.profileAvatarImg = document.getElementById('profileAvatarImg') || document.querySelector('.profile img.avatar');
+  els.profileAvatarInitial = document.getElementById('profileAvatarInitial') || document.querySelector('.profile span.avatar');
+  els.profileName = document.getElementById('profileName') || document.querySelector('.profile span:not(.avatar)');
+    els.btnLogin = document.getElementById('btn-login');
+    els.btnLogout = document.getElementById('btn-logout');
+  els.roomsNoSelection = document.querySelector('[data-role="no-room-selected"]');
+  els.roomsPanel = document.querySelector('[data-role="room-panel"]');
+  els.usersCount = document.getElementById('users-count');
+  }
 
-    function wireConnectionHandlers() {
-        if (!connection || connectionHandlersWired) return;
-        connection.on("newMessage", function (messageView) {
-            var isMine = messageView.fromUserName === viewModel.myProfile().userName();
-            var message = new ChatMessage(messageView.id, messageView.content, messageView.timestamp, messageView.fromUserName, messageView.fromFullName, isMine, messageView.avatar);
-            viewModel.chatMessages.push(message);
-            $(".messages-container").animate({ scrollTop: $(".messages-container")[0].scrollHeight }, 1000);
-        });
-        connection.on("getProfileInfo", function (user) {
-            viewModel.myProfile(new ProfileInfo(user.userName, user.fullName, user.avatar));
-            viewModel.isLoading(false);
-        });
-        connection.on("addUser", function (user) {
-            viewModel.userAdded(new ChatUser(user.userName, user.fullName, user.avatar, user.currentRoom, user.device));
-        });
-        connection.on("removeUser", function (user) {
-            viewModel.userRemoved(user.userName);
-        });
-        connection.on("addChatRoom", function (room) {
-            viewModel.roomAdded(new ChatRoom(room.id, room.name, room.admin));
-        });
-        connection.on("updateChatRoom", function (room) {
-            viewModel.roomUpdated(new ChatRoom(room.id, room.name, room.admin));
-        });
-        connection.on("removeChatRoom", function (id) {
-            viewModel.roomDeleted(id);
-        });
-        connection.on("removeChatMessage", function (id) {
-            viewModel.messageDeleted(id);
-        });
-        connection.on("onError", function (message) {
-            viewModel.serverInfoMessage(message);
-            $("#errorAlert").removeClass("d-none").show().delay(5000).fadeOut(500);
-        });
-        connection.on("onRoomDeleted", function () {
-            if (viewModel.chatRooms().length == 0) {
-                viewModel.joinedRoom(null);
-            }
-            else {
-                // Join to the first room from the list
-                viewModel.joinRoom(viewModel.chatRooms()[0]);
-            }
-        });
-        connectionHandlersWired = true;
+  function setLoading(v){
+    state.loading=v;
+    if(els.loaderWrapper) els.loaderWrapper.classList.toggle('d-none', !v);
+    if(els.app) els.app.classList.toggle('d-none', v);
+  }
+
+  // --------------- Rendering ---------------
+  function initialFrom(name, alt){
+    const source = (name && typeof name === 'string' && name.trim().length>0 ? name : (alt||''));
+    if(!source) return '?';
+    const ch = source.trim().charAt(0).toUpperCase();
+    return ch || '?';
+  }
+  function renderRooms(){ if(!els.roomsList) return; els.roomsList.innerHTML=''; state.rooms.forEach(r=>{ const li=document.createElement('li'); const a=document.createElement('a'); a.href='#'; a.textContent=r.name; a.dataset.roomId=r.id; if(state.joinedRoom && state.joinedRoom.name===r.name) a.classList.add('active'); a.addEventListener('click',e=>{ e.preventDefault(); joinRoom(r.name); }); li.appendChild(a); els.roomsList.appendChild(li); }); }
+  function renderUsers(){ if(!els.usersList) return; const term=state.filter.toLowerCase(); els.usersList.innerHTML=''; const filtered=state.users.filter(u=>!term|| (u.fullName||u.userName||'').toLowerCase().includes(term)); filtered.forEach(u=>{ const li=document.createElement('li'); li.dataset.username=u.userName; const wrap=document.createElement('div'); wrap.className='user'; if(!u.avatar){ const span=document.createElement('span'); span.className='avatar me-2 text-uppercase'; span.textContent=initialFrom(u.fullName, u.userName); wrap.appendChild(span);} else { const img=document.createElement('img'); img.className='avatar me-2'; img.src='/avatars/'+u.avatar; wrap.appendChild(img);} const info=document.createElement('div'); info.className='user-info'; const nameSpan=document.createElement('span'); nameSpan.className='name'; nameSpan.textContent=u.fullName || u.userName; info.appendChild(nameSpan); const devSpan=document.createElement('span'); devSpan.className='device'; devSpan.textContent=u.device; info.appendChild(devSpan); wrap.appendChild(info); li.appendChild(wrap); els.usersList.appendChild(li); }); if(els.usersCount) els.usersCount.textContent=filtered.length; }
+  function formatDateParts(ts){ const date=new Date(ts); const now=new Date(); const diffDays=Math.round((date-now)/(1000*3600*24)); const day=date.getDate(); const month=date.getMonth()+1; const year=date.getFullYear(); let hours=date.getHours(); const minutes=('0'+date.getMinutes()).slice(-2); const ampm=hours>=12?'PM':'AM'; if(hours>12) hours=hours%12; const dateOnly=`${day}/${month}/${year}`; const timeOnly=`${hours}:${minutes} ${ampm}`; const full=`${dateOnly} ${timeOnly}`; let relative=dateOnly; if(diffDays===0) relative=`Today, ${timeOnly}`; else if(diffDays===-1) relative=`Yesterday, ${timeOnly}`; return {relative, full}; }
+  function renderMessages(){ if(!els.messagesList) return; els.messagesList.innerHTML=''; state.messages.forEach(m=>{ const li=document.createElement('li'); const wrap=document.createElement('div'); wrap.className='message-item'; if(m.isMine) wrap.classList.add('ismine'); if(!m.avatar){ const span=document.createElement('span'); span.className='avatar avatar-lg mx-2 text-uppercase'; span.textContent=initialFrom(m.fromFullName, m.fromUserName); wrap.appendChild(span);} else { const img=document.createElement('img'); img.className='avatar avatar-lg mx-2'; img.src='/avatars/'+m.avatar; wrap.appendChild(img);} const content=document.createElement('div'); content.className='message-content'; const info=document.createElement('div'); info.className='message-info d-flex flex-wrap align-items-center'; const author=document.createElement('span'); author.className='author'; author.textContent=m.fromFullName||m.fromUserName; info.appendChild(author); const time=document.createElement('span'); time.className='timestamp'; const fp=formatDateParts(m.timestamp); time.textContent=fp.relative; time.dataset.bsTitle=fp.full; time.setAttribute('data-bs-toggle','tooltip'); info.appendChild(time); content.appendChild(info); const body=document.createElement('div'); body.className='content'; body.textContent=m.content; content.appendChild(body); wrap.appendChild(content); li.appendChild(wrap); els.messagesList.appendChild(li); }); const noInfo=document.querySelector('.no-messages-info'); if(noInfo) noInfo.classList.toggle('d-none', state.messages.length>0); const mc=document.querySelector('.messages-container'); if(mc && !state.loadingMore) mc.scrollTop=mc.scrollHeight; 
+    // Re-init Bootstrap tooltips if available
+    if(window.bootstrap){ const ttEls = [].slice.call(els.messagesList.querySelectorAll('[data-bs-toggle="tooltip"]')); ttEls.forEach(el=>{ try{ new window.bootstrap.Tooltip(el); }catch(_){} }); }
+  }
+  function renderProfile(){ const p=state.profile; if(!els.profileName) return; if(!p){ els.profileName.textContent='Not signed in'; if(els.profileAvatarImg) els.profileAvatarImg.classList.add('d-none'); if(els.profileAvatarInitial){ els.profileAvatarInitial.classList.remove('d-none'); els.profileAvatarInitial.textContent='?'; } if(els.btnLogin) els.btnLogin.classList.remove('d-none'); if(els.btnLogout) els.btnLogout.classList.add('d-none'); } else { els.profileName.textContent=p.fullName||p.userName; if(p.avatar){ if(els.profileAvatarImg){ els.profileAvatarImg.src='/avatars/'+p.avatar; els.profileAvatarImg.classList.remove('d-none'); } if(els.profileAvatarInitial) els.profileAvatarInitial.classList.add('d-none'); } else { if(els.profileAvatarInitial){ els.profileAvatarInitial.textContent=initialFrom(p.fullName, p.userName); els.profileAvatarInitial.classList.remove('d-none'); } if(els.profileAvatarImg) els.profileAvatarImg.classList.add('d-none'); } if(els.btnLogin) els.btnLogin.classList.add('d-none'); if(els.btnLogout) els.btnLogout.classList.remove('d-none'); } }
+
+  // Defensive: ensure avatar initial shows correct letter if placeholder reappears
+  function ensureProfileAvatar(){
+    if(!state.profile || state.profile.avatar) return;
+    if(els.profileAvatarInitial){
+      const desired = initialFrom(state.profile.fullName, state.profile.userName);
+      els.profileAvatarInitial.textContent = desired;
+      els.profileAvatarInitial.classList.remove('d-none');
+      if(els.profileAvatarImg) els.profileAvatarImg.classList.add('d-none');
     }
+  }
+  function renderRoomContext(){ if(!els.roomsPanel||!els.roomsNoSelection) return; const hasRoom=!!state.joinedRoom; els.roomsPanel.classList.toggle('d-none', !hasRoom); els.roomsNoSelection.classList.toggle('d-none', hasRoom); if(state.joinedRoom && els.joinedRoomTitle) els.joinedRoomTitle.textContent=state.joinedRoom.name; renderRooms(); }
+  function renderAll(){ renderProfile(); renderRoomContext(); renderUsers(); renderMessages(); }
 
-    function createConnection() {
-        if (connection) return connection;
-        connection = new signalR.HubConnectionBuilder().withUrl("/chatHub").build();
-        connectionHandlersWired = false;
-        wireConnectionHandlers();
-        return connection;
-    }
+  // --------------- API ----------------
+  const apiGet = url => fetch(url,{credentials:'include'}).then(r=> r.ok? r.json(): Promise.reject(r));
+  const apiPost = (u,o)=> fetch(u,{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify(o)});
+  const apiPut = (u,o)=> fetch(u,{method:'PUT',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify(o)});
+  const apiDelete = u => fetch(u,{method:'DELETE',credentials:'include'});
 
-    function startConnection() {
-        createConnection();
-        return connection.start().then(function () {
-            console.log('SignalR Started...');
-            viewModel.roomList();
-            viewModel.userList();
-        }).catch(function (err) {
-            console.error(err);
-        });
-    }
-
-    function stopConnection() {
-        if (connection) {
-            try { connection.stop(); } catch (_) { }
-            connection = null;
-            connectionHandlersWired = false;
+  // --------------- SignalR --------------
+  let hub=null, reconnectAttempts=0; const maxBackoff=30000;
+  /**
+   * Classify a SignalR (or underlying transport) error into a coarse category for reconnect telemetry.
+   * @param {any} err Error or reason object
+   * @returns {{cat:string,msg:string}} category + original message
+   */
+  function classifyError(err){
+    if(!err) return {cat:'unknown', msg:''};
+    const msg=(err && (err.message||err.toString()))||'';
+    if(/403|401|unauthor/i.test(msg)) return {cat:'auth', msg};
+    if(/timeout|timed out/i.test(msg)) return {cat:'timeout', msg};
+    if(/network|fetch|socket|ws|transport/i.test(msg)) return {cat:'transport', msg};
+    if(/server|500|hubexception/i.test(msg)) return {cat:'server', msg};
+    return {cat:'other', msg};
+  }
+  let lastReconnectError=null;
+  function ensureHub(){ if(hub) return hub; hub=new signalR.HubConnectionBuilder().withUrl('/chatHub').withAutomaticReconnect().build(); wireHub(hub); return hub; }
+  function startHub(){ ensureHub(); log('info','signalr.start'); return hub.start().then(()=>{ reconnectAttempts=0; lastReconnectError=null; loadRooms(); }).catch(err=>{ log('error','signalr.start.fail',{error:err&&err.message}); scheduleReconnect(err); }); }
+  /**
+   * Applies exponential backoff and records telemetry for each reconnect attempt.
+   * @param {Error} err the error that triggered scheduling
+   */
+  function scheduleReconnect(err){
+    if(err) lastReconnectError=err;
+    reconnectAttempts++; const delay=Math.min(1000*Math.pow(2,reconnectAttempts), maxBackoff);
+    const {cat,msg}=classifyError(lastReconnectError);
+    try { fetch('/api/telemetry/reconnect',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({attempt:reconnectAttempts,delayMs:delay,errorCategory:cat,errorMessage:msg.slice(0,300)})}); } catch(_){ }
+    setTimeout(()=> startHub().catch(e=> scheduleReconnect(e)), delay);
+  }
+  function wireHub(c){ c.on('getProfileInfo', u=>{ state.profile={userName:u.userName, fullName:u.fullName, avatar:u.avatar}; setLoading(false); renderProfile(); }); c.on('newMessage', m=> {
+      const mineUser = state.profile && state.profile.userName;
+      if(mineUser){
+        // Prefer correlationId reconciliation
+        if(m.correlationId){
+          const byCorr = state.messages.findIndex(x=> x.isMine && x.correlationId && x.correlationId===m.correlationId);
+          if(byCorr>=0){
+            state.messages[byCorr] = {id:m.id,content:m.content,timestamp:m.timestamp,fromUserName:m.fromUserName,fromFullName:m.fromFullName,avatar:m.avatar,isMine:true, correlationId:m.correlationId};
+            renderMessages();
+            return;
+          }
         }
-    }
+        // Fallback to content + negative id heuristic
+        const pendingIdx = state.messages.findIndex(x=> x.isMine && x.id<0 && x.content===m.content);
+        if(pendingIdx>=0){
+          state.messages[pendingIdx] = {id:m.id,content:m.content,timestamp:m.timestamp,fromUserName:m.fromUserName,fromFullName:m.fromFullName,avatar:m.avatar,isMine:true, correlationId:m.correlationId};
+          renderMessages();
+          return;
+        }
+      }
+      addOrRenderMessage({ ...m, correlationId: m.correlationId });
+  }); c.on('addUser', u=> upsertUser(u)); c.on('removeUser', u=> removeUser(u.userName)); c.on('addChatRoom', r=> upsertRoom(r)); c.on('updateChatRoom', r=> upsertRoom(r)); c.on('removeChatRoom', id=>{ state.rooms=state.rooms.filter(x=>x.id!==id); if(state.joinedRoom && state.joinedRoom.id===id){ state.joinedRoom=null; state.messages=[]; } renderAll(); }); c.on('onError', msg=> showError(msg)); }
 
-    function isAuthenticated() {
-        // Call lightweight auth ping to avoid touching rooms
-        return fetch('/api/auth/me', { method: 'GET' })
-            .then(function (r) {
-                if (!r.ok) return false;
-                return r.json().then(function (u) {
-                    // Prime profile to avoid waiting for hub callback
-                    if (u && u.userName) {
-                        viewModel.myProfile(new ProfileInfo(u.userName, u.fullName, u.avatar));
-                        viewModel.isLoading(false);
-                    }
-                    return true;
-                });
-            })
-            .catch(function () { return false; });
-    }
+  // --------------- Mutators -------------
+  function upsertRoom(r){ const e=state.rooms.find(x=>x.id===r.id); if(e){ e.name=r.name; e.admin=r.admin; } else state.rooms.push({id:r.id,name:r.name,admin:r.admin}); renderRooms(); }
+  function upsertUser(u){ const e=state.users.find(x=>x.userName===u.userName); if(e) Object.assign(e,u); else state.users.push(u); renderUsers(); }
+  function removeUser(userName){ state.users=state.users.filter(u=>u.userName!==userName); renderUsers(); }
+  /**
+   * Appends a message to local state and re-renders.
+   * @param {object} m MessageViewModel-like payload
+   */
+  function addOrRenderMessage(m){ const isMine=state.profile && state.profile.userName===m.fromUserName; state.messages.push({id:m.id,content:m.content,timestamp:m.timestamp,fromUserName:m.fromUserName,fromFullName:m.fromFullName,avatar:m.avatar,isMine, correlationId:m.correlationId}); renderMessages(); }
 
-    function ChatRoom(id, name, admin) {
-        var self = this;
-        self.id = ko.observable(id);
-        self.name = ko.observable(name);
-        self.admin = ko.observable(admin);
-    }
-
-    function ChatUser(userName, fullName, avatar, currentRoom, device) {
-        var self = this;
-        self.userName = ko.observable(userName);
-        self.fullName = ko.observable(fullName);
-        self.avatar = ko.observable(avatar);
-        self.currentRoom = ko.observable(currentRoom);
-        self.device = ko.observable(device);
-    }
-
-    function ChatMessage(id, content, timestamp, fromUserName, fromFullName, isMine, avatar) {
-        var self = this;
-        self.id = ko.observable(id);
-        self.content = ko.observable(content);
-        self.timestamp = ko.observable(timestamp);
-        self.timestampRelative = ko.pureComputed(function () {
-            // Get diff
-            var date = new Date(self.timestamp());
-            var now = new Date();
-            var diff = Math.round((date.getTime() - now.getTime()) / (1000 * 3600 * 24));
-
-            // Format date
-            var { dateOnly, timeOnly } = formatDate(date);
-
-            // Generate relative datetime
-            if (diff == 0)
-                return `Today, ${timeOnly}`;
-            if (diff == -1)
-                return `Yestrday, ${timeOnly}`;
-
-            return `${dateOnly}`;
-        });
-        self.timestampFull = ko.pureComputed(function () {
-            var date = new Date(self.timestamp());
-            var { fullDateTime } = formatDate(date);
-            return fullDateTime;
-        });
-        self.fromUserName = ko.observable(fromUserName);
-        self.fromFullName = ko.observable(fromFullName);
-        self.isMine = ko.observable(isMine);
-        self.avatar = ko.observable(avatar);
-    }
-
-    function ProfileInfo(userName, fullName, avatar) {
-        var self = this;
-        self.userName = ko.observable(userName);
-        self.fullName = ko.observable(fullName);
-        self.avatar = ko.observable(avatar);
-    }
-
-    function formatDate(date) {
-        // Get fields
-        var year = date.getFullYear();
-        var month = date.getMonth() + 1;
-        var day = date.getDate();
-        var hours = date.getHours();
-        var minutes = date.getMinutes();
-        var d = hours >= 12 ? "PM" : "AM";
-
-        // Correction
-        if (hours > 12)
-            hours = hours % 12;
-
-        if (minutes < 10)
-            minutes = "0" + minutes;
-
-        // Result
-        var dateOnly = `${day}/${month}/${year}`;
-        var timeOnly = `${hours}:${minutes} ${d}`;
-        var fullDateTime = `${dateOnly} ${timeOnly}`;
-
-        return { dateOnly, timeOnly, fullDateTime };
-    }
-
-    var viewModel = new AppViewModel();
-    ko.applyBindings(viewModel);
-
-    // Only connect if already authenticated; otherwise wait until OTP verification
-    isAuthenticated().then(function (authed) {
-        if (authed) {
-            startConnection();
+  // --------------- Actions --------------
+  function joinRoom(roomName){ if(!hub||!roomName) return; hub.invoke('Join',roomName).then(()=>{ state.joinedRoom=state.rooms.find(r=>r.name===roomName)||{name:roomName}; localStorage.setItem('lastRoom',roomName); loadUsers(); loadMessages(); renderRoomContext(); ensureProfileAvatar(); }).catch(err=> showError('Join failed: '+(err&&err.message))); }
+  function loadRooms(){ apiGet('/api/Rooms').then(list=>{ state.rooms=list; renderRooms(); const stored=localStorage.getItem('lastRoom'); if(stored && state.rooms.some(r=>r.name===stored)) joinRoom(stored); else if(state.rooms.length>0) joinRoom(state.rooms[0].name); }).catch(()=>{}); }
+  function loadUsers(){ if(!state.joinedRoom) return; hub.invoke('GetUsers', state.joinedRoom.name).then(users=>{ state.users=users; renderUsers(); }); }
+  /**
+   * Loads most recent page of messages for joined room (resets pagination state).
+   */
+  function loadMessages(){
+    if(!state.joinedRoom) return;
+    state.oldestLoaded=null; state.canLoadMore=true;
+    apiGet('/api/Messages/Room/'+encodeURIComponent(state.joinedRoom.name)+'?take='+state.pageSize)
+      .then(list=>{
+        // Server returns ascending order (repository sorts ascending)
+        state.messages = list.map(m=>({id:m.id,content:m.content,timestamp:m.timestamp,fromUserName:m.fromUserName,fromFullName:m.fromFullName,avatar:m.avatar,isMine: state.profile && state.profile.userName===m.fromUserName}));
+        if(state.messages.length>0){
+          state.oldestLoaded = state.messages[0].timestamp;
+          // If fewer than requested, no more pages
+          if(list.length < state.pageSize) state.canLoadMore = false;
         } else {
-            // Keep UI in unauthenticated state
-            viewModel.isLoading(true);
-            viewModel.myProfile(null);
+          state.canLoadMore = false;
         }
-    });
+        renderMessages();
+        attachScrollPagination();
+      }).catch(()=>{});
+  }
+  /**
+   * Loads the next (older) page of messages and prepends them while preserving scroll position.
+   */
+  function loadOlderMessages(){
+    if(!state.canLoadMore || state.loadingMore || !state.joinedRoom || !state.oldestLoaded) return;
+    state.loadingMore = true;
+    const before = encodeURIComponent(state.oldestLoaded);
+    apiGet('/api/Messages/Room/'+encodeURIComponent(state.joinedRoom.name)+'?before='+before+'&take='+state.pageSize)
+      .then(list=>{
+        if(!Array.isArray(list) || list.length===0){ state.canLoadMore=false; return; }
+        const mapped=list.map(m=>({id:m.id,content:m.content,timestamp:m.timestamp,fromUserName:m.fromUserName,fromFullName:m.fromFullName,avatar:m.avatar,isMine: state.profile && state.profile.userName===m.fromUserName}));
+        const mc=document.querySelector('.messages-container'); let prevScrollHeight = mc? mc.scrollHeight:0;
+        // Prepend
+        state.messages = mapped.concat(state.messages);
+        state.oldestLoaded = state.messages[0].timestamp;
+        if(list.length < state.pageSize) state.canLoadMore=false;
+        renderMessages();
+        if(mc){ const newScrollHeight = mc.scrollHeight; mc.scrollTop = newScrollHeight - prevScrollHeight; }
+      })
+      .finally(()=>{ state.loadingMore=false; });
+  }
+  /**
+   * One-time scroll listener that triggers pagination when scrolled near top.
+   */
+  function attachScrollPagination(){ const mc=document.querySelector('.messages-container'); if(!mc || mc.dataset.paginated) return; mc.dataset.paginated='true'; let lastReq=0; mc.addEventListener('scroll',()=>{ if(mc.scrollTop < 30){ const now=Date.now(); if(now-lastReq>400){ lastReq=now; loadOlderMessages(); } } }); }
+  let pendingIdCounter=-1;
+  /**
+   * Sends a chat message (or /private(user) command). Implements rate limiting & optimistic update.
+   */
+  function sendMessage(){
+    const text=(els.messageInput && els.messageInput.value||'').trim(); if(!text) return;
+    const now=Date.now();
+    if(now - state.lastSendAt < state.minSendIntervalMs){ showError('You are sending messages too quickly'); return; }
+    state.lastSendAt = now;
+    if(text.startsWith('/private(')){
+      const idx=text.indexOf(')');
+      if(idx>9){ const user=text.substring(9,idx); const body=text.substring(idx+1).trim(); hub.invoke('SendPrivate',user,body).catch(()=>{}); }
+    } else if(state.joinedRoom){
+      // Optimistic pending message
+      const tempId = pendingIdCounter--;
+      const nowIso = new Date().toISOString();
+      const correlationId = 'c_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,8);
+      state.messages.push({id:tempId,content:text,timestamp:nowIso,fromUserName:state.profile?.userName,fromFullName:state.profile?.fullName,avatar:state.profile?.avatar,isMine:true, correlationId});
+      renderMessages();
+      apiPost('/api/Messages',{room:state.joinedRoom.name, content:text, correlationId}).catch(()=>{
+        // On failure, remove pending and show error
+        state.messages = state.messages.filter(m=>m.id!==tempId);
+        renderMessages();
+        showError('Send failed');
+      });
+    }
+    if(els.messageInput) els.messageInput.value='';
+  }
+  function createRoom(){ const n=document.getElementById('roomName').value.trim(); if(!n) return; apiPost('/api/Rooms',{name:n}); }
+  function renameRoom(){ if(!state.joinedRoom) return; const n=document.getElementById('newRoomName').value.trim(); if(!n) return; apiPut('/api/Rooms/'+state.joinedRoom.id,{id:state.joinedRoom.id,name:n}); }
+  function deleteRoom(){ if(!state.joinedRoom) return; apiDelete('/api/Rooms/'+state.joinedRoom.id); }
+  // deleteMessage removed
+  function logoutCleanup(){ state.rooms=[]; state.users=[]; state.messages=[]; state.profile=null; state.joinedRoom=null; renderAll(); setLoading(false); }
 
-    // Expose control hooks for login/logout without reload
-    window.chatApp = window.chatApp || {};
-    window.chatApp.onAuthenticated = function () {
-        // After successful OTP verify
-        startConnection();
-    };
-    window.chatApp.logoutCleanup = function () {
-        stopConnection();
-        // Clear state and return to unauthenticated UI
-        viewModel.chatRooms.removeAll();
-        viewModel.chatUsers.removeAll();
-        viewModel.chatMessages.removeAll();
-        viewModel.joinedRoom(null);
-        viewModel.myProfile(null);
-        viewModel.isLoading(true);
-    };
-});
+  // --------------- Auth Probe -----------
+  function probeAuth(){ const timeout=setTimeout(()=>{ log('warn','auth.timeout'); setLoading(false); },6000); return fetch('/api/auth/me',{credentials:'include'}).then(r=> r.ok? r.json(): null).then(u=>{ clearTimeout(timeout); if(u&&u.userName){ state.profile={userName:u.userName, fullName:u.fullName, avatar:u.avatar}; startHub(); } else { setLoading(false); } renderProfile(); }).catch(()=>{ clearTimeout(timeout); setLoading(false); }); }
+
+  // --------------- UI Wiring ------------
+  function wireUi(){ if(els.messageInput) els.messageInput.addEventListener('keypress',e=>{ if(e.key==='Enter') sendMessage(); }); const sendBtn=document.getElementById('btn-send-message'); if(sendBtn) sendBtn.addEventListener('click',e=>{ e.preventDefault(); sendMessage(); }); if(els.filterInput) els.filterInput.addEventListener('input',()=>{ state.filter=els.filterInput.value; renderUsers(); }); const createBtn=document.getElementById('btn-create-room'); if(createBtn) createBtn.addEventListener('click',createRoom); const renameBtn=document.getElementById('btn-rename-room'); if(renameBtn) renameBtn.addEventListener('click',renameRoom); const deleteRoomBtn=document.getElementById('btn-delete-room'); if(deleteRoomBtn) deleteRoomBtn.addEventListener('click',deleteRoom); if(els.btnLogout) els.btnLogout.addEventListener('click',()=>{ fetch('/api/auth/logout',{method:'POST',credentials:'include'}).finally(()=>{ logoutCleanup(); }); }); }
+
+  function showError(msg){ if(!els.errorAlert) return; const span=els.errorAlert.querySelector('span'); if(span) span.textContent=msg; els.errorAlert.classList.remove('d-none'); setTimeout(()=> els.errorAlert.classList.add('d-none'),5000); }
+
+  // Expose hooks for OTP flow
+  window.chatApp = window.chatApp || {};
+  window.chatApp.onAuthenticated = function(){ setLoading(true); probeAuth(); };
+  window.chatApp.logoutCleanup = logoutCleanup;
+
+  // Boot
+  document.addEventListener('DOMContentLoaded',()=>{ cacheDom(); setLoading(true); probeAuth(); wireUi(); });
+  // Fail-safe: if something throws during early init, show the app with a generic error.
+  window.addEventListener('error', function(){
+    if(state.loading){ setLoading(false); }
+  });
+  window.addEventListener('unhandledrejection', function(){
+    if(state.loading){ setLoading(false); }
+  });
+})();

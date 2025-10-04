@@ -8,5 +8,6 @@ namespace Chat.Web.Options
         public string UsersContainer { get; set; } = "users";
         public string RoomsContainer { get; set; } = "rooms";
         public int MessagesTtlSeconds { get; set; } = 604800; // 7 days
+        public bool AutoCreate { get; set; } = true; // Automatically create database/containers if missing
     }
 }

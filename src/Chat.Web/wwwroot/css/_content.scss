@@ -78,8 +78,6 @@ $message-input-bg-color: #f5f5f5;
             margin-top: 2px;
             line-height: 1.4;
             color: $message-text-color;
-
-            // images and upload removed
         }
     }
 
@@ -131,9 +129,6 @@ $message-input-bg-color: #f5f5f5;
         padding: 10px 20px;
     }
 
-    input[type="file"] {
-        display: none;
-    }
 
     .actions {
         padding: 0 10px;
@@ -147,8 +142,5 @@ $message-input-bg-color: #f5f5f5;
             }
         }
 
-        // emoji button removed
     }
-
-    // emojis container removed
 }

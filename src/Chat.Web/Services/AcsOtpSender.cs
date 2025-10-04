@@ -6,14 +6,20 @@ using Chat.Web.Options;
 
 namespace Chat.Web.Services
 {
-    // Sends OTP via ACS Email if destination looks like an email; otherwise via ACS SMS if looks like phone.
+    /// <summary>
+    /// Azure Communication Services sender: routes to Email if destination contains '@', otherwise SMS.
+    /// Requires connection string + channel-specific from addresses in options.
+    /// </summary>
     public class AcsOtpSender : IOtpSender
     {
         private readonly AcsOptions _options;
         private readonly EmailClient _emailClient;
         private readonly SmsClient _smsClient;
 
-        public AcsOtpSender(AcsOptions options)
+    /// <summary>
+    /// Validates configuration and primes Email + SMS clients.
+    /// </summary>
+    public AcsOtpSender(AcsOptions options)
         {
             _options = options;
             if (string.IsNullOrWhiteSpace(options?.ConnectionString))
@@ -22,7 +28,8 @@ namespace Chat.Web.Services
             _smsClient = new SmsClient(options.ConnectionString);
         }
 
-        public async Task SendAsync(string userName, string destination, string code)
+    /// <inheritdoc />
+    public async Task SendAsync(string userName, string destination, string code)
         {
             if (string.IsNullOrWhiteSpace(destination))
                 throw new ArgumentException("Destination is required for ACS OTP sending", nameof(destination));
