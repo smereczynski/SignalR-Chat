@@ -16,26 +16,39 @@ namespace Chat.Web.Controllers
     [Authorize]
     [Route("api/[controller]")]
     [ApiController]
+    /// <summary>
+    /// REST endpoints for querying and creating chat messages.
+    /// GET endpoints support pagination by timestamp; POST broadcasts to a SignalR room and increments metrics.
+    /// </summary>
     public class MessagesController : ControllerBase
     {
         private readonly IMessagesRepository _messages;
         private readonly IRoomsRepository _rooms;
         private readonly IUsersRepository _users;
-        private readonly IHubContext<ChatHub> _hubContext;
+    private readonly IHubContext<ChatHub> _hubContext;
+    private readonly Services.IInProcessMetrics _metrics;
 
+        /// <summary>
+        /// DI constructor for messages API.
+        /// </summary>
         public MessagesController(IMessagesRepository messages,
             IRoomsRepository rooms,
             IUsersRepository users,
-            IHubContext<ChatHub> hubContext)
+            IHubContext<ChatHub> hubContext,
+            Services.IInProcessMetrics metrics)
         {
             _messages = messages;
             _rooms = rooms;
             _users = users;
             _hubContext = hubContext;
+            _metrics = metrics;
         }
 
-        [HttpGet("{id}")]
-        public ActionResult<Room> Get(int id)
+    /// <summary>
+    /// Retrieve a single message by id.
+    /// </summary>
+    [HttpGet("{id}")]
+    public ActionResult<Room> Get(int id)
         {
             var message = _messages.GetById(id);
             if (message == null)
@@ -54,29 +67,40 @@ namespace Chat.Web.Controllers
             return Ok(vm);
         }
 
-        [HttpGet("Room/{roomName}")]
-        public IActionResult GetMessages(string roomName)
+    /// <summary>
+    /// Get recent messages for a room. Optionally page backwards using a 'before' timestamp.
+    /// </summary>
+    [HttpGet("Room/{roomName}")]
+    public IActionResult GetMessages(string roomName, [FromQuery] DateTime? before = null, [FromQuery] int take = 20)
         {
+            if (take <= 0) take = 1;
+            if (take > 100) take = 100; // cap
             var room = _rooms.GetByName(roomName);
             if (room == null)
                 return BadRequest();
 
-            var items = _messages.GetRecentByRoom(room.Name, 20)
-                .Select(m => new MessageViewModel
-                {
-                    Id = m.Id,
-                    Content = m.Content,
-                    FromUserName = m.FromUser?.UserName,
-                    FromFullName = m.FromUser?.FullName,
-                    Avatar = m.FromUser?.Avatar,
-                    Room = room.Name,
-                    Timestamp = m.Timestamp
-                });
+            IEnumerable<Message> source = before.HasValue
+                ? _messages.GetBeforeByRoom(room.Name, before.Value, take)
+                : _messages.GetRecentByRoom(room.Name, take);
+
+            var items = source.Select(m => new MessageViewModel
+            {
+                Id = m.Id,
+                Content = m.Content,
+                FromUserName = m.FromUser?.UserName,
+                FromFullName = m.FromUser?.FullName,
+                Avatar = m.FromUser?.Avatar,
+                Room = room.Name,
+                Timestamp = m.Timestamp
+            });
             return Ok(items);
         }
 
-        [HttpPost]
-        public async Task<ActionResult<Message>> Create(MessageViewModel viewModel)
+    /// <summary>
+    /// Create and broadcast a message to all clients in the target room.
+    /// </summary>
+    [HttpPost]
+    public async Task<ActionResult<Message>> Create(MessageViewModel viewModel)
         {
             var user = _users.GetByUserName(User.Identity.Name);
             var room = _rooms.GetByName(viewModel.Room);
@@ -102,28 +126,14 @@ namespace Chat.Web.Controllers
                 FromFullName = msg.FromUser?.FullName,
                 Avatar = msg.FromUser?.Avatar,
                 Room = room.Name,
-                Timestamp = msg.Timestamp
+                Timestamp = msg.Timestamp,
+                CorrelationId = viewModel.CorrelationId
             };
             await _hubContext.Clients.Group(room.Name).SendAsync("newMessage", createdMessage);
+            _metrics.IncMessagesSent();
 
             return CreatedAtAction(nameof(Get), new { id = msg.Id }, createdMessage);
         }
 
-        [HttpDelete("{id}")]
-        public async Task<IActionResult> Delete(int id)
-        {
-            var message = _messages.GetById(id);
-            if (message?.FromUser?.UserName != User.Identity.Name)
-                message = null;
-
-            if (message == null)
-                return NotFound();
-
-            _messages.Delete(id, User.Identity.Name);
-
-            await _hubContext.Clients.All.SendAsync("removeChatMessage", message.Id);
-
-            return Ok();
-        }
     }
 }

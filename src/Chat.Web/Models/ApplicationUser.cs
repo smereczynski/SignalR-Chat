@@ -2,6 +2,9 @@
 
 namespace Chat.Web.Models
 {
+    /// <summary>
+    /// Lightweight user profile used for authentication, presence display and message attribution.
+    /// </summary>
     public class ApplicationUser
     {
         public string Id { get; set; }

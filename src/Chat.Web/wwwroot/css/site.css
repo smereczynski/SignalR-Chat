@@ -143,13 +143,6 @@
   line-height: 1.4;
   color: #333;
 }
-.message-item .message-content .content img {
-  max-width: 270px;
-  max-height: 270px;
-  -o-object-fit: contain;
-     object-fit: contain;
-}
-/* upload/image styles removed */
 .message-item .actions svg {
   width: 16px !important;
   height: 16px !important;
@@ -190,9 +183,6 @@
   outline: 0;
   padding: 10px 20px;
 }
-.message-input-container input[type=file] {
-  display: none;
-}
 .message-input-container .actions {
   padding: 0 10px;
 }
@@ -203,7 +193,6 @@
 .message-input-container .actions svg:hover {
   color: #555;
 }
-/* emoji UI removed */
 
 .users-container {
   display: flex;
@@ -416,8 +405,7 @@ form .btn {
   justify-content: center;
   align-items: center;
   border-radius: 50%;
-  -o-object-fit: cover;
-     object-fit: cover;
+  object-fit: cover;
   width: 32px;
   height: 32px;
   background: #549d54;
@@ -474,7 +462,7 @@ body {
 }
 @media screen and (max-width: 575.98px) {
   .app .sidebar,
-.app .users-container {
+  .app .users-container {
     position: fixed;
     left: 0;
     top: 0;
@@ -503,7 +491,7 @@ body {
     min-height: 60px;
   }
   #expand-users-list,
-#expand-sidebar {
+  #expand-sidebar {
     display: flex;
   }
-}/*# sourceMappingURL=site.css.map */
+}

@@ -6,6 +6,9 @@ using System.Threading.Tasks;
 using Microsoft.Azure.Cosmos;
 using Chat.Web.Models;
 using Chat.Web.Options;
+using System.Diagnostics;
+using Chat.Web.Observability;
+using Microsoft.Extensions.Logging;
 
 namespace Chat.Web.Repositories
 {
@@ -20,10 +23,38 @@ namespace Chat.Web.Repositories
         public CosmosClients(CosmosOptions options)
         {
             Client = new CosmosClient(options.ConnectionString);
-            Database = Client.GetDatabase(options.Database);
-            Users = Database.GetContainer(options.UsersContainer);
-            Rooms = Database.GetContainer(options.RoomsContainer);
-            Messages = Database.GetContainer(options.MessagesContainer);
+            if (options.AutoCreate)
+            {
+                Database = Client.CreateDatabaseIfNotExistsAsync(options.Database).GetAwaiter().GetResult();
+                Users = CreateContainerIfNotExists(options.UsersContainer, "/userName", 400);
+                Rooms = CreateContainerIfNotExists(options.RoomsContainer, "/name", 400);
+                Messages = CreateContainerIfNotExists(options.MessagesContainer, "/roomName", 400, options.MessagesTtlSeconds);
+            }
+            else
+            {
+                Database = Client.GetDatabase(options.Database);
+                Users = Database.GetContainer(options.UsersContainer);
+                Rooms = Database.GetContainer(options.RoomsContainer);
+                Messages = Database.GetContainer(options.MessagesContainer);
+            }
+        }
+
+        private Container CreateContainerIfNotExists(string name, string partitionKey, int? throughput, int? defaultTtlSeconds = null)
+        {
+            var props = new ContainerProperties(name, partitionKey);
+            if (defaultTtlSeconds.HasValue)
+            {
+                props.DefaultTimeToLive = defaultTtlSeconds.Value;
+            }
+            var response = Database.CreateContainerIfNotExistsAsync(props, throughput).GetAwaiter().GetResult();
+            // If TTL was added after existing container creation, update it
+            if (defaultTtlSeconds.HasValue && response.Container.ReadContainerAsync().GetAwaiter().GetResult().Resource.DefaultTimeToLive != defaultTtlSeconds.Value)
+            {
+                var existing = response.Container.ReadContainerAsync().GetAwaiter().GetResult().Resource;
+                existing.DefaultTimeToLive = defaultTtlSeconds.Value;
+                response.Container.ReplaceContainerAsync(existing).GetAwaiter().GetResult();
+            }
+            return response.Container;
         }
     }
 
@@ -34,170 +65,362 @@ namespace Chat.Web.Repositories
 
     public class CosmosUsersRepository : IUsersRepository
     {
-    private readonly Container _users;
-        public CosmosUsersRepository(CosmosClients clients)
+        private readonly Container _users;
+        private readonly ILogger<CosmosUsersRepository> _logger;
+        public CosmosUsersRepository(CosmosClients clients, ILogger<CosmosUsersRepository> logger)
         {
             _users = clients.Users;
+            _logger = logger;
         }
 
         public IEnumerable<ApplicationUser> GetAll()
         {
+            using var activity = Tracing.ActivitySource.StartActivity("cosmos.users.getall", ActivityKind.Client);
             var q = _users.GetItemQueryIterator<UserDoc>(new QueryDefinition("SELECT * FROM c"));
             var list = new List<ApplicationUser>();
-            while (q.HasMoreResults)
+            try
             {
-                var page = q.ReadNextAsync().GetAwaiter().GetResult();
-                list.AddRange(page.Select(d => new ApplicationUser { UserName = d.userName, FullName = d.fullName, Avatar = d.avatar }));
+                while (q.HasMoreResults)
+                {
+                    var page = q.ReadNextAsync().GetAwaiter().GetResult();
+                    activity?.AddEvent(new ActivityEvent("page", tags: new ActivityTagsCollection { {"db.page.count", page.Count} }));
+                    list.AddRange(page.Select(d => new ApplicationUser { UserName = d.userName, FullName = d.fullName, Avatar = d.avatar }));
+                }
+                activity?.SetTag("app.result.count", list.Count);
+                return list;
             }
-            return list;
+            catch (CosmosException ex)
+            {
+                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+                _logger.LogError(ex, "Cosmos users get all failed");
+                throw;
+            }
         }
 
         public ApplicationUser GetByUserName(string userName)
         {
+            using var activity = Tracing.ActivitySource.StartActivity("cosmos.users.get", ActivityKind.Client);
+            activity?.SetTag("app.userName", userName);
             var q = _users.GetItemQueryIterator<UserDoc>(new QueryDefinition("SELECT * FROM c WHERE c.userName = @u").WithParameter("@u", userName));
-            while (q.HasMoreResults)
+            try
             {
-                var page = q.ReadNextAsync().GetAwaiter().GetResult();
-                var d = page.FirstOrDefault();
-                if (d != null) return new ApplicationUser { UserName = d.userName, FullName = d.fullName, Avatar = d.avatar };
+                while (q.HasMoreResults)
+                {
+                    var page = q.ReadNextAsync().GetAwaiter().GetResult();
+                    var d = page.FirstOrDefault();
+                    if (d != null)
+                    {
+                        return new ApplicationUser { UserName = d.userName, FullName = d.fullName, Avatar = d.avatar };
+                    }
+                }
+                return null;
             }
-            return null;
+            catch (CosmosException ex)
+            {
+                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+                _logger.LogError(ex, "Cosmos user lookup failed {User}", userName);
+                throw;
+            }
         }
 
         public void Upsert(ApplicationUser user)
         {
+            using var activity = Tracing.ActivitySource.StartActivity("cosmos.users.upsert", ActivityKind.Client);
+            activity?.SetTag("app.userName", user.UserName);
             var doc = new UserDoc { id = user.UserName, userName = user.UserName, fullName = user.FullName, avatar = user.Avatar };
-            _users.UpsertItemAsync(doc, new PartitionKey(doc.userName)).GetAwaiter().GetResult();
+            try
+            {
+                var resp = _users.UpsertItemAsync(doc, new PartitionKey(doc.userName)).GetAwaiter().GetResult();
+                activity?.SetTag("db.status_code", (int)resp.StatusCode);
+            }
+            catch (CosmosException ex)
+            {
+                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+                _logger.LogError(ex, "Cosmos user upsert failed {User}", user.UserName);
+                throw;
+            }
         }
     }
 
     public class CosmosRoomsRepository : IRoomsRepository
     {
-    private readonly Container _rooms;
-        public CosmosRoomsRepository(CosmosClients clients)
+        private readonly Container _rooms;
+        private readonly ILogger<CosmosRoomsRepository> _logger;
+        public CosmosRoomsRepository(CosmosClients clients, ILogger<CosmosRoomsRepository> logger)
         {
             _rooms = clients.Rooms;
+            _logger = logger;
         }
 
         public Room Create(Room room)
         {
+            using var activity = Tracing.ActivitySource.StartActivity("cosmos.rooms.create", ActivityKind.Client);
             // id as Guid string for cosmos; store legacy int in a field
             room.Id = room.Id == 0 ? new Random().Next(1, int.MaxValue) : room.Id;
             var doc = new RoomDoc { id = room.Id.ToString(), name = room.Name, admin = room.Admin?.UserName };
-            _rooms.UpsertItemAsync(doc, new PartitionKey(doc.name)).GetAwaiter().GetResult();
+            try
+            {
+                var resp = _rooms.UpsertItemAsync(doc, new PartitionKey(doc.name)).GetAwaiter().GetResult();
+                activity?.SetTag("db.status_code", (int)resp.StatusCode);
+            }
+            catch (CosmosException ex)
+            {
+                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+                _logger.LogError(ex, "Cosmos room create failed {Room}", room.Name);
+                throw;
+            }
             return room;
         }
 
         public void Delete(int id)
         {
+            using var activity = Tracing.ActivitySource.StartActivity("cosmos.rooms.delete", ActivityKind.Client);
             // Cannot delete without partition key; query then delete
             var r = GetById(id);
             if (r != null)
             {
-                _rooms.DeleteItemAsync<RoomDoc>(id.ToString(), new PartitionKey(r.Name)).GetAwaiter().GetResult();
+                try
+                {
+                    var resp = _rooms.DeleteItemAsync<RoomDoc>(id.ToString(), new PartitionKey(r.Name)).GetAwaiter().GetResult();
+                    activity?.SetTag("db.status_code", (int)resp.StatusCode);
+                }
+                catch (CosmosException ex)
+                {
+                    activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+                    _logger.LogError(ex, "Cosmos room delete failed {Room}", r.Name);
+                    throw;
+                }
             }
         }
 
         public IEnumerable<Room> GetAll()
         {
+            using var activity = Tracing.ActivitySource.StartActivity("cosmos.rooms.getall", ActivityKind.Client);
             var q = _rooms.GetItemQueryIterator<RoomDoc>(new QueryDefinition("SELECT * FROM c ORDER BY c.name"));
             var list = new List<Room>();
-            while (q.HasMoreResults)
+            try
             {
-                var page = q.ReadNextAsync().GetAwaiter().GetResult();
-                list.AddRange(page.Select(d => new Room { Id = int.Parse(d.id), Name = d.name, Admin = new ApplicationUser { UserName = d.admin } }));
+                while (q.HasMoreResults)
+                {
+                    var page = q.ReadNextAsync().GetAwaiter().GetResult();
+                    activity?.AddEvent(new ActivityEvent("page", tags: new ActivityTagsCollection {{"db.page.count", page.Count}}));
+                    list.AddRange(page.Select(d => new Room { Id = int.Parse(d.id), Name = d.name, Admin = new ApplicationUser { UserName = d.admin } }));
+                }
+                list = list.OrderBy(r => r.Name).ToList();
+                activity?.SetTag("app.result.count", list.Count);
+                return list;
             }
-            return list.OrderBy(r => r.Name);
+            catch (CosmosException ex)
+            {
+                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+                _logger.LogError(ex, "Cosmos rooms get all failed");
+                throw;
+            }
         }
 
         public Room GetById(int id)
         {
+            using var activity = Tracing.ActivitySource.StartActivity("cosmos.rooms.getbyid", ActivityKind.Client);
+            activity?.SetTag("app.room.id", id);
             var q = _rooms.GetItemQueryIterator<RoomDoc>(new QueryDefinition("SELECT * FROM c WHERE c.id = @id").WithParameter("@id", id.ToString()));
-            while (q.HasMoreResults)
+            try
             {
-                var page = q.ReadNextAsync().GetAwaiter().GetResult();
-                var d = page.FirstOrDefault();
-                if (d != null) return new Room { Id = int.Parse(d.id), Name = d.name, Admin = new ApplicationUser { UserName = d.admin } };
+                while (q.HasMoreResults)
+                {
+                    var page = q.ReadNextAsync().GetAwaiter().GetResult();
+                    var d = page.FirstOrDefault();
+                    if (d != null) return new Room { Id = int.Parse(d.id), Name = d.name, Admin = new ApplicationUser { UserName = d.admin } };
+                }
+                return null;
             }
-            return null;
+            catch (CosmosException ex)
+            {
+                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+                _logger.LogError(ex, "Cosmos room get by id failed {Id}", id);
+                throw;
+            }
         }
 
         public Room GetByName(string name)
         {
+            using var activity = Tracing.ActivitySource.StartActivity("cosmos.rooms.getbyname", ActivityKind.Client);
+            activity?.SetTag("app.room", name);
             var q = _rooms.GetItemQueryIterator<RoomDoc>(new QueryDefinition("SELECT * FROM c WHERE c.name = @n").WithParameter("@n", name));
-            while (q.HasMoreResults)
+            try
             {
-                var page = q.ReadNextAsync().GetAwaiter().GetResult();
-                var d = page.FirstOrDefault();
-                if (d != null) return new Room { Id = int.Parse(d.id), Name = d.name, Admin = new ApplicationUser { UserName = d.admin } };
+                while (q.HasMoreResults)
+                {
+                    var page = q.ReadNextAsync().GetAwaiter().GetResult();
+                    var d = page.FirstOrDefault();
+                    if (d != null) return new Room { Id = int.Parse(d.id), Name = d.name, Admin = new ApplicationUser { UserName = d.admin } };
+                }
+                return null;
             }
-            return null;
+            catch (CosmosException ex)
+            {
+                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+                _logger.LogError(ex, "Cosmos room get by name failed {Room}", name);
+                throw;
+            }
         }
 
         public void Update(Room room)
         {
+            using var activity = Tracing.ActivitySource.StartActivity("cosmos.rooms.update", ActivityKind.Client);
+            activity?.SetTag("app.room", room.Name);
             var doc = new RoomDoc { id = room.Id.ToString(), name = room.Name, admin = room.Admin?.UserName };
-            _rooms.UpsertItemAsync(doc, new PartitionKey(doc.name)).GetAwaiter().GetResult();
+            try
+            {
+                var resp = _rooms.UpsertItemAsync(doc, new PartitionKey(doc.name)).GetAwaiter().GetResult();
+                activity?.SetTag("db.status_code", (int)resp.StatusCode);
+            }
+            catch (CosmosException ex)
+            {
+                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+                _logger.LogError(ex, "Cosmos room update failed {Room}", room.Name);
+                throw;
+            }
         }
     }
 
     public class CosmosMessagesRepository : IMessagesRepository
     {
-    private readonly Container _messages;
+        private readonly Container _messages;
         private readonly IRoomsRepository _roomsRepo;
+        private readonly ILogger<CosmosMessagesRepository> _logger;
 
-        public CosmosMessagesRepository(CosmosClients clients, IRoomsRepository roomsRepo)
+        public CosmosMessagesRepository(CosmosClients clients, IRoomsRepository roomsRepo, ILogger<CosmosMessagesRepository> logger)
         {
             _messages = clients.Messages;
             _roomsRepo = roomsRepo;
+            _logger = logger;
         }
 
         public Message Create(Message message)
         {
+            using var activity = Tracing.ActivitySource.StartActivity("cosmos.messages.create", ActivityKind.Client);
             var room = message.ToRoom ?? _roomsRepo.GetById(message.ToRoomId);
             var pk = room?.Name ?? "global";
             message.Id = message.Id == 0 ? new Random().Next(1, int.MaxValue) : message.Id;
             var doc = new MessageDoc { id = message.Id.ToString(), roomName = pk, content = message.Content, fromUser = message.FromUser?.UserName, timestamp = message.Timestamp };
-            _messages.UpsertItemAsync(doc, new PartitionKey(pk)).GetAwaiter().GetResult();
+            try
+            {
+                var resp = _messages.UpsertItemAsync(doc, new PartitionKey(pk)).GetAwaiter().GetResult();
+                activity?.SetTag("db.status_code", (int)resp.StatusCode);
+            }
+            catch (CosmosException ex)
+            {
+                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+                _logger.LogError(ex, "Cosmos message create failed {Room}", pk);
+                throw;
+            }
             return message;
         }
 
         public void Delete(int id, string byUserName)
         {
+            using var activity = Tracing.ActivitySource.StartActivity("cosmos.messages.delete", ActivityKind.Client);
             var m = GetById(id);
             if (m?.FromUser?.UserName == byUserName)
             {
                 var room = m.ToRoom ?? _roomsRepo.GetById(m.ToRoomId);
                 var pk = room?.Name ?? "global";
-                _messages.DeleteItemAsync<MessageDoc>(id.ToString(), new PartitionKey(pk)).GetAwaiter().GetResult();
+                try
+                {
+                    var resp = _messages.DeleteItemAsync<MessageDoc>(id.ToString(), new PartitionKey(pk)).GetAwaiter().GetResult();
+                    activity?.SetTag("db.status_code", (int)resp.StatusCode);
+                }
+                catch (CosmosException ex)
+                {
+                    activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+                    _logger.LogError(ex, "Cosmos message delete failed {Id}", id);
+                    throw;
+                }
             }
         }
 
         public Message GetById(int id)
         {
+            using var activity = Tracing.ActivitySource.StartActivity("cosmos.messages.getbyid", ActivityKind.Client);
+            activity?.SetTag("app.message.id", id);
             var q = _messages.GetItemQueryIterator<MessageDoc>(new QueryDefinition("SELECT TOP 1 * FROM c WHERE c.id = @id").WithParameter("@id", id.ToString()));
-            while (q.HasMoreResults)
+            try
             {
-                var page = q.ReadNextAsync().GetAwaiter().GetResult();
-                var d = page.FirstOrDefault();
-                if (d != null)
+                while (q.HasMoreResults)
                 {
-                    return new Message { Id = int.Parse(d.id), Content = d.content, Timestamp = d.timestamp, ToRoom = new Room { Name = d.roomName }, ToRoomId = 0, FromUser = new ApplicationUser { UserName = d.fromUser } };
+                    var page = q.ReadNextAsync().GetAwaiter().GetResult();
+                    var d = page.FirstOrDefault();
+                    if (d != null)
+                    {
+                        return new Message { Id = int.Parse(d.id), Content = d.content, Timestamp = d.timestamp, ToRoom = new Room { Name = d.roomName }, ToRoomId = 0, FromUser = new ApplicationUser { UserName = d.fromUser } };
+                    }
                 }
+                return null;
             }
-            return null;
+            catch (CosmosException ex)
+            {
+                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+                _logger.LogError(ex, "Cosmos message get by id failed {Id}", id);
+                throw;
+            }
         }
 
         public IEnumerable<Message> GetRecentByRoom(string roomName, int take = 20)
         {
+            using var activity = Tracing.ActivitySource.StartActivity("cosmos.messages.recent", ActivityKind.Client);
+            activity?.SetTag("app.room", roomName);
             var q = _messages.GetItemQueryIterator<MessageDoc>(new QueryDefinition($"SELECT TOP {take} * FROM c WHERE c.roomName = @n ORDER BY c.timestamp DESC").WithParameter("@n", roomName), requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey(roomName) });
             var list = new List<Message>();
-            while (q.HasMoreResults)
+            try
             {
-                var page = q.ReadNextAsync().GetAwaiter().GetResult();
-                list.AddRange(page.Select(d => new Message { Id = int.Parse(d.id), Content = d.content, Timestamp = d.timestamp, ToRoom = new Room { Name = d.roomName }, FromUser = new ApplicationUser { UserName = d.fromUser } }));
+                while (q.HasMoreResults)
+                {
+                    var page = q.ReadNextAsync().GetAwaiter().GetResult();
+                    activity?.AddEvent(new ActivityEvent("page", tags: new ActivityTagsCollection {{"db.page.count", page.Count}}));
+                    list.AddRange(page.Select(d => new Message { Id = int.Parse(d.id), Content = d.content, Timestamp = d.timestamp, ToRoom = new Room { Name = d.roomName }, FromUser = new ApplicationUser { UserName = d.fromUser } }));
+                }
+                list = list.OrderBy(m => m.Timestamp).ToList();
+                activity?.SetTag("app.result.count", list.Count);
+                return list;
             }
-            return list.OrderBy(m => m.Timestamp);
+            catch (CosmosException ex)
+            {
+                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+                _logger.LogError(ex, "Cosmos recent messages failed {Room}", roomName);
+                throw;
+            }
+        }
+
+        public IEnumerable<Message> GetBeforeByRoom(string roomName, DateTime before, int take = 20)
+        {
+            using var activity = Tracing.ActivitySource.StartActivity("cosmos.messages.before", ActivityKind.Client);
+            activity?.SetTag("app.room", roomName);
+            activity?.SetTag("app.before", before);
+            // Query older messages strictly before provided timestamp
+            var q = _messages.GetItemQueryIterator<MessageDoc>(
+                new QueryDefinition($"SELECT TOP {take} * FROM c WHERE c.roomName = @n AND c.timestamp < @b ORDER BY c.timestamp DESC")
+                    .WithParameter("@n", roomName)
+                    .WithParameter("@b", before),
+                requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey(roomName) });
+            var list = new List<Message>();
+            try
+            {
+                while (q.HasMoreResults)
+                {
+                    var page = q.ReadNextAsync().GetAwaiter().GetResult();
+                    activity?.AddEvent(new ActivityEvent("page", tags: new ActivityTagsCollection {{"db.page.count", page.Count}}));
+                    list.AddRange(page.Select(d => new Message { Id = int.Parse(d.id), Content = d.content, Timestamp = d.timestamp, ToRoom = new Room { Name = d.roomName }, FromUser = new ApplicationUser { UserName = d.fromUser } }));
+                }
+                list = list.OrderBy(m => m.Timestamp).ToList();
+                activity?.SetTag("app.result.count", list.Count);
+                return list;
+            }
+            catch (CosmosException ex)
+            {
+                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+                _logger.LogError(ex, "Cosmos messages before failed {Room}", roomName);
+                throw;
+            }
         }
     }
 }

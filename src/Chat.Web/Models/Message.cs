@@ -5,6 +5,9 @@ using System.Threading.Tasks;
 
 namespace Chat.Web.Models
 {
+    /// <summary>
+    /// Represents a chat message posted to a room (FromUser -> Room) with a server-side timestamp.
+    /// </summary>
     public class Message
     {
         public int Id { get; set; }

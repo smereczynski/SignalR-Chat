@@ -1,8 +1,9 @@
-﻿@import "_sidebar.scss";
-@import "_content.scss";
-@import "_userslist.scss";
-@import "_auth.scss";
-@import "_misc.scss";
+﻿// Modern Sass modules (namespaced). Adjust selectors rely only on generated class names.
+@use "_sidebar" as sidebar;
+@use "_content" as content;
+@use "_userslist" as userslist;
+@use "_auth" as auth;
+@use "_misc" as misc;
 
 $header-height: 60px;
 

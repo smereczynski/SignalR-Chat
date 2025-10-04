@@ -14,12 +14,18 @@ namespace Chat.Web.Controllers
     [Authorize]
     [Route("api/[controller]")]
     [ApiController]
+    /// <summary>
+    /// Provides CRUD operations for chat rooms and broadcasts room lifecycle events to all connected clients.
+    /// </summary>
     public class RoomsController : ControllerBase
     {
         private readonly IRoomsRepository _rooms;
         private readonly IUsersRepository _users;
         private readonly IHubContext<ChatHub> _hubContext;
 
+        /// <summary>
+        /// DI constructor for rooms API.
+        /// </summary>
         public RoomsController(IRoomsRepository rooms,
             IUsersRepository users,
             IHubContext<ChatHub> hubContext)
@@ -29,16 +35,22 @@ namespace Chat.Web.Controllers
             _hubContext = hubContext;
         }
 
-        [HttpGet]
-        public ActionResult<IEnumerable<RoomViewModel>> Get()
+    /// <summary>
+    /// Returns all existing rooms (id, name, admin user).
+    /// </summary>
+    [HttpGet]
+    public ActionResult<IEnumerable<RoomViewModel>> Get()
         {
             var rooms = _rooms.GetAll()
                 .Select(r => new RoomViewModel { Id = r.Id, Name = r.Name, Admin = r.Admin?.UserName });
             return Ok(rooms);
         }
 
-        [HttpGet("{id}")]
-        public ActionResult<Room> Get(int id)
+    /// <summary>
+    /// Returns a single room by id.
+    /// </summary>
+    [HttpGet("{id}")]
+    public ActionResult<Room> Get(int id)
         {
             var room = _rooms.GetById(id);
             if (room == null)
@@ -48,8 +60,11 @@ namespace Chat.Web.Controllers
             return Ok(vm);
         }
 
-        [HttpPost]
-        public async Task<ActionResult<Room>> Create(RoomViewModel viewModel)
+    /// <summary>
+    /// Creates a new room (caller becomes admin) and broadcasts creation to all clients.
+    /// </summary>
+    [HttpPost]
+    public async Task<ActionResult<Room>> Create(RoomViewModel viewModel)
         {
             if (_rooms.GetByName(viewModel.Name) != null)
                 return BadRequest("Invalid room name or room already exists");
@@ -69,8 +84,11 @@ namespace Chat.Web.Controllers
             return CreatedAtAction(nameof(Get), new { id = room.Id }, createdRoom);
         }
 
-        [HttpPut("{id}")]
-        public async Task<IActionResult> Edit(int id, RoomViewModel viewModel)
+    /// <summary>
+    /// Renames a room. Only the admin can modify. Broadcasts updated room metadata.
+    /// </summary>
+    [HttpPut("{id}")]
+    public async Task<IActionResult> Edit(int id, RoomViewModel viewModel)
         {
             if (_rooms.GetByName(viewModel.Name) != null)
                 return BadRequest("Invalid room name or room already exists");
@@ -89,8 +107,11 @@ namespace Chat.Web.Controllers
             return Ok();
         }
 
-        [HttpDelete("{id}")]
-        public async Task<IActionResult> Delete(int id)
+    /// <summary>
+    /// Deletes a room (admin only), broadcasts removal and notifies members.
+    /// </summary>
+    [HttpDelete("{id}")]
+    public async Task<IActionResult> Delete(int id)
         {
             var room = _rooms.GetById(id);
             if (room?.Admin?.UserName != User.Identity.Name)

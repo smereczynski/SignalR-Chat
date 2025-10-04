@@ -15,11 +15,126 @@ using Chat.Web.Options;
 using Chat.Web.Services;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using StackExchange.Redis;
+using OpenTelemetry.Trace;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Exporter;
+using Chat.Web.Observability;
+using Microsoft.Extensions.Logging;
+using Serilog;
+using Serilog.AspNetCore;
+using Chat.Web.Configuration;
+using Microsoft.AspNetCore.Authentication;
+using System.Security.Claims;
+using System.Text.Encodings.Web;
+using Microsoft.Extensions.Options;
+// OpenTelemetry instrumentation extension namespaces (ensure packages installed: OpenTelemetry.Instrumentation.AspNetCore, OpenTelemetry.Exporter.OpenTelemetryProtocol)
+using System.Diagnostics;
+#if OPENTELEMETRY_INSTRUMENTATION
+using OpenTelemetry.Instrumentation.AspNetCore;
+#endif
+using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.Http;
+using Azure.Monitor.OpenTelemetry.Exporter;
+using System.Reflection;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Logs;
+using System.Diagnostics.Metrics;
+using OpenTelemetry.Instrumentation.Runtime;
 
 namespace Chat.Web
 {
+    /// <summary>
+    /// Configures dependency injection and the HTTP request pipeline for the chat application.
+    /// Responsibilities:
+    ///  - Register persistence (Cosmos / InMemory) and OTP (Redis / InMemory)
+    ///  - Configure authentication (cookie vs test header auth) & SignalR (Azure vs in-process)
+    ///  - Set up OpenTelemetry (Traces + Metrics + Logs) with exporter auto-selection
+    ///  - Apply rate limiting to sensitive OTP endpoints
+    ///  - Seed baseline data on startup
+    ///  - Expose health and hub endpoints
+    /// </summary>
     public class Startup
     {
+        /// <summary>
+        /// Static holder for custom domain meters and counters. These are added to the MeterProvider in <see cref="ConfigureServices"/>.
+        /// Keeping them nested avoids accidental public exposure while still enabling reuse in controllers/hubs.
+        /// </summary>
+        private static class Metrics
+        {
+            public const string InstrumentationName = "Chat.Web";
+            public static readonly Meter Meter = new Meter(InstrumentationName, "1.0.0");
+            public static readonly Counter<long> MessagesSent = Meter.CreateCounter<long>("chat.messages.sent");
+            public static readonly Counter<long> RoomsJoined = Meter.CreateCounter<long>("chat.rooms.joined");
+            public static readonly Counter<long> OtpRequests = Meter.CreateCounter<long>("chat.otp.requests");
+            public static readonly Counter<long> OtpVerifications = Meter.CreateCounter<long>("chat.otp.verifications");
+            public static readonly Counter<long> ReconnectAttempts = Meter.CreateCounter<long>("chat.reconnect.attempts");
+        }
+
+    /// <summary>
+    /// Chooses a trace exporter based on configuration priority (Azure Monitor > OTLP > Console).
+    /// </summary>
+    private static void AddSelectedExporter(TracerProviderBuilder builder, string otlpEndpoint, IConfiguration config)
+        {
+            var envName = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT");
+            var aiConn = config["ApplicationInsights:ConnectionString"] ?? Environment.GetEnvironmentVariable("APPLICATIONINSIGHTS_CONNECTION_STRING");
+            if (!string.IsNullOrWhiteSpace(aiConn) && string.Equals(envName, "Production", StringComparison.OrdinalIgnoreCase))
+            {
+                builder.AddAzureMonitorTraceExporter(o => o.ConnectionString = aiConn);
+            }
+            else if (!string.IsNullOrWhiteSpace(otlpEndpoint))
+            {
+                builder.AddOtlpExporter(o => o.Endpoint = new Uri(otlpEndpoint));
+            }
+            else
+            {
+                builder.AddConsoleExporter();
+            }
+        }
+
+    /// <summary>
+    /// Chooses a metrics exporter based on configuration priority (Azure Monitor > OTLP > Console).
+    /// </summary>
+    private static void AddSelectedExporter(MeterProviderBuilder builder, string otlpEndpoint, IConfiguration config)
+        {
+            var envName = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT");
+            var aiConn = config["ApplicationInsights:ConnectionString"] ?? Environment.GetEnvironmentVariable("APPLICATIONINSIGHTS_CONNECTION_STRING");
+            if (!string.IsNullOrWhiteSpace(aiConn) && string.Equals(envName, "Production", StringComparison.OrdinalIgnoreCase))
+            {
+                builder.AddAzureMonitorMetricExporter(o => o.ConnectionString = aiConn);
+            }
+            else if (!string.IsNullOrWhiteSpace(otlpEndpoint))
+            {
+                builder.AddOtlpExporter(o => o.Endpoint = new Uri(otlpEndpoint));
+            }
+            else
+            {
+                builder.AddConsoleExporter();
+            }
+        }
+
+    /// <summary>
+    /// Chooses a log exporter based on configuration priority (Azure Monitor > OTLP > Console).
+    /// </summary>
+    private static void AddSelectedExporter(OpenTelemetryLoggerOptions logging, string otlpEndpoint, IConfiguration config)
+        {
+            var envName = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT");
+            var aiConn = config["ApplicationInsights:ConnectionString"] ?? Environment.GetEnvironmentVariable("APPLICATIONINSIGHTS_CONNECTION_STRING");
+            if (!string.IsNullOrWhiteSpace(aiConn) && string.Equals(envName, "Production", StringComparison.OrdinalIgnoreCase))
+            {
+                logging.AddAzureMonitorLogExporter(o => o.ConnectionString = aiConn);
+            }
+            else if (!string.IsNullOrWhiteSpace(otlpEndpoint))
+            {
+                logging.AddOtlpExporter(o => o.Endpoint = new Uri(otlpEndpoint));
+            }
+            else
+            {
+                logging.AddConsoleExporter();
+            }
+        }
+        /// <summary>
+        /// Constructs the startup instance (configuration injected by host).
+        /// </summary>
         public Startup(IConfiguration configuration)
         {
             Configuration = configuration;
@@ -28,36 +143,78 @@ namespace Chat.Web
         public IConfiguration Configuration { get; }
 
         // This method gets called by the runtime. Use this method to add services to the container.
-        public void ConfigureServices(IServiceCollection services)
+    /// <summary>
+    /// Registers application services and infrastructure components.
+    /// Conditional logic toggles between production cloud services and in-memory test doubles.
+    /// </summary>
+    public void ConfigureServices(IServiceCollection services)
         {
+            // OpenTelemetry Tracing
+            var otlpEndpoint = Configuration["OTel:OtlpEndpoint"]; // e.g. http://localhost:4317 or https://otlp.yourdomain:4317
+            var assemblyVersion = typeof(Startup).Assembly.GetName().Version?.ToString() ?? "unknown";
+            services.AddOpenTelemetry()
+                .ConfigureResource(rb => rb.AddService(Tracing.ServiceName, serviceVersion: assemblyVersion))
+                .WithTracing(builder =>
+                {
+                    builder.AddSource(Tracing.ServiceName);
+                    try { builder.AddAspNetCoreInstrumentation().AddHttpClientInstrumentation(); } catch { }
+                    AddSelectedExporter(builder, otlpEndpoint, Configuration);
+                })
+                .WithMetrics(builder =>
+                {
+                    builder.AddRuntimeInstrumentation()
+                           .AddAspNetCoreInstrumentation()
+                           .AddHttpClientInstrumentation()
+                           .AddMeter(Metrics.InstrumentationName);
+                    AddSelectedExporter(builder, otlpEndpoint, Configuration);
+                });
+
+            // OpenTelemetry logging provider (simple; Serilog remains primary)
+            services.AddLogging(lb =>
+            {
+                lb.AddOpenTelemetry(o =>
+                {
+                    AddSelectedExporter(o, otlpEndpoint, Configuration);
+                    o.IncludeFormattedMessage = true;
+                    o.IncludeScopes = false;
+                });
+            });
             // Options
             services.Configure<CosmosOptions>(Configuration.GetSection("Cosmos"));
             services.Configure<RedisOptions>(Configuration.GetSection("Redis"));
             services.Configure<AcsOptions>(Configuration.GetSection("Acs"));
 
-            // Cosmos required
-            var cosmosConn = Configuration["Cosmos:ConnectionString"];
-            if (string.IsNullOrWhiteSpace(cosmosConn))
-                throw new InvalidOperationException("Cosmos:ConnectionString is required for this app.");
-            var cosmosOpts = new CosmosOptions
+            var inMemory = Configuration["Testing:InMemory"];
+            if (string.Equals(inMemory, "true", StringComparison.OrdinalIgnoreCase))
             {
-                ConnectionString = cosmosConn,
-                Database = Configuration["Cosmos:Database"] ?? "chat",
-                MessagesContainer = Configuration["Cosmos:MessagesContainer"] ?? "messages",
-                UsersContainer = Configuration["Cosmos:UsersContainer"] ?? "users",
-                RoomsContainer = Configuration["Cosmos:RoomsContainer"] ?? "rooms",
-            };
-            services.AddSingleton(new CosmosClients(cosmosOpts));
-            services.AddSingleton<IUsersRepository, CosmosUsersRepository>();
-            services.AddSingleton<IRoomsRepository, CosmosRoomsRepository>();
-            services.AddSingleton<IMessagesRepository, CosmosMessagesRepository>();
+                // Lightweight in-memory repositories for integration tests (no external services)
+                services.AddSingleton<IUsersRepository, InMemoryUsersRepository>();
+                services.AddSingleton<IRoomsRepository, InMemoryRoomsRepository>();
+                services.AddSingleton<IMessagesRepository, InMemoryMessagesRepository>();
+                services.AddSingleton<IOtpStore, InMemoryOtpStore>();
+            }
+            else
+            {
+                // Cosmos required (fail fast if placeholder)
+                var cosmosConn = ConfigurationGuards.Require(Configuration["Cosmos:ConnectionString"], "Cosmos:ConnectionString");
+                var cosmosOpts = new CosmosOptions
+                {
+                    ConnectionString = cosmosConn,
+                    Database = Configuration["Cosmos:Database"] ?? "chat",
+                    MessagesContainer = Configuration["Cosmos:MessagesContainer"] ?? "messages",
+                    UsersContainer = Configuration["Cosmos:UsersContainer"] ?? "users",
+                    RoomsContainer = Configuration["Cosmos:RoomsContainer"] ?? "rooms",
+                };
+                services.AddSingleton(new CosmosClients(cosmosOpts));
+                services.AddSingleton<IUsersRepository, CosmosUsersRepository>();
+                services.AddSingleton<IRoomsRepository, CosmosRoomsRepository>();
+                services.AddSingleton<IMessagesRepository, CosmosMessagesRepository>();
 
-            // Redis OTP store
-            var redisConn = Configuration["Redis:ConnectionString"];
-            if (string.IsNullOrWhiteSpace(redisConn))
-                throw new InvalidOperationException("Redis:ConnectionString is required for this app.");
-            services.AddSingleton<IConnectionMultiplexer>(sp => ConnectionMultiplexer.Connect(redisConn));
-            services.AddSingleton<IOtpStore, RedisOtpStore>();
+                // Redis OTP store (fail fast if placeholder)
+                var redisConn = ConfigurationGuards.Require(Configuration["Redis:ConnectionString"], "Redis:ConnectionString");
+                services.AddSingleton<IConnectionMultiplexer>(sp => ConnectionMultiplexer.Connect(redisConn));
+                services.AddSingleton<IOtpStore, RedisOtpStore>();
+            }
             // Prefer ACS sender if configured, otherwise console
             var acsConn = Configuration["Acs:ConnectionString"];            
             if (!string.IsNullOrWhiteSpace(acsConn))
@@ -76,20 +233,64 @@ namespace Chat.Web
             }
             services.AddRazorPages();
             services.AddControllers();
-            services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
-                .AddCookie(options =>
-                {
-                    options.LoginPath = "/"; // the SPA handles login UI
-                    options.AccessDeniedPath = "/";
-                    options.SlidingExpiration = true;
-                });
-        // Always use Azure SignalR (no in-memory transport)
-        services.AddSignalR()
-            .AddAzureSignalR();
+            services.AddSingleton<Services.IInProcessMetrics, Services.InProcessMetrics>();
+            // Rate limiting: protect auth endpoints (OTP request / verify) - configurable for tests vs prod
+            services.AddRateLimiter(options =>
+            {
+                options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+                var permitLimit = Configuration.GetValue<int?>("RateLimiting:Auth:PermitLimit") ?? 5;
+                var windowSeconds = Configuration.GetValue<int?>("RateLimiting:Auth:WindowSeconds") ?? 60; // default 1 minute
+                var queueLimit = Configuration.GetValue<int?>("RateLimiting:Auth:QueueLimit") ?? 0; // default reject overflow
+                options.AddPolicy("AuthEndpoints", context =>
+                    RateLimitPartition.GetFixedWindowLimiter(partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "anon",
+                        factory: _ => new FixedWindowRateLimiterOptions
+                        {
+                            PermitLimit = permitLimit,
+                            Window = TimeSpan.FromSeconds(windowSeconds),
+                            QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                            QueueLimit = queueLimit
+                        }));
+            });
+            if (string.Equals(Configuration["Testing:InMemory"], "true", StringComparison.OrdinalIgnoreCase))
+            {
+                services.AddAuthentication("Test")
+                    .AddScheme<AuthenticationSchemeOptions, TestAuthHandler>("Test", _ => { });
+            }
+            else
+            {
+                services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
+                    .AddCookie(options =>
+                    {
+                        options.LoginPath = "/"; // the SPA handles login UI
+                        options.AccessDeniedPath = "/";
+                        options.SlidingExpiration = true;
+                    });
+            }
+            // SignalR transport: use Azure in normal mode, in-memory during tests
+            if (string.Equals(Configuration["Testing:InMemory"], "true", StringComparison.OrdinalIgnoreCase))
+            {
+                services.AddSignalR();
+            }
+            else
+            {
+                services.AddSignalR().AddAzureSignalR();
+            }
+            
+            // Seeding service (runs once at startup)
+            // Background service: seeds default room/users if they do not yet exist (idempotent on restart).
+            services.AddHostedService<DataSeedHostedService>();
+            services.AddLogging(logging =>
+            {
+                logging.AddFilter("Microsoft.AspNetCore.SignalR", LogLevel.Information);
+                logging.AddFilter("Microsoft.Azure.SignalR", LogLevel.Information);
+            });
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
-        public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
+    /// <summary>
+    /// Configures the HTTP request pipeline: diagnostics, static assets, routing, security, tracing and SignalR hub.
+    /// </summary>
+    public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
         {
             if (env.IsDevelopment())
             {
@@ -107,6 +308,23 @@ namespace Chat.Web
 
             app.UseRouting();
 
+            app.UseRateLimiter();
+
+            // Custom request tracing middleware (adds per-request Activity & trace headers)
+            app.UseMiddleware<RequestTracingMiddleware>();
+
+            // Serilog request logging (structured HTTP access logs)
+            app.UseSerilogRequestLogging(opts =>
+            {
+                opts.EnrichDiagnosticContext = (ctx, http) =>
+                {
+                    if (http.Response.Headers.TryGetValue("X-Trace-Id", out var traceId))
+                    {
+                        ctx.Set("TraceId", traceId.ToString());
+                    }
+                };
+            });
+
             app.UseAuthentication();
             app.UseAuthorization();
 
@@ -115,6 +333,7 @@ namespace Chat.Web
                 endpoints.MapRazorPages();
                 endpoints.MapControllers();
                 endpoints.MapHub<ChatHub>("/chatHub");
+                endpoints.MapGet("/healthz", () => "ok");
             });
         }
     }
