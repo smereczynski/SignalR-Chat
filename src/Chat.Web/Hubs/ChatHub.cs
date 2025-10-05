@@ -17,6 +17,7 @@ namespace Chat.Web.Hubs
     /// <summary>
     /// SignalR hub handling real-time chat operations: user presence, room membership and message broadcast.
     /// Tracks connected users for quick lookup and updates custom OpenTelemetry counters.
+    /// Private direct messaging removed; connection map retained for future notification use-cases.
     /// </summary>
     public class ChatHub : Hub
     {
@@ -45,37 +46,8 @@ namespace Chat.Web.Hubs
         }
 
         /// <summary>
-        /// Sends a private (direct) message to a single user. Validates both sender and recipient existence.
-        /// </summary>
-        /// <param name="receiverName">Target recipient user name.</param>
-        /// <param name="message">Message body supplied by the caller (HTML tags stripped).</param>
-        public async Task SendPrivate(string receiverName, string message)
-        {
-            if (_ConnectionsMap.TryGetValue(receiverName, out string userId))
-            {
-                var sender = _Connections.First(u => u.UserName == IdentityName);
-                if (!string.IsNullOrWhiteSpace(message))
-                {
-                    var messageViewModel = new MessageViewModel
-                    {
-                        Content = Regex.Replace(message, @"<.*?>", string.Empty),
-                        FromUserName = sender.UserName,
-                        FromFullName = sender.FullName,
-                        Avatar = sender.Avatar,
-                        Room = string.Empty,
-                        Timestamp = DateTime.Now
-                    };
-
-                    await Clients.Client(userId).SendAsync("newMessage", messageViewModel);
-                    await Clients.Caller.SendAsync("newMessage", messageViewModel);
-                    _metrics.IncMessagesSent();
-                }
-            }
-        }
-
-        /// <summary>
         /// Adds the calling connection to the specified room (SignalR group) and notifies existing members.
-        /// Increments a custom counter for room joins.
+        /// Enforces fixed room membership if user profile defines FixedRooms.
         /// </summary>
         public async Task Join(string roomName)
         {
@@ -91,6 +63,14 @@ namespace Chat.Web.Hubs
             }
             try
             {
+                var profile = _users.GetByUserName(IdentityName);
+                if (profile?.FixedRooms?.Any() == true && !profile.FixedRooms.Contains(roomName))
+                {
+                    _logger.LogWarning("User {User} attempted to join unauthorized room {Room}", IdentityName, roomName);
+                    await Clients.Caller.SendAsync("onError", "You are not authorized for this room.");
+                    activity?.SetStatus(ActivityStatusCode.Error, "room unauthorized");
+                    return;
+                }
                 var user = _Connections.FirstOrDefault(u => u.UserName == IdentityName);
                 if (user != null && user.CurrentRoom != roomName)
                 {
@@ -99,6 +79,8 @@ namespace Chat.Web.Hubs
                     {
                         await Clients.OthersInGroup(previous).SendAsync("removeUser", user);
                         _logger.LogDebug("User {User} leaving room {Prev}", IdentityName, previous);
+                        activity?.AddEvent(new ActivityEvent("leave", tags: new ActivityTagsCollection {{"chat.room.prev", previous}}));
+                        _metrics.DecRoomPresence(previous);
                     }
                     await Leave(previous);
                     await Groups.AddToGroupAsync(Context.ConnectionId, roomName);
@@ -106,6 +88,7 @@ namespace Chat.Web.Hubs
                     await Clients.OthersInGroup(roomName).SendAsync("addUser", user);
                     _logger.LogInformation("User {User} joined room {Room}", IdentityName, roomName);
                     _metrics.IncRoomsJoined();
+                    _metrics.IncRoomPresence(roomName);
                 }
             }
             catch (Exception ex)
@@ -155,6 +138,7 @@ namespace Chat.Web.Hubs
             {
                 var user = _users.GetByUserName(IdentityName);
                 var existing = _Connections.FirstOrDefault(u => u.UserName == IdentityName);
+                var device = GetDevice();
                 if (existing != null)
                 {
                     _ConnectionsMap[IdentityName] = Context.ConnectionId;
@@ -169,13 +153,14 @@ namespace Chat.Web.Hubs
                         UserName = user?.UserName ?? IdentityName,
                         FullName = user?.FullName ?? IdentityName,
                         Avatar = user?.Avatar,
-                        Device = GetDevice(),
+                        Device = device,
                         CurrentRoom = string.Empty
                     };
                     _Connections.Add(userViewModel);
                     _ConnectionsMap[IdentityName] = Context.ConnectionId;
                     _logger.LogInformation("User connected {User}", IdentityName);
                     _metrics.IncActiveConnections();
+                    _metrics.UserAvailable(IdentityName, device);
                     await Clients.Caller.SendAsync("getProfileInfo", userViewModel);
                 }
             }
@@ -207,10 +192,12 @@ namespace Chat.Web.Hubs
                 if (!string.IsNullOrWhiteSpace(user.CurrentRoom))
                 {
                     await Clients.OthersInGroup(user.CurrentRoom).SendAsync("removeUser", user);
+                    _metrics.DecRoomPresence(user.CurrentRoom);
                 }
                 _ConnectionsMap.Remove(user.UserName);
                 _logger.LogInformation("User disconnected {User}", IdentityName);
                 _metrics.DecActiveConnections();
+                _metrics.UserUnavailable(IdentityName);
             }
             catch (Exception ex)
             {

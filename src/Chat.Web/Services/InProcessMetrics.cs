@@ -17,6 +17,10 @@ namespace Chat.Web.Services
         void IncReconnectAttempt(int attempt, int delayMs);
         void IncActiveConnections();
         void DecActiveConnections();
+        void IncRoomPresence(string roomName);
+        void DecRoomPresence(string roomName);
+        void UserAvailable(string userName, string device);
+        void UserUnavailable(string userName);
         MetricsSnapshot Snapshot();
         DateTimeOffset StartTime { get; }
     }
@@ -45,6 +49,8 @@ namespace Chat.Web.Services
         private static readonly Counter<long> OtpVerificationsCounter = Meter.CreateCounter<long>("chat.otp.verifications");
         private static readonly Counter<long> ReconnectAttemptsCounter = Meter.CreateCounter<long>("chat.reconnect.attempts");
         private static readonly UpDownCounter<long> ActiveConnectionsGauge = Meter.CreateUpDownCounter<long>("chat.connections.active");
+        private static readonly UpDownCounter<long> RoomPresenceGauge = Meter.CreateUpDownCounter<long>("chat.room.presence");
+        private static readonly Counter<long> AvailabilityEventsCounter = Meter.CreateCounter<long>("chat.user.availability.events");
 
         public DateTimeOffset StartTime { get; } = DateTimeOffset.UtcNow;
 
@@ -55,6 +61,10 @@ namespace Chat.Web.Services
         public void IncReconnectAttempt(int attempt, int delayMs){ Interlocked.Increment(ref _reconnectAttempts); ReconnectAttemptsCounter.Add(1, new ("attempt", attempt), new ("delay_ms", delayMs)); }
         public void IncActiveConnections(){ Interlocked.Increment(ref _activeConnections); ActiveConnectionsGauge.Add(1); }
         public void DecActiveConnections(){ Interlocked.Decrement(ref _activeConnections); ActiveConnectionsGauge.Add(-1); }
+        public void IncRoomPresence(string roomName){ RoomPresenceGauge.Add(1, new System.Collections.Generic.KeyValuePair<string, object>("room", roomName)); }
+        public void DecRoomPresence(string roomName){ RoomPresenceGauge.Add(-1, new System.Collections.Generic.KeyValuePair<string, object>("room", roomName)); }
+        public void UserAvailable(string userName, string device){ AvailabilityEventsCounter.Add(1, new ("user", userName), new ("state", "online"), new ("device", device)); }
+        public void UserUnavailable(string userName){ AvailabilityEventsCounter.Add(1, new ("user", userName), new ("state", "offline")); }
 
         public MetricsSnapshot Snapshot() => new(
             _messagesSent,

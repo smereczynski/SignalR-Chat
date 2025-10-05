@@ -6,11 +6,12 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Chat.Web.Repositories;
 using Chat.Web.Models;
+using System.Collections.Generic;
 
 namespace Chat.Web.Services
 {
     /// <summary>
-    /// Idempotent startup task seeding a default room and sample users when store is empty.
+    /// Idempotent startup task seeding a default room set and sample users when store is empty.
     /// </summary>
     public class DataSeedHostedService : IHostedService
     {
@@ -18,17 +19,17 @@ namespace Chat.Web.Services
         private readonly IUsersRepository _users;
         private readonly ILogger<DataSeedHostedService> _logger;
 
-    /// <summary>
-    /// Creates the hosted service with repositories used for seeding.
-    /// </summary>
-    public DataSeedHostedService(IRoomsRepository rooms, IUsersRepository users, ILogger<DataSeedHostedService> logger)
+        /// <summary>
+        /// Creates the hosted service with repositories used for seeding.
+        /// </summary>
+        public DataSeedHostedService(IRoomsRepository rooms, IUsersRepository users, ILogger<DataSeedHostedService> logger)
         {
             _rooms = rooms;
             _users = users;
             _logger = logger;
         }
 
-    /// <inheritdoc />
+        /// <inheritdoc />
         public Task StartAsync(CancellationToken cancellationToken)
         {
             try
@@ -40,20 +41,43 @@ namespace Chat.Web.Services
                     _logger.LogInformation("Data seeding skipped (Seeding:Enabled=false)");
                     return Task.CompletedTask;
                 }
-                // Seed default 'general' room if absent
-                var existing = _rooms.GetByName("general");
-                if (existing == null)
+
+                // Ensure baseline rooms
+                string[] roomNames = new[] { "general", "ops", "random" };
+                foreach (var rn in roomNames)
                 {
-                    _rooms.Create(new Room { Name = "general" });
-                    _logger.LogInformation("Seeded default room 'general'.");
+                    if (_rooms.GetByName(rn) == null)
+                    {
+                        _rooms.Create(new Room { Name = rn });
+                        _logger.LogInformation("Seeded room {Room}", rn);
+                    }
                 }
-                // Seed sample users if none
-                var anyUser = _users.GetAll().FirstOrDefault();
-                if (anyUser == null)
+
+                // Seed users only if none exist
+                if (!_users.GetAll().Any())
                 {
-                    _users.Upsert(new ApplicationUser { UserName = "alice", FullName = "Alice" });
-                    _users.Upsert(new ApplicationUser { UserName = "bob", FullName = "Bob" });
-                    _logger.LogInformation("Seeded sample users 'alice', 'bob'.");
+                    _users.Upsert(new ApplicationUser {
+                        UserName = "alice",
+                        FullName = "Alice Johnson",
+                        Email = "alice@example.com",
+                        MobileNumber = "+15550000001",
+                        FixedRooms = new List<string>{ "general", "ops" }
+                    });
+                    _users.Upsert(new ApplicationUser {
+                        UserName = "bob",
+                        FullName = "Bob Stone",
+                        Email = "bob@example.com",
+                        MobileNumber = "+15550000002",
+                        FixedRooms = new List<string>{ "general", "random" }
+                    });
+                    _users.Upsert(new ApplicationUser {
+                        UserName = "charlie",
+                        FullName = "Charlie Fields",
+                        Email = "charlie@example.com",
+                        MobileNumber = "+15550000003",
+                        FixedRooms = new List<string>{ "general" }
+                    });
+                    _logger.LogInformation("Seeded demo users with fixed room assignments.");
                 }
             }
             catch (Exception ex)
