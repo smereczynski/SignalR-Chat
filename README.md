@@ -4,7 +4,6 @@ Modern real-time chat on .NET 9 using Azure SignalR, Cosmos DB, Redis (OTP + sta
 
 ## Features
 * Multi-room chat (create / switch rooms)
-* (Optional) simple private whisper syntax: `/private(Name) message` (server relays if enabled)
 * Text-only messages (concise scope, no file upload or custom emoji assets)
 * Optimistic message sending with client-generated correlation IDs (prevents duplicates when server echoes)
 * Incremental, scroll-triggered pagination (newest first load + "load older" on scroll-up)
@@ -259,6 +258,26 @@ Additional automatically collected metrics include (non-exhaustive):
 * Rate limiting (`aspnetcore.rate_limiting.*`)
 * Runtime (`process.runtime.dotnet.*`, GC/JIT/thread pool)
 
+## Changes: Fixed Room Membership & Removed Private Messages
+Users are now predefined with immutable room assignments stored in the user profile (Email, MobileNumber, FixedRooms). The hub enforces authorization: attempts to join a non-assigned room are rejected. Legacy private messaging (/private(user) ...) has been removed client & server side; the connection map remains for future targeted notifications (e.g., alerts, system pings).
+
+### New User Fields
+- Email
+- MobileNumber
+- FixedRooms (array of allowed room names)
+
+### Updated Seeding
+On first run (if no users) the seeder creates rooms: general, ops, random and users:
+- alice (general, ops)
+- bob (general, random)
+- charlie (general)
+
+### Presence & Availability Metrics
+Added metrics published via OpenTelemetry:
+- chat.room.presence (UpDownCounter per room tag)
+- chat.user.availability.events (Counter: state=online/offline, device=<device>)
+- Existing counters (messages, joins, active connections, reconnect attempts) unaffected.
+
 ### Logs
 * Serilog handles structured application logs.
 * OpenTelemetry logging provider forwards enriched log records through the same exporter selection.
@@ -386,86 +405,6 @@ Service metadata includes `service.name=Chat.Web` and `service.version` (derived
   * or env var `APPLICATIONINSIGHTS_CONNECTION_STRING`
 4. Restart the app—new traces will flow to AI (requests, custom Activities, rate limited 429s, etc.).
 
-### Logs
-Currently Serilog writes structured logs to console (App Service captures them). You can later add `Serilog.Sinks.ApplicationInsights` or OTel log exporter if central log correlation is required.
-
-### Trace Header Propagation
-Custom middleware adds `X-Trace-Id` and `X-Span-Id` if the response has not yet started. These can be forwarded by reverse proxies for cross-hop correlation.
-
-### Hub Spans
-Custom spans created for: `ChatHub.OnConnected`, `ChatHub.OnDisconnected`, `ChatHub.Join`, `ChatHub.Leave`. Duplicate connection detection sets tag `chat.duplicateConnection=true`.
-
-## Rate Limiting
-ASP.NET Core built-in fixed window limiter applied ONLY to sensitive OTP endpoints:
-* `POST /api/auth/start`
-* `POST /api/auth/verify`
-
-Default Policy (production/dev defaults): 5 requests per 60 seconds per IP, queue length 0 (excess immediately rejected with 429).
-
-Configurable Keys:
-| Setting | Key | Default |
-|---------|-----|---------|
-| Permit limit | `RateLimiting:Auth:PermitLimit` | 5 |
-| Window seconds | `RateLimiting:Auth:WindowSeconds` | 60 |
-| Queue limit | `RateLimiting:Auth:QueueLimit` | 0 |
-
-Integration tests override these to a shorter window (5 seconds) for fast deterministic validation by injecting in-memory configuration values.
-
-## In-Memory Test Mode
-Integration tests enable an in-memory mode (`Testing:InMemory=true`) that swaps:
-* Cosmos repositories → in-memory collections
-* Redis OTP store → in-memory dictionary
-* Azure SignalR → in-process SignalR
-* Authentication → custom header-based test handler (`X-Test-User`)
-
-This keeps tests hermetic with no external dependencies. Enable manually by setting env var `Testing__InMemory=true` for local experimentation.
-
-## File Structure (Key Paths)
-```
-src/Chat.Web/
-  Program.cs / Startup.cs          # Host + service wiring & OpenTelemetry
-  Controllers/                     # REST + telemetry ingestion endpoints
-  Hubs/ChatHub.cs                  # Real-time hub (presence, rooms, private send)
-  Repositories/                    # Cosmos + InMemory data access abstractions
-  Services/                        # OTP senders/stores, metrics, seeding, test auth
-  Models/                          # Domain entities (User, Room, Message)
-  ViewModels/                      # API/Hub DTO projections (MessageViewModel etc.)
-  wwwroot/js/chat.js               # Vanilla JS client (state + SignalR + telemetry)
-  wwwroot/css/                     # SCSS + compiled CSS
-tests/ (if present)                # Integration tests (signalr lifecycle)
-```
-
-## Deletion Candidates (Approved)
-| Item | Reason | Action |
-|------|--------|--------|
-| `UploadViewModel.cs` | Legacy file upload feature removed | Delete (safe) |
-| Emoji picker assets (removed) | Already excised | None |
-| Identity scaffolding (if reappears) | OTP-only auth | Remove if unused |
-| Legacy comments (e.g. deleteMessage) | Clarity | Optional cleanup |
-
-Keep this list in sync if features are reintroduced.
-
-## Seeding Control
-Data seeding now respects env flag:
-```
-Seeding__Enabled=false   # Skip seeding alice/bob + 'general' room
-```
-Omit or set to any other value to enable default seeding.
-
-## Legacy / Removed Components
-Removed to simplify maintenance & reduce surface area:
-* KnockoutJS MVVM → replaced with small stateful module (`chat.js`).
-* File uploads & emoji picker UI (server + static assets purged).
-* Message deletion (immutability + simpler auditability).
-
-## Adoption Checklist
-1. Set Cosmos / Redis / SignalR secrets via environment.
-2. (Optional) Provide OTLP endpoint or App Insights connection string.
-3. Decide on seeding (`Seeding__Enabled=false` in production if you do not want sample data).
-4. Verify rate limiting suits auth security requirements.
-5. Deploy and monitor `/healthz` + traces/metrics for baseline.
-
-
 ## Integration Tests
 Added lifecycle integration tests (xUnit):
 * Duplicate connection resilience
@@ -506,10 +445,4 @@ Redis__ConnectionString=<your redis connection string>
 * Add OTLP exporter + tracing dashboard
 * Introduce integration tests for optimistic reconciliation & pagination
 * Optional in-memory dev mode (no Cosmos/Redis) for rapid prototyping
-* UI refinement for pending (optimistic) messages (e.g., opacity until acknowledged)
-
-## License
-See `LICENSE`.
-
----
-Questions or suggestions? Open an issue or PR.
+* UI refinement for pending (optimistic) messages (e.g., opacity until

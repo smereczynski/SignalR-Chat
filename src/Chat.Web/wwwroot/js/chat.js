@@ -219,18 +219,13 @@
     const now=Date.now();
     if(now - state.lastSendAt < state.minSendIntervalMs){ showError('You are sending messages too quickly'); return; }
     state.lastSendAt = now;
-    if(text.startsWith('/private(')){
-      const idx=text.indexOf(')');
-      if(idx>9){ const user=text.substring(9,idx); const body=text.substring(idx+1).trim(); hub.invoke('SendPrivate',user,body).catch(()=>{}); }
-    } else if(state.joinedRoom){
-      // Optimistic pending message
+    if(state.joinedRoom){
       const tempId = pendingIdCounter--;
       const nowIso = new Date().toISOString();
       const correlationId = 'c_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,8);
       state.messages.push({id:tempId,content:text,timestamp:nowIso,fromUserName:state.profile?.userName,fromFullName:state.profile?.fullName,avatar:state.profile?.avatar,isMine:true, correlationId});
       renderMessages();
       apiPost('/api/Messages',{room:state.joinedRoom.name, content:text, correlationId}).catch(()=>{
-        // On failure, remove pending and show error
         state.messages = state.messages.filter(m=>m.id!==tempId);
         renderMessages();
         showError('Send failed');
