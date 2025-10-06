@@ -23,7 +23,7 @@
   const log = (lvl,msg,obj)=> (window.appLogger && window.appLogger[lvl]) ? window.appLogger[lvl](msg,obj) : console.log(`[${lvl}] ${msg}`, obj||'');
 
   // ---------------- State ----------------
-  const state = { loading:true, profile:null, rooms:[], users:[], messages:[], joinedRoom:null, filter:'', oldestLoaded:null, canLoadMore:true, pageSize:20, loadingMore:false, lastSendAt:0, minSendIntervalMs:800 };
+  const state = { loading:true, profile:null, rooms:[], users:[], messages:[], joinedRoom:null, filter:'', oldestLoaded:null, canLoadMore:true, pageSize:20, loadingMore:false, lastSendAt:0, minSendIntervalMs:800, sendQueue:[] };
   const els = {};
 
   function cacheDom(){
@@ -115,7 +115,15 @@
   }
   let lastReconnectError=null;
   function ensureHub(){ if(hub) return hub; hub=new signalR.HubConnectionBuilder().withUrl('/chatHub').withAutomaticReconnect().build(); wireHub(hub); return hub; }
-  function startHub(){ ensureHub(); log('info','signalr.start'); return hub.start().then(()=>{ reconnectAttempts=0; lastReconnectError=null; loadRooms(); }).catch(err=>{ log('error','signalr.start.fail',{error:err&&err.message}); scheduleReconnect(err); }); }
+  function startHub(){
+    ensureHub();
+    log('info','signalr.start');
+    return hub.start().then(()=>{
+      reconnectAttempts=0; lastReconnectError=null; loadRooms();
+      // Fallback: if we already have a profile (from /api/auth/me) but still showing loading because getProfileInfo hasn't fired, hide loader.
+      if(state.profile && state.loading){ setLoading(false); }
+    }).catch(err=>{ log('error','signalr.start.fail',{error:err&&err.message}); scheduleReconnect(err); });
+  }
   /**
    * Applies exponential backoff and records telemetry for each reconnect attempt.
    * @param {Error} err the error that triggered scheduling
@@ -127,7 +135,7 @@
     try { fetch('/api/telemetry/reconnect',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({attempt:reconnectAttempts,delayMs:delay,errorCategory:cat,errorMessage:msg.slice(0,300)})}); } catch(_){ }
     setTimeout(()=> startHub().catch(e=> scheduleReconnect(e)), delay);
   }
-  function wireHub(c){ c.on('getProfileInfo', u=>{ state.profile={userName:u.userName, fullName:u.fullName, avatar:u.avatar}; setLoading(false); renderProfile(); }); c.on('newMessage', m=> {
+  function wireHub(c){ c.on('getProfileInfo', u=>{ state.profile={userName:u.userName, fullName:u.fullName, avatar:u.avatar}; setLoading(false); renderProfile(); attemptFlushQueue(); }); c.on('newMessage', m=> {
       const mineUser = state.profile && state.profile.userName;
       if(mineUser){
         // Prefer correlationId reconciliation
@@ -148,7 +156,7 @@
         }
       }
       addOrRenderMessage({ ...m, correlationId: m.correlationId });
-  }); c.on('addUser', u=> upsertUser(u)); c.on('removeUser', u=> removeUser(u.userName)); c.on('addChatRoom', r=> upsertRoom(r)); c.on('updateChatRoom', r=> upsertRoom(r)); c.on('removeChatRoom', id=>{ state.rooms=state.rooms.filter(x=>x.id!==id); if(state.joinedRoom && state.joinedRoom.id===id){ state.joinedRoom=null; state.messages=[]; } renderAll(); }); c.on('onError', msg=> showError(msg)); }
+  }); c.on('addUser', u=> upsertUser(u)); c.on('removeUser', u=> removeUser(u.userName)); c.on('addChatRoom', r=> upsertRoom(r)); c.on('updateChatRoom', r=> upsertRoom(r)); c.on('removeChatRoom', id=>{ state.rooms=state.rooms.filter(x=>x.id!==id); if(state.joinedRoom && state.joinedRoom.id===id){ state.joinedRoom=null; state.messages=[]; } renderAll(); }); c.on('onError', msg=> showError(msg)); c.on('notify', n=> handleNotify(n)); }
 
   // --------------- Mutators -------------
   function upsertRoom(r){ const e=state.rooms.find(x=>x.id===r.id); if(e){ e.name=r.name; e.admin=r.admin; } else state.rooms.push({id:r.id,name:r.name,admin:r.admin}); renderRooms(); }
@@ -160,9 +168,33 @@
    */
   function addOrRenderMessage(m){ const isMine=state.profile && state.profile.userName===m.fromUserName; state.messages.push({id:m.id,content:m.content,timestamp:m.timestamp,fromUserName:m.fromUserName,fromFullName:m.fromFullName,avatar:m.avatar,isMine, correlationId:m.correlationId}); renderMessages(); }
 
+  /**
+   * Handles a direct notification (non-room message). We surface it as a system message in the current transcript.
+   * @param {{title:string,body:string,from:string,ts:string}} n
+   */
+  function handleNotify(n){
+    const ts = n.ts || new Date().toISOString();
+    const content = `[NOTIFY] ${n.title}${n.body?': '+n.body:''}`;
+    state.messages.push({id:'notify_'+ts, content, timestamp:ts, fromUserName:n.from||'system', fromFullName:n.from||'system', avatar:null, isMine:false});
+    renderMessages();
+  }
+
   // --------------- Actions --------------
-  function joinRoom(roomName){ if(!hub||!roomName) return; hub.invoke('Join',roomName).then(()=>{ state.joinedRoom=state.rooms.find(r=>r.name===roomName)||{name:roomName}; localStorage.setItem('lastRoom',roomName); loadUsers(); loadMessages(); renderRoomContext(); ensureProfileAvatar(); }).catch(err=> showError('Join failed: '+(err&&err.message))); }
-  function loadRooms(){ apiGet('/api/Rooms').then(list=>{ state.rooms=list; renderRooms(); const stored=localStorage.getItem('lastRoom'); if(stored && state.rooms.some(r=>r.name===stored)) joinRoom(stored); else if(state.rooms.length>0) joinRoom(state.rooms[0].name); }).catch(()=>{}); }
+  function joinRoom(roomName){ if(!hub||!roomName) return; hub.invoke('Join',roomName).then(()=>{ state.joinedRoom=state.rooms.find(r=>r.name===roomName)||{name:roomName}; localStorage.setItem('lastRoom',roomName); loadUsers(); loadMessages(); renderRoomContext(); ensureProfileAvatar(); attemptFlushQueue(); }).catch(err=> showError('Join failed: '+(err&&err.message))); }
+  function loadRooms(){
+    apiGet('/api/Rooms').then(list=>{
+      // Defensive normalization: support either PascalCase (Id/Name/Admin) or camelCase (id/name/admin)
+      state.rooms = (list||[]).map(r=>({
+        id: r.id!==undefined? r.id : r.Id,
+        name: r.name!==undefined? r.name : r.Name,
+        admin: r.admin!==undefined? r.admin : r.Admin
+      }));
+      renderRooms();
+      const stored=localStorage.getItem('lastRoom');
+      if(stored && state.rooms.some(r=>r.name===stored)) joinRoom(stored);
+      else if(state.rooms.length>0) joinRoom(state.rooms[0].name);
+    }).catch(()=>{});
+  }
   function loadUsers(){ if(!state.joinedRoom) return; hub.invoke('GetUsers', state.joinedRoom.name).then(users=>{ state.users=users; renderUsers(); }); }
   /**
    * Loads most recent page of messages for joined room (resets pagination state).
@@ -212,30 +244,48 @@
   function attachScrollPagination(){ const mc=document.querySelector('.messages-container'); if(!mc || mc.dataset.paginated) return; mc.dataset.paginated='true'; let lastReq=0; mc.addEventListener('scroll',()=>{ if(mc.scrollTop < 30){ const now=Date.now(); if(now-lastReq>400){ lastReq=now; loadOlderMessages(); } } }); }
   let pendingIdCounter=-1;
   /**
+   * Flush any queued messages that were entered before room/profile readiness.
+   */
+  function attemptFlushQueue(){
+    if(!state.joinedRoom || !state.profile || state.sendQueue.length===0) return;
+    const queued = [...state.sendQueue];
+    state.sendQueue.length = 0;
+    queued.forEach(txt=> internalSendMessage(txt, /*bypassRateLimit*/ true));
+  }
+  function internalSendMessage(text, bypassRateLimit){
+    const now=Date.now();
+    if(!bypassRateLimit && (now - state.lastSendAt < state.minSendIntervalMs)){
+      showError('You are sending messages too quickly');
+      return;
+    }
+    state.lastSendAt = now;
+    const tempId = pendingIdCounter--;
+    const nowIso = new Date().toISOString();
+    const correlationId = 'c_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,8);
+    state.messages.push({id:tempId,content:text,timestamp:nowIso,fromUserName:state.profile?.userName,fromFullName:state.profile?.fullName,avatar:state.profile?.avatar,isMine: !!state.profile, correlationId});
+    renderMessages();
+    apiPost('/api/Messages',{room:state.joinedRoom.name, content:text, correlationId}).catch(()=>{
+      state.messages = state.messages.filter(m=>m.id!==tempId);
+      renderMessages();
+      showError('Send failed');
+    });
+  }
+  /**
    * Sends a chat message (or /private(user) command). Implements rate limiting & optimistic update.
    */
   function sendMessage(){
     const text=(els.messageInput && els.messageInput.value||'').trim(); if(!text) return;
-    const now=Date.now();
-    if(now - state.lastSendAt < state.minSendIntervalMs){ showError('You are sending messages too quickly'); return; }
-    state.lastSendAt = now;
-    if(state.joinedRoom){
-      const tempId = pendingIdCounter--;
-      const nowIso = new Date().toISOString();
-      const correlationId = 'c_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,8);
-      state.messages.push({id:tempId,content:text,timestamp:nowIso,fromUserName:state.profile?.userName,fromFullName:state.profile?.fullName,avatar:state.profile?.avatar,isMine:true, correlationId});
-      renderMessages();
-      apiPost('/api/Messages',{room:state.joinedRoom.name, content:text, correlationId}).catch(()=>{
-        state.messages = state.messages.filter(m=>m.id!==tempId);
-        renderMessages();
-        showError('Send failed');
-      });
+    // If room or profile not ready yet, queue and try later
+    if(!state.joinedRoom || !state.profile){
+      state.sendQueue.push(text);
+      showError('Still connecting – your message is queued.');
+      if(els.messageInput) els.messageInput.value='';
+      attemptFlushQueue();
+      return;
     }
+    internalSendMessage(text, false);
     if(els.messageInput) els.messageInput.value='';
   }
-  function createRoom(){ const n=document.getElementById('roomName').value.trim(); if(!n) return; apiPost('/api/Rooms',{name:n}); }
-  function renameRoom(){ if(!state.joinedRoom) return; const n=document.getElementById('newRoomName').value.trim(); if(!n) return; apiPut('/api/Rooms/'+state.joinedRoom.id,{id:state.joinedRoom.id,name:n}); }
-  function deleteRoom(){ if(!state.joinedRoom) return; apiDelete('/api/Rooms/'+state.joinedRoom.id); }
   // deleteMessage removed
   function logoutCleanup(){ state.rooms=[]; state.users=[]; state.messages=[]; state.profile=null; state.joinedRoom=null; renderAll(); setLoading(false); }
 
@@ -243,7 +293,7 @@
   function probeAuth(){ const timeout=setTimeout(()=>{ log('warn','auth.timeout'); setLoading(false); },6000); return fetch('/api/auth/me',{credentials:'include'}).then(r=> r.ok? r.json(): null).then(u=>{ clearTimeout(timeout); if(u&&u.userName){ state.profile={userName:u.userName, fullName:u.fullName, avatar:u.avatar}; startHub(); } else { setLoading(false); } renderProfile(); }).catch(()=>{ clearTimeout(timeout); setLoading(false); }); }
 
   // --------------- UI Wiring ------------
-  function wireUi(){ if(els.messageInput) els.messageInput.addEventListener('keypress',e=>{ if(e.key==='Enter') sendMessage(); }); const sendBtn=document.getElementById('btn-send-message'); if(sendBtn) sendBtn.addEventListener('click',e=>{ e.preventDefault(); sendMessage(); }); if(els.filterInput) els.filterInput.addEventListener('input',()=>{ state.filter=els.filterInput.value; renderUsers(); }); const createBtn=document.getElementById('btn-create-room'); if(createBtn) createBtn.addEventListener('click',createRoom); const renameBtn=document.getElementById('btn-rename-room'); if(renameBtn) renameBtn.addEventListener('click',renameRoom); const deleteRoomBtn=document.getElementById('btn-delete-room'); if(deleteRoomBtn) deleteRoomBtn.addEventListener('click',deleteRoom); if(els.btnLogout) els.btnLogout.addEventListener('click',()=>{ fetch('/api/auth/logout',{method:'POST',credentials:'include'}).finally(()=>{ logoutCleanup(); }); }); }
+  function wireUi(){ if(els.messageInput) els.messageInput.addEventListener('keypress',e=>{ if(e.key==='Enter') sendMessage(); }); const sendBtn=document.getElementById('btn-send-message'); if(sendBtn) sendBtn.addEventListener('click',e=>{ e.preventDefault(); sendMessage(); }); if(els.filterInput) els.filterInput.addEventListener('input',()=>{ state.filter=els.filterInput.value; renderUsers(); }); if(els.btnLogout) els.btnLogout.addEventListener('click',()=>{ fetch('/api/auth/logout',{method:'POST',credentials:'include'}).finally(()=>{ logoutCleanup(); }); }); }
 
   function showError(msg){ if(!els.errorAlert) return; const span=els.errorAlert.querySelector('span'); if(span) span.textContent=msg; els.errorAlert.classList.remove('d-none'); setTimeout(()=> els.errorAlert.classList.add('d-none'),5000); }
 

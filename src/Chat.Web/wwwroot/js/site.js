@@ -150,47 +150,195 @@ document.addEventListener('DOMContentLoaded', () => {
         else { el.textContent = ''; el.classList.add('d-none'); }
     }
 
+    // Reusable OTP verify logic so it can be triggered by button click or Enter key
+    function executeOtpVerify() {
+        setOtpError(null);
+        window.__otpFlow = window.__otpFlow || {};
+        const flow = window.__otpFlow;
+        if (flow.verifyInFlight) return; // prevent double-submit
+        const userName = (document.getElementById('otpUserName')?.value || '').trim();
+        const code = (document.getElementById('otpCode')?.value || '').trim();
+        if (!userName || !code) { setOtpError('User and code are required'); return; }
+        const verifyBtn = document.getElementById('btn-verify-otp');
+        if (verifyBtn) verifyBtn.disabled = true;
+        flow.verifyInFlight = true;
+        const verifyStart = performance.now();
+        postJson('/api/auth/verify', { userName, code })
+            .then(r => { if (!r.ok) throw new Error('Invalid code'); return r.json().catch(()=>({})); })
+            .then(() => {
+                appLogger.info('OTP verify success', { user: userName });
+                if (flow.lastSendId) {
+                    const verifyLatencyMs = Math.round(performance.now() - (flow.lastSendCompletedTs || flow.lastSendStartTs || verifyStart));
+                    appLogger.info('OTP verify latency', { user: userName, sendId: flow.lastSendId, verifyLatencyMs });
+                }
+                const modalEl = document.getElementById('otp-login-modal');
+                if (modalEl && window.bootstrap) {
+                    try {
+                        (bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl)).hide();
+                    } catch(_){}
+                }
+                if (window.chatApp && typeof window.chatApp.onAuthenticated === 'function') {
+                    window.chatApp.onAuthenticated();
+                } else {
+                    appLogger.warn('chatApp.onAuthenticated not available');
+                }
+            })
+            .catch(e2 => { appLogger.error('OTP verify failed', { user: userName, error: e2.message }); setOtpError(e2.message || 'Verification failed'); })
+            .finally(() => { flow.verifyInFlight = false; if (verifyBtn) verifyBtn.disabled = false; });
+    }
+
+    // Unified OTP send logic with timeout, countdown, cooldown, resend, telemetry
+    function startOtpSend(options){
+        options = options || {};
+        const isResend = !!options.resend;
+        setOtpError(null);
+        const userName = (document.getElementById('otpUserName')?.value || '').trim();
+        if (!userName) { setOtpError('User selection is required'); return; }
+        window.__otpFlow = window.__otpFlow || {};
+        const flow = window.__otpFlow;
+        const sendBtn = document.getElementById('btn-send-otp');
+        if (sendBtn && sendBtn.disabled && !isResend) return; // prevent duplicate primary sends
+        const resendBtn = document.getElementById('btn-resend-otp');
+        if (isResend && resendBtn && resendBtn.disabled) return;
+
+        // Config
+        const container = document.getElementById('otpContainer');
+        const timeoutMs = parseInt(container?.getAttribute('data-otp-timeout-ms')||'8000',10);
+        const retryCooldownMs = parseInt(container?.getAttribute('data-otp-retry-cooldown-ms')||'5000',10);
+
+        // UI state elements
+        const indicator = document.getElementById('otpSendingIndicator');
+        const countdownEl = document.getElementById('otpSendCountdown');
+        const retryLink = document.getElementById('otpRetryLink');
+        const retryCountdown = document.getElementById('otpRetryCountdown');
+
+        // Disable relevant buttons
+        if (!isResend && sendBtn) sendBtn.disabled = true;
+        if (isResend && resendBtn) resendBtn.disabled = true;
+
+        // Reset indicator to sending
+        if (indicator) {
+            indicator.classList.remove('d-none','fade-hidden');
+            indicator.querySelectorAll('[data-state]')?.forEach(n=>n.classList.add('d-none'));
+            const sending = indicator.querySelector('[data-state="sending"]');
+            if (sending) sending.classList.remove('d-none');
+        }
+        if (retryLink) {
+            retryLink.classList.add('disabled-link');
+            retryLink.dataset.cooldownLeft = '0';
+        }
+        if (retryCountdown) retryCountdown.textContent='';
+
+        // Abort existing send
+        if (flow.startAbort) { try { flow.startAbort.abort(); } catch(_){} }
+        const controller = new AbortController();
+        flow.startAbort = controller;
+        flow.activeUser = userName;
+        const sendId = 'send_' + Date.now() + '_' + Math.random().toString(36).slice(2,8);
+        flow.lastSendId = sendId;
+        flow.lastSendStartTs = performance.now();
+        flow.lastSendCompletedTs = null;
+
+        // Timeout countdown
+        let remainingMs = timeoutMs;
+        if (countdownEl) countdownEl.textContent = Math.ceil(remainingMs/1000);
+        if (flow.countdownInterval) { clearInterval(flow.countdownInterval); }
+        flow.countdownInterval = setInterval(()=>{
+            remainingMs -= 1000;
+            if (remainingMs <= 0){
+                if (countdownEl) countdownEl.textContent = '0';
+                clearInterval(flow.countdownInterval); flow.countdownInterval=null;
+            } else if (countdownEl) countdownEl.textContent = Math.ceil(remainingMs/1000);
+        },1000);
+
+        // Hard timeout
+        if (flow.startTimeout) { clearTimeout(flow.startTimeout); }
+        flow.startTimeout = setTimeout(()=>{
+            if (!controller.signal.aborted) {
+                appLogger.warn('OTP send timeout', { user: userName, timeoutMs, sendId });
+                try { controller.abort(); } catch(_){}
+            }
+        }, timeoutMs);
+
+        fetch('/api/auth/start', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ userName }), credentials:'same-origin', signal: controller.signal })
+            .then(r => { if (!r.ok) throw new Error('Failed to send code'); return r.json().catch(()=>({})); })
+            .then(() => {
+                if (flow.activeUser !== userName || controller.signal.aborted) return;
+                flow.lastSendCompletedTs = performance.now();
+                const durMs = Math.round(flow.lastSendCompletedTs - flow.lastSendStartTs);
+                appLogger.info('OTP code sent', { user: userName, durationMs: durMs, sendId });
+                if (indicator) {
+                    indicator.querySelectorAll('[data-state]')?.forEach(n=>n.classList.add('d-none'));
+                    const success = indicator.querySelector('[data-state="success"]');
+                    if (success) success.classList.remove('d-none');
+                    setTimeout(()=>{ indicator.classList.add('fade-hidden'); }, 2000);
+                    setTimeout(()=>{ indicator.classList.add('d-none'); }, 2500);
+                }
+                // Move to step2 only on initial send, keep on step2 for resend
+                if (!isResend){
+                    const step1 = $('#otp-step1');
+                    const step2 = $('#otp-step2');
+                    if (step1 && step2) { step1.classList.add('d-none'); step2.classList.remove('d-none'); }
+                    const codeEl = $('#otpCode'); if (codeEl) codeEl.focus();
+                }
+            })
+            .catch(e2 => {
+                const aborted = controller.signal.aborted;
+                const now = performance.now();
+                const durMs = Math.round(now - flow.lastSendStartTs);
+                if (aborted){
+                    appLogger.warn('OTP send aborted', { user: userName, durationMs: durMs, sendId });
+                } else {
+                    appLogger.error('OTP send failed', { error: e2.message, user: userName, durationMs: durMs, sendId });
+                    setOtpError(e2.message || 'Error sending code');
+                }
+                if (indicator) {
+                    indicator.querySelectorAll('[data-state]')?.forEach(n=>n.classList.add('d-none'));
+                    if (!aborted) {
+                        const errNode = indicator.querySelector('[data-state="error"]');
+                        if (errNode) errNode.classList.remove('d-none');
+                        // Start retry cooldown
+                        if (retryLink) {
+                            let left = retryCooldownMs;
+                            retryLink.classList.add('disabled-link');
+                            retryLink.dataset.cooldownLeft = left.toString();
+                            if (retryCountdown) retryCountdown.textContent = '(' + Math.ceil(left/1000) + 's)';
+                            if (flow.retryInterval) clearInterval(flow.retryInterval);
+                            flow.retryInterval = setInterval(()=>{
+                                left -= 1000;
+                                if (left <= 0){
+                                    clearInterval(flow.retryInterval); flow.retryInterval=null;
+                                    retryLink.classList.remove('disabled-link');
+                                    retryLink.dataset.cooldownLeft = '0';
+                                    if (retryCountdown) retryCountdown.textContent='';
+                                } else {
+                                    retryLink.dataset.cooldownLeft = left.toString();
+                                    if (retryCountdown) retryCountdown.textContent='(' + Math.ceil(left/1000) + 's)';
+                                }
+                            },1000);
+                        }
+                    } else {
+                        indicator.classList.add('fade-hidden');
+                        setTimeout(()=>indicator.classList.add('d-none'),250);
+                    }
+                }
+            })
+            .finally(()=>{
+                if (sendBtn) sendBtn.disabled = false;
+                if (resendBtn) resendBtn.disabled = false;
+                if (flow.startTimeout) { clearTimeout(flow.startTimeout); flow.startTimeout=null; }
+                if (flow.countdownInterval) { clearInterval(flow.countdownInterval); flow.countdownInterval=null; }
+            });
+    }
+
     document.addEventListener('click', e => {
         const sendBtn = e.target.closest('#btn-send-otp');
-        if (sendBtn) {
-            setOtpError(null);
-            const userName = (document.getElementById('otpUserName')?.value || '').trim();
-            const destination = (document.getElementById('otpDestination')?.value || '').trim();
-            if (!userName) { setOtpError('Username is required'); return; }
-            postJson('/api/auth/start', { userName, destination: destination || null })
-                .then(r => { if (!r.ok) throw new Error('Failed to send code'); return r.json().catch(()=>({})); })
-                .then(() => {
-                    appLogger.info('OTP code sent', { user: userName, dest: destination || null });
-                    $('#otp-step1')?.classList.add('d-none');
-                    $('#otp-step2')?.classList.remove('d-none');
-                    $('#otpCode')?.focus();
-                })
-                .catch(e2 => { appLogger.error('OTP send failed', { error: e2.message }); setOtpError(e2.message || 'Error sending code'); });
-            return;
-        }
+        if (sendBtn) { startOtpSend({ resend:false }); return; }
+        const resendBtn = e.target.closest('#btn-resend-otp');
+        if (resendBtn) { startOtpSend({ resend:true }); return; }
         const verifyBtn = e.target.closest('#btn-verify-otp');
         if (verifyBtn) {
-            setOtpError(null);
-            const userName = (document.getElementById('otpUserName')?.value || '').trim();
-            const code = (document.getElementById('otpCode')?.value || '').trim();
-            if (!userName || !code) { setOtpError('Username and code are required'); return; }
-            postJson('/api/auth/verify', { userName, code })
-                .then(r => { if (!r.ok) throw new Error('Invalid code'); return r.json().catch(()=>({})); })
-                .then(() => {
-                    appLogger.info('OTP verify success', { user: userName });
-                    const modalEl = document.getElementById('otp-login-modal');
-                    if (modalEl && window.bootstrap) {
-                        try {
-                            (bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl)).hide();
-                        } catch(_){}
-                    }
-                    if (window.chatApp && typeof window.chatApp.onAuthenticated === 'function') {
-                        window.chatApp.onAuthenticated();
-                    } else {
-                        appLogger.warn('chatApp.onAuthenticated not available');
-                    }
-                })
-                .catch(e2 => { appLogger.error('OTP verify failed', { user: userName, error: e2.message }); setOtpError(e2.message || 'Verification failed'); });
+            executeOtpVerify();
             return;
         }
         const logoutBtn = e.target.closest('#btn-logout');
@@ -208,13 +356,72 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // Retry link handler (event delegation)
+    document.addEventListener('click', ev => {
+        const retry = ev.target.closest('#otpRetryLink');
+        if (retry) {
+            ev.preventDefault();
+            if (retry.classList.contains('disabled-link')) return;
+            startOtpSend({ resend:false });
+        }
+    });
+
+    // Attach Enter key handler for OTP code input to trigger verification
+    const otpCodeInput = document.getElementById('otpCode');
+    if (otpCodeInput) {
+        otpCodeInput.addEventListener('keydown', ev => {
+            if (ev.key === 'Enter') {
+                ev.preventDefault();
+                executeOtpVerify();
+            }
+        });
+    }
+
     const otpLoginModal = document.getElementById('otp-login-modal');
     if (otpLoginModal) {
         on(otpLoginModal, 'show.bs.modal', () => {
             setOtpError(null);
+            const flow = (window.__otpFlow = window.__otpFlow || {});
+            flow.activeUser = null; // reset active user context
             $('#otp-step1')?.classList.remove('d-none');
             $('#otp-step2')?.classList.add('d-none');
             const code = $('#otpCode'); if (code) code.value='';
+            const sel = document.getElementById('otpUserName');
+            if (sel && sel.dataset.loaded !== 'true') {
+                fetch('/api/auth/users', { credentials: 'same-origin' })
+                    .then(r => { if (!r.ok) throw new Error('Failed to load users'); return r.json(); })
+                    .then(users => {
+                        sel.innerHTML = '<option value="" disabled selected>Select user...</option>' + users.map(u => `<option value="${u.userName}">${u.fullName || u.userName}</option>`).join('');
+                        sel.dataset.loaded = 'true';
+                    })
+                    .catch(err => { setOtpError(err.message); });
+            }
+        });
+        on(otpLoginModal, 'hide.bs.modal', () => {
+            const flow = window.__otpFlow;
+            if (flow?.startAbort) { try { flow.startAbort.abort(); } catch(_){} }
+            if (flow) { flow.activeUser = null; }
+            // Reset steps
+            $('#otp-step1')?.classList.remove('d-none');
+            $('#otp-step2')?.classList.add('d-none');
+            setOtpError(null);
+            // Safeguard: ensure send button is enabled after closing modal (handles early abort before response)
+            const sendBtn = document.getElementById('btn-send-otp');
+            if (sendBtn) sendBtn.disabled = false;
+            const ind = document.getElementById('otpSendingIndicator');
+            if (ind) {
+                ind.classList.add('d-none');
+                ind.classList.remove('fade-hidden');
+                ind.querySelectorAll('[data-state]')?.forEach(n=>n.classList.add('d-none'));
+            }
+            const resendBtn = document.getElementById('btn-resend-otp');
+            if (resendBtn) resendBtn.disabled = false;
+            if (flow.startTimeout) { clearTimeout(flow.startTimeout); flow.startTimeout=null; }
+            if (flow.countdownInterval) { clearInterval(flow.countdownInterval); flow.countdownInterval=null; }
+            if (flow.retryInterval) { clearInterval(flow.retryInterval); flow.retryInterval=null; }
+            const countdownEl = document.getElementById('otpSendCountdown'); if (countdownEl) countdownEl.textContent='0';
+            const retryCountdown = document.getElementById('otpRetryCountdown'); if (retryCountdown) retryCountdown.textContent='';
+            const retryLink = document.getElementById('otpRetryLink'); if (retryLink) { retryLink.classList.add('disabled-link'); retryLink.dataset.cooldownLeft='0'; }
         });
     }
 });

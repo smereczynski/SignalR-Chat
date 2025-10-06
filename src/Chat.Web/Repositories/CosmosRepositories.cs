@@ -152,46 +152,7 @@ namespace Chat.Web.Repositories
             _logger = logger;
         }
 
-        public Room Create(Room room)
-        {
-            using var activity = Tracing.ActivitySource.StartActivity("cosmos.rooms.create", ActivityKind.Client);
-            // id as Guid string for cosmos; store legacy int in a field
-            room.Id = room.Id == 0 ? new Random().Next(1, int.MaxValue) : room.Id;
-            var doc = new RoomDoc { id = room.Id.ToString(), name = room.Name, admin = room.Admin?.UserName };
-            try
-            {
-                var resp = _rooms.UpsertItemAsync(doc, new PartitionKey(doc.name)).GetAwaiter().GetResult();
-                activity?.SetTag("db.status_code", (int)resp.StatusCode);
-            }
-            catch (CosmosException ex)
-            {
-                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-                _logger.LogError(ex, "Cosmos room create failed {Room}", room.Name);
-                throw;
-            }
-            return room;
-        }
-
-        public void Delete(int id)
-        {
-            using var activity = Tracing.ActivitySource.StartActivity("cosmos.rooms.delete", ActivityKind.Client);
-            // Cannot delete without partition key; query then delete
-            var r = GetById(id);
-            if (r != null)
-            {
-                try
-                {
-                    var resp = _rooms.DeleteItemAsync<RoomDoc>(id.ToString(), new PartitionKey(r.Name)).GetAwaiter().GetResult();
-                    activity?.SetTag("db.status_code", (int)resp.StatusCode);
-                }
-                catch (CosmosException ex)
-                {
-                    activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-                    _logger.LogError(ex, "Cosmos room delete failed {Room}", r.Name);
-                    throw;
-                }
-            }
-        }
+        // Create/Delete removed (static predefined rooms). Upsert happens via Update when seeding.
 
         public IEnumerable<Room> GetAll()
         {
@@ -264,23 +225,7 @@ namespace Chat.Web.Repositories
             }
         }
 
-        public void Update(Room room)
-        {
-            using var activity = Tracing.ActivitySource.StartActivity("cosmos.rooms.update", ActivityKind.Client);
-            activity?.SetTag("app.room", room.Name);
-            var doc = new RoomDoc { id = room.Id.ToString(), name = room.Name, admin = room.Admin?.UserName };
-            try
-            {
-                var resp = _rooms.UpsertItemAsync(doc, new PartitionKey(doc.name)).GetAwaiter().GetResult();
-                activity?.SetTag("db.status_code", (int)resp.StatusCode);
-            }
-            catch (CosmosException ex)
-            {
-                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-                _logger.LogError(ex, "Cosmos room update failed {Room}", room.Name);
-                throw;
-            }
-        }
+        // Update removed (static rooms seeded externally if needed)
     }
 
     public class CosmosMessagesRepository : IMessagesRepository

@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Authorization;
 using Chat.Web.Hubs;
 using Microsoft.AspNetCore.SignalR;
 using Chat.Web.ViewModels;
+using System.Text.Json;
 
 namespace Chat.Web.Controllers
 {
@@ -15,7 +16,8 @@ namespace Chat.Web.Controllers
     [Route("api/[controller]")]
     [ApiController]
     /// <summary>
-    /// Provides CRUD operations for chat rooms and broadcasts room lifecycle events to all connected clients.
+    /// Provides room listing. Dynamic creation / deletion have been deprecated in favor of static, predefined rooms with fixed membership.
+    /// Legacy POST/DELETE endpoints now return 410 (Gone).
     /// </summary>
     public class RoomsController : ControllerBase
     {
@@ -36,14 +38,26 @@ namespace Chat.Web.Controllers
         }
 
     /// <summary>
-    /// Returns all existing rooms (id, name, admin user).
+    /// Returns rooms the authenticated user is authorized to see.
+    /// Authorization model: user profile may define FixedRooms (whitelist). If none defined, returns empty list.
+    /// This ensures clients cannot discover rooms they are not assigned to.
     /// </summary>
     [HttpGet]
     public ActionResult<IEnumerable<RoomViewModel>> Get()
         {
+            // Retrieve user profile
+            var userName = User?.Identity?.Name;
+            var profile = string.IsNullOrWhiteSpace(userName) ? null : _users.GetByUserName(userName);
+            var allowed = profile?.FixedRooms ?? new List<string>();
+
             var rooms = _rooms.GetAll()
-                .Select(r => new RoomViewModel { Id = r.Id, Name = r.Name, Admin = r.Admin?.UserName });
-            return Ok(rooms);
+                .Where(r => allowed.Contains(r.Name))
+                .Select(r => new RoomViewModel { Id = r.Id, Name = r.Name, Admin = r.Admin?.UserName })
+                .ToList();
+
+            // Manual serialization (workaround for test server PipeWriter issue) + camelCase for client expectations.
+            var json = JsonSerializer.Serialize(rooms, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+            return new ContentResult { Content = json, ContentType = "application/json", StatusCode = 200 };
         }
 
     /// <summary>
@@ -61,71 +75,19 @@ namespace Chat.Web.Controllers
         }
 
     /// <summary>
-    /// Creates a new room (caller becomes admin) and broadcasts creation to all clients.
+    /// Deprecated: dynamic creation removed. Returns 410 Gone.
     /// </summary>
     [HttpPost]
-    public async Task<ActionResult<Room>> Create(RoomViewModel viewModel)
-        {
-            if (_rooms.GetByName(viewModel.Name) != null)
-                return BadRequest("Invalid room name or room already exists");
+    public Task<ActionResult> Create(RoomViewModel viewModel)
+        => Task.FromResult<ActionResult>(StatusCode(410, "Dynamic room creation disabled (static rooms only)"));
 
-            var user = _users.GetByUserName(User.Identity.Name);
-            var room = new Room()
-            {
-                Name = viewModel.Name,
-                Admin = user
-            };
-
-            room = _rooms.Create(room);
-
-            var createdRoom = new RoomViewModel { Id = room.Id, Name = room.Name, Admin = room.Admin?.UserName };
-            await _hubContext.Clients.All.SendAsync("addChatRoom", createdRoom);
-
-            return CreatedAtAction(nameof(Get), new { id = room.Id }, createdRoom);
-        }
+    // NOTE: Rename (PUT) endpoint intentionally removed as part of feature deprecation.
 
     /// <summary>
-    /// Renames a room. Only the admin can modify. Broadcasts updated room metadata.
-    /// </summary>
-    [HttpPut("{id}")]
-    public async Task<IActionResult> Edit(int id, RoomViewModel viewModel)
-        {
-            if (_rooms.GetByName(viewModel.Name) != null)
-                return BadRequest("Invalid room name or room already exists");
-            var room = _rooms.GetById(id);
-            if (room?.Admin?.UserName != User.Identity.Name)
-                room = null;
-
-            if (room == null)
-                return NotFound();
-
-            room.Name = viewModel.Name;
-            _rooms.Update(room);
-            var updatedRoom = new RoomViewModel { Id = room.Id, Name = room.Name, Admin = room.Admin?.UserName };
-            await _hubContext.Clients.All.SendAsync("updateChatRoom", updatedRoom);
-
-            return Ok();
-        }
-
-    /// <summary>
-    /// Deletes a room (admin only), broadcasts removal and notifies members.
+    /// Deprecated: dynamic deletion removed. Returns 410 Gone.
     /// </summary>
     [HttpDelete("{id}")]
-    public async Task<IActionResult> Delete(int id)
-        {
-            var room = _rooms.GetById(id);
-            if (room?.Admin?.UserName != User.Identity.Name)
-                room = null;
-
-            if (room == null)
-                return NotFound();
-
-            _rooms.Delete(room.Id);
-
-            await _hubContext.Clients.All.SendAsync("removeChatRoom", room.Id);
-            await _hubContext.Clients.Group(room.Name).SendAsync("onRoomDeleted");
-
-            return Ok();
-        }
+    public Task<ActionResult> Delete(int id)
+        => Task.FromResult<ActionResult>(StatusCode(410, "Dynamic room deletion disabled (static rooms only)"));
     }
 }

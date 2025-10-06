@@ -31,14 +31,14 @@
     <PackageReference Include="Serilog.Enrichers.Environment" Version="2.2.0" />
     <PackageReference Include="Serilog.Enrichers.Thread" Version="3.1.0" />
   <PackageReference Include="Serilog.Enrichers.Process" Version="3.0.0" />
-    <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.8.1" />
-    <PackageReference Include="OpenTelemetry.Exporter.Console" Version="1.8.1" />
+  <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.9.0" />
+  <PackageReference Include="OpenTelemetry.Exporter.Console" Version="1.9.0" />
   <!-- Pin instrumentation to stable GA versions to avoid prerelease vulnerability warnings -->
-  <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.8.1" />
-  <PackageReference Include="OpenTelemetry.Instrumentation.Http" Version="1.8.1" />
-    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.8.1" />
+  <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.9.0" />
+  <PackageReference Include="OpenTelemetry.Instrumentation.Http" Version="1.9.0" />
+    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.9.0" />
     <PackageReference Include="Azure.Monitor.OpenTelemetry.Exporter" Version="1.0.0" />
   <!-- Metrics & Logs -->
-  <PackageReference Include="OpenTelemetry.Instrumentation.Runtime" Version="1.8.1" />
+  <PackageReference Include="OpenTelemetry.Instrumentation.Runtime" Version="1.9.0" />
   </ItemGroup>
 </Project>

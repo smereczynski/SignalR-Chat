@@ -3,20 +3,40 @@ Modern real-time chat on .NET 9 using Azure SignalR, Cosmos DB, Redis (OTP + sta
 
 
 ## Features
-* Multi-room chat (create / switch rooms)
+* Multi-room chat (predefined static rooms: general, ops, random)
 * Text-only messages (concise scope, no file upload or custom emoji assets)
 * Optimistic message sending with client-generated correlation IDs (prevents duplicates when server echoes)
 * Incremental, scroll-triggered pagination (newest first load + "load older" on scroll-up)
 * Client-side rate limiting for sends
 * Avatar initials with defensive refresh logic
 * OTP-based authentication (cookie session) backed by Redis
-  * Azure Communication Services (Email/SMS) if configured; console fallback otherwise
-* Automatic Cosmos DB database & container creation (if allowed) + seeding default `general` room & sample users (`alice`, `bob`)
+  * Predefined demo users selectable from dropdown (alice, bob, charlie)
+  * Multi-channel delivery (Email + SMS) if Azure Communication Services configured; console fallback otherwise
+  * Configurable send timeout, retry cooldown, resend support, progress indicator with live countdown
+* Automatic Cosmos DB database & container creation (if allowed) + validation of presence of static rooms (`general`, `ops`, `random`). In Cosmos mode those rooms must be provisioned up‑front (migration/script/IaC). Sample users (`alice`, `bob`, `charlie`) are seeded only if user store is empty.
 * Tri-signal observability: OpenTelemetry Traces + Metrics + Logs (runtime + custom domain metrics)
 * Structured logging (Serilog) + manual OpenTelemetry spans (Activities) + correlation header propagation
 * Health endpoints: `/healthz` (readiness) and `/healthz/metrics` (JSON in-process counters & uptime)
 * Client reconnect backoff telemetry (manual spans + counter for reconnect attempts)
+* Dynamic room creation/rename/delete removed (simpler, fixed topology)
 * Delete message feature removed (simpler, immutable chat log)
+
+## Rooms Repository (Read‑Only)
+Rooms are a fixed, immutable set (`general`, `ops`, `random`). The `IRoomsRepository` surface area is intentionally minimal and query‑only:
+
+```
+IEnumerable<Room> GetAll();
+Room? GetById(string id);
+Room? GetByName(string name);
+```
+
+There are deliberately no create/update/delete methods. Corresponding HTTP endpoints for dynamic room creation or deletion return `410 Gone` so older clients fail fast and clearly. Room metadata (ids, names) must be established outside the running app (e.g. infrastructure provisioning). The in‑memory test implementation seeds them internally for convenience; production (Cosmos) simply reads them.
+
+The startup `DataSeedHostedService` now only:
+* Verifies the expected static room names exist (logs a warning if any are missing, but does not create or mutate rooms)
+* Seeds demo users exactly once when the user container is empty
+
+This keeps room topology truly immutable at runtime.
 
 ## Architecture Overview
 **Runtime**: ASP.NET Core 9 (Razor Pages host + MVC API + SignalR Hub)
@@ -52,6 +72,7 @@ Modern real-time chat on .NET 9 using Azure SignalR, Cosmos DB, Redis (OTP + sta
 * KnockoutJS removed (vanilla JS only)
 * No file attachment pipeline (lean chat core)
 * Immutable messages (no delete/edit)
+* Static room list (no runtime create/delete)
 
 ## Local Development
 Prerequisites:
@@ -102,10 +123,50 @@ dotnet run --project src/Chat.Web/Chat.Web.csproj --urls=http://localhost:5099
 ```
 Then visit: http://localhost:5099
 
-### 3. OTP Authentication Flow
-1. Enter username (existing or new) and destination (email / phone depending on ACS configuration or console fallback).
-2. Enter code received (or check console output if no ACS configured).
-3. Session cookie established; SignalR connection re-initialized with identity.
+### 3. OTP Authentication Flow (Updated)
+Current UX removes free‑text destination entry and replaces it with a secure, deterministic demo user selection.
+
+1. Open Sign In → pick a demo user from the dropdown (users are pre-seeded with Email + Mobile).
+2. Click "Send code" (or press Enter after focusing the button) – the sending indicator appears with a live seconds countdown (configured by `data-otp-timeout-ms`, default 8s).
+3. On success, indicator shows "Sent to email & mobile" then fades; Step 2 (code entry) is revealed and the code input focused.
+4. Enter the 6‑digit code (or press Enter to submit). Successful verification logs latency telemetry and closes the modal.
+5. If delivery fails, an error state with a disabled Retry link appears. Retry re-enables after a cooldown (configured by `data-otp-retry-cooldown-ms`, default 5s) and shows a countdown.
+6. While on Step 2 you can use the "Resend" link to trigger a new (or reused, if still valid) code without leaving the code entry step.
+
+Additional Behavior:
+* Timeout: If the send does not complete before timeout, the request is aborted; telemetry logs a timeout event.
+* Resend: Maintains focus in Step 2; only the sending indicator changes state.
+* Abort: Closing the modal aborts any in-flight send and resets all timers, countdowns, and disabled states.
+* Telemetry: Each send is assigned a `sendId`; we log duration (`OTP code sent` + `durationMs`) and subsequent verification latency (`OTP verify latency`) correlated by `sendId`.
+* No destination field: Destination is implicit from seeded user record (Email + MobileNumber) promoting consistency and preventing enumeration attacks in this demo context.
+
+Configurable via Markup Data Attributes (on `#otpContainer`):
+| Attribute | Purpose | Default |
+|-----------|---------|---------|
+| `data-otp-timeout-ms` | Milliseconds before send aborts | 8000 |
+| `data-otp-retry-cooldown-ms` | Milliseconds before retry becomes active after a failure | 5000 |
+
+Client Elements of Interest:
+| Element | Role |
+|---------|------|
+| `#btn-send-otp` | Initiates first send (enters Step 2 on success) |
+| `#btn-resend-otp` | Issues subsequent sends from Step 2 (stays in Step 2) |
+| `#otpSendingIndicator` | Houses sending / success / error states |
+| `#otpSendCountdown` | Displays remaining seconds until timeout |
+| `#otpRetryLink` | Retry action (disabled during cooldown) |
+| `#otpRetryCountdown` | Shows remaining cooldown seconds |
+
+Keyboard Shortcuts:
+* Enter in code field → Verify
+* Enter on Step 1 with focus on Send → Send code
+
+Failure Modes & Recovery:
+| Scenario | UI Result | Recovery |
+|----------|-----------|----------|
+| Network timeout | Indicator hides (timeout logged), error state with cooldown | Wait for retry cooldown or close modal |
+| Abort (modal closed) | Indicator fades out immediately | Reopen modal, select user again |
+| Server error (non-2xx) | Error state + retry cooldown | Retry after cooldown |
+| Rapid double click | Ignored (button disabled while in-flight) | N/A |
 
 ### 4. Pagination & Optimistic Messaging
 * Initial load fetches newest N messages ascending.
@@ -320,14 +381,15 @@ Sample (fields abbreviated):
 ## API (Selected Endpoints)
 | Purpose | Method | Path | Notes |
 |---------|--------|------|-------|
-| Start OTP | POST | `/api/auth/start` | Provide `userName`, `destination` (email / phone) |
+| Start OTP | POST | `/api/auth/start` | Body: `{ userName }` (delivery inferred from profile; existing unexpired code may be reused) |
 | Verify OTP | POST | `/api/auth/verify` | Provide `userName`, `code` |
+| List OTP users | GET | `/api/auth/users` | Returns predefined selectable users |
 | Logout | POST | `/api/auth/logout` | Clears auth cookie |
 | Current user | GET | `/api/auth/me` | Returns basic profile |
 | Recent messages | GET | `/api/Messages/Room/{room}?take=50` | Newest ascending |
 | Older messages | GET | `/api/Messages/Room/{room}?before=ISO&take=50` | Paged history |
 | Send message | POST | `/api/Messages` | Includes optional `CorrelationId` |
-| Rooms list | GET | `/api/Rooms` | Basic metadata |
+| Rooms list | GET | `/api/Rooms` | Static predefined rooms |
 | Health metrics snapshot | GET | `/healthz/metrics` | In-process counters + uptime |
 | Reconnect telemetry (internal) | POST | `/api/telemetry/reconnect` | Client reconnect attempt (not user-facing) |
 

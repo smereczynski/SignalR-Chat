@@ -11,8 +11,6 @@ namespace Chat.Web.Repositories
         IEnumerable<Room> GetAll();
         Room GetById(int id);
         Room GetByName(string name);
-        Room Create(Room room);
-        void Update(Room room);
-        void Delete(int id);
+    // Static rooms: interface intentionally minimal (read-only)
     }
 }

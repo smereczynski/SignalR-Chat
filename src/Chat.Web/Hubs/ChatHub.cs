@@ -24,7 +24,8 @@ namespace Chat.Web.Hubs
         /// <summary>
         /// Active connections with lightweight user information (room participation tracked per user).
         /// </summary>
-        public static readonly List<UserViewModel> _Connections = new List<UserViewModel>();
+    public static readonly List<UserViewModel> _Connections = new List<UserViewModel>();
+    internal static readonly object _ConnectionsLock = new object();
 
         /// <summary>
         /// Map userName -> current SignalR connection id (latest). Allows targeted messaging.
@@ -64,14 +65,27 @@ namespace Chat.Web.Hubs
             try
             {
                 var profile = _users.GetByUserName(IdentityName);
-                if (profile?.FixedRooms?.Any() == true && !profile.FixedRooms.Contains(roomName))
+                bool hasFixed = profile?.FixedRooms != null;
+                bool hasAny = hasFixed && profile.FixedRooms.Any();
+                if (!hasAny)
                 {
-                    _logger.LogWarning("User {User} attempted to join unauthorized room {Room}", IdentityName, roomName);
+                    _logger.LogWarning("Unauthorized room join attempt (no fixed rooms) {User} => {Room} correlation={CorrelationId}", IdentityName, roomName, Context.ConnectionId);
+                    await Clients.Caller.SendAsync("onError", "You are not authorized for this room.");
+                    activity?.SetStatus(ActivityStatusCode.Error, "room unauthorized none");
+                    return;
+                }
+                if (!profile.FixedRooms.Contains(roomName))
+                {
+                    _logger.LogWarning("Unauthorized room join attempt (not in fixed list) {User} => {Room} allowed={AllowedRooms} correlation={CorrelationId}", IdentityName, roomName, string.Join(',', profile.FixedRooms), Context.ConnectionId);
                     await Clients.Caller.SendAsync("onError", "You are not authorized for this room.");
                     activity?.SetStatus(ActivityStatusCode.Error, "room unauthorized");
                     return;
                 }
-                var user = _Connections.FirstOrDefault(u => u.UserName == IdentityName);
+                UserViewModel user;
+                lock (_ConnectionsLock)
+                {
+                    user = _Connections.FirstOrDefault(u => u.UserName == IdentityName);
+                }
                 if (user != null && user.CurrentRoom != roomName)
                 {
                     var previous = user.CurrentRoom;
@@ -84,7 +98,10 @@ namespace Chat.Web.Hubs
                     }
                     await Leave(previous);
                     await Groups.AddToGroupAsync(Context.ConnectionId, roomName);
-                    user.CurrentRoom = roomName;
+                    lock (_ConnectionsLock)
+                    {
+                        user.CurrentRoom = roomName;
+                    }
                     await Clients.OthersInGroup(roomName).SendAsync("addUser", user);
                     _logger.LogInformation("User {User} joined room {Room}", IdentityName, roomName);
                     _metrics.IncRoomsJoined();
@@ -123,7 +140,11 @@ namespace Chat.Web.Hubs
             using var activity = Tracing.ActivitySource.StartActivity("ChatHub.GetUsers");
             activity?.SetTag("chat.room", roomName);
             if (string.IsNullOrWhiteSpace(roomName)) return Enumerable.Empty<UserViewModel>();
-            var users = _Connections.Where(u => u.CurrentRoom == roomName).ToList();
+                List<UserViewModel> users;
+                lock (_ConnectionsLock)
+                {
+                    users = _Connections.Where(u => u.CurrentRoom == roomName).ToList();
+                }
             activity?.SetTag("chat.user.count", users.Count);
             return users;
         }
@@ -137,7 +158,11 @@ namespace Chat.Web.Hubs
             try
             {
                 var user = _users.GetByUserName(IdentityName);
-                var existing = _Connections.FirstOrDefault(u => u.UserName == IdentityName);
+                UserViewModel existing;
+                lock (_ConnectionsLock)
+                {
+                    existing = _Connections.FirstOrDefault(u => u.UserName == IdentityName);
+                }
                 var device = GetDevice();
                 if (existing != null)
                 {
@@ -156,7 +181,10 @@ namespace Chat.Web.Hubs
                         Device = device,
                         CurrentRoom = string.Empty
                     };
-                    _Connections.Add(userViewModel);
+                    lock (_ConnectionsLock)
+                    {
+                        _Connections.Add(userViewModel);
+                    }
                     _ConnectionsMap[IdentityName] = Context.ConnectionId;
                     _logger.LogInformation("User connected {User}", IdentityName);
                     _metrics.IncActiveConnections();
@@ -181,14 +209,21 @@ namespace Chat.Web.Hubs
             using var activity = Tracing.ActivitySource.StartActivity("ChatHub.OnDisconnected");
             try
             {
-                var user = _Connections.FirstOrDefault(u => u.UserName == IdentityName);
+                UserViewModel user;
+                lock (_ConnectionsLock)
+                {
+                    user = _Connections.FirstOrDefault(u => u.UserName == IdentityName);
+                }
                 if (user == null)
                 {
                     _logger.LogDebug("Disconnect for unknown user {User}", IdentityName);
                     await base.OnDisconnectedAsync(exception);
                     return;
                 }
-                _Connections.Remove(user);
+                lock (_ConnectionsLock)
+                {
+                    _Connections.Remove(user);
+                }
                 if (!string.IsNullOrWhiteSpace(user.CurrentRoom))
                 {
                     await Clients.OthersInGroup(user.CurrentRoom).SendAsync("removeUser", user);
@@ -208,6 +243,20 @@ namespace Chat.Web.Hubs
             await base.OnDisconnectedAsync(exception);
         }
 
+        /// <summary>
+        /// Sends a direct notification (non-chat message) to a single connected user if online.
+        /// </summary>
+        public Task NotifyUser(string targetUserName, string title, string body)
+        {
+            if (string.IsNullOrWhiteSpace(targetUserName) || string.IsNullOrWhiteSpace(title))
+                return Task.CompletedTask;
+            if (_ConnectionsMap.TryGetValue(targetUserName, out var connId))
+            {
+                return Clients.Client(connId).SendAsync("notify", new { title, body, from = IdentityName, ts = DateTime.UtcNow });
+            }
+            return Task.CompletedTask;
+        }
+
         private string IdentityName => Context.User.Identity.Name;
 
         private string GetDevice()
@@ -216,6 +265,24 @@ namespace Chat.Web.Hubs
             if (!string.IsNullOrEmpty(device) && (device.Equals("Desktop") || device.Equals("Mobile")))
                 return device;
             return "Web";
+        }
+
+        /// <summary>
+        /// Returns a thread-safe deep snapshot of current connections (used externally for presence API).
+        /// </summary>
+        public static IReadOnlyList<UserViewModel> Snapshot()
+        {
+            lock (_ConnectionsLock)
+            {
+                return _Connections.Select(c => new UserViewModel
+                {
+                    UserName = c.UserName,
+                    FullName = c.FullName,
+                    Avatar = c.Avatar,
+                    CurrentRoom = c.CurrentRoom,
+                    Device = c.Device
+                }).ToList();
+            }
         }
     }
 }

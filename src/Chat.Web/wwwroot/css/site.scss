@@ -11,6 +11,23 @@ body {
     background-color: white;
 }
 
+.disabled-link {
+    pointer-events: none;
+    opacity: .55;
+    text-decoration: none;
+}
+
+// Subtle fade utility classes for status indicators
+.fade-soft {
+    opacity: 1;
+    transition: opacity 180ms ease-in-out, transform 180ms ease-in-out;
+    &.fade-hidden {
+        opacity: 0;
+        pointer-events: none;
+        transform: translateY(-2px);
+    }
+}
+
 .app {
     display: flex;
     height: 100vh;
