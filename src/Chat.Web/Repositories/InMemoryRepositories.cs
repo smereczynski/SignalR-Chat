@@ -20,29 +20,15 @@ namespace Chat.Web.Repositories
     {
         private readonly ConcurrentDictionary<int, Room> _roomsById = new();
         private readonly ConcurrentDictionary<string, Room> _roomsByName = new();
-        private int _id = 0;
-        public Room Create(Room room)
+        public InMemoryRoomsRepository()
         {
-            room.Id = System.Threading.Interlocked.Increment(ref _id);
-            _roomsById[room.Id] = room;
-            _roomsByName[room.Name] = room;
-            return room;
-        }
-        public void Delete(int id)
-        {
-            if (_roomsById.TryRemove(id, out var r) && r != null)
-            {
-                _roomsByName.TryRemove(r.Name, out _);
-            }
+            // Pre-seed static rooms with deterministic IDs (1..n)
+            var rooms = new[]{"general","ops","random"};
+            int id=1; foreach(var r in rooms){ var room=new Room{Id=id++, Name=r}; _roomsById[room.Id]=room; _roomsByName[room.Name]=room; }
         }
         public IEnumerable<Room> GetAll() => _roomsById.Values;
         public Room GetById(int id) => _roomsById.TryGetValue(id, out var r) ? r : null;
         public Room GetByName(string name) => _roomsByName.TryGetValue(name, out var r) ? r : null;
-        public void Update(Room room)
-        {
-            _roomsById[room.Id] = room;
-            _roomsByName[room.Name] = room;
-        }
     }
 
     public class InMemoryMessagesRepository : IMessagesRepository

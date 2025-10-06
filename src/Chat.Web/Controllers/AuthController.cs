@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using System.Text.Json;
 
 namespace Chat.Web.Controllers
 {
@@ -36,6 +37,20 @@ namespace Chat.Web.Controllers
         }
 
         /// <summary>
+        /// Returns a lightweight list of users that can log in (for dropdown population). Public to simplify demo UX.
+        /// </summary>
+        [AllowAnonymous]
+        [HttpGet("users")]
+        public IActionResult Users()
+        {
+            var users = _users.GetAll();
+            var list = System.Linq.Enumerable.Select(users, u => new { userName = u.UserName, fullName = u.FullName });
+            // Manual serialization to avoid test harness PipeWriter issue.
+            var json = JsonSerializer.Serialize(list);
+            return new ContentResult { Content = json, ContentType = "application/json", StatusCode = 200 };
+        }
+
+        /// <summary>
         /// Begins OTP flow: validates user existence, generates and stores a code, sends via configured sender.
         /// </summary>
         [AllowAnonymous]
@@ -46,9 +61,22 @@ namespace Chat.Web.Controllers
             var user = _users.GetByUserName(req.UserName);
             if (user == null) return Unauthorized();
 
-            var code = new Random().Next(100000, 999999).ToString();
-            await _otpStore.SetAsync(req.UserName, code, TimeSpan.FromMinutes(5));
-            await _otpSender.SendAsync(req.UserName, req.Destination ?? req.UserName, code);
+            // Reuse existing unexpired code to avoid flooding destinations; otherwise create a new one.
+            var existing = await _otpStore.GetAsync(req.UserName);
+            var code = existing;
+            if (string.IsNullOrEmpty(existing))
+            {
+                code = new Random().Next(100000, 999999).ToString();
+                await _otpStore.SetAsync(req.UserName, code, TimeSpan.FromMinutes(5));
+            }
+            // Send to email and mobile when available (fire-and-forget pattern after first send success)
+            // Primary channel: email (if present) otherwise mobile else fallback to username.
+            var primary = user.Email ?? user.MobileNumber ?? req.UserName;
+            await _otpSender.SendAsync(req.UserName, primary, code);
+            if (!string.IsNullOrWhiteSpace(user.MobileNumber) && user.MobileNumber != primary)
+            {
+                _ = _otpSender.SendAsync(req.UserName, user.MobileNumber, code);
+            }
             _metrics.IncOtpRequests();
             return Ok();
         }
@@ -104,13 +132,16 @@ namespace Chat.Web.Controllers
             if (string.IsNullOrEmpty(userName)) return Unauthorized();
             var user = _users.GetByUserName(userName);
             if (user == null) return Unauthorized();
-            return Ok(new { userName = user.UserName, fullName = user.FullName, avatar = user.Avatar });
+            var payload = new { userName = user.UserName, fullName = user.FullName, avatar = user.Avatar };
+            // WORKAROUND: Manual serialization to avoid PipeWriter UnflushedBytes issue in test harness.
+            var json = JsonSerializer.Serialize(payload);
+            return new ContentResult { Content = json, ContentType = "application/json", StatusCode = 200 };
         }
 
         /// <summary>
         /// Request body for OTP start (Destination optional override, defaults to username when not provided).
         /// </summary>
-        public class StartRequest { public string UserName { get; set; } public string Destination { get; set; } }
+    public class StartRequest { public string UserName { get; set; } }
         /// <summary>
         /// Request body for OTP verification.
         /// </summary>

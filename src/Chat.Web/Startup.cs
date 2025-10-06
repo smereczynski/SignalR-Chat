@@ -149,6 +149,7 @@ namespace Chat.Web
     /// </summary>
     public void ConfigureServices(IServiceCollection services)
         {
+            var inMemoryTest = string.Equals(Configuration["Testing:InMemory"], "true", StringComparison.OrdinalIgnoreCase);
             // OpenTelemetry Tracing
             var otlpEndpoint = Configuration["OTel:OtlpEndpoint"]; // e.g. http://localhost:4317 or https://otlp.yourdomain:4317
             var assemblyVersion = typeof(Startup).Assembly.GetName().Version?.ToString() ?? "unknown";
@@ -157,14 +158,17 @@ namespace Chat.Web
                 .WithTracing(builder =>
                 {
                     builder.AddSource(Tracing.ServiceName);
-                    try { builder.AddAspNetCoreInstrumentation().AddHttpClientInstrumentation(); } catch { }
+                    try {
+                        builder.AddAspNetCoreInstrumentation();
+                        builder.AddHttpClientInstrumentation();
+                    } catch { }
                     AddSelectedExporter(builder, otlpEndpoint, Configuration);
                 })
                 .WithMetrics(builder =>
                 {
-                    builder.AddRuntimeInstrumentation()
-                           .AddAspNetCoreInstrumentation()
-                           .AddHttpClientInstrumentation()
+                    builder.AddRuntimeInstrumentation();
+              builder.AddAspNetCoreInstrumentation()
+                  .AddHttpClientInstrumentation()
                            .AddMeter(Metrics.InstrumentationName);
                     AddSelectedExporter(builder, otlpEndpoint, Configuration);
                 });

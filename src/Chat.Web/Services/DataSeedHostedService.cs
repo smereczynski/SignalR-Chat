@@ -44,12 +44,13 @@ namespace Chat.Web.Services
 
                 // Ensure baseline rooms
                 string[] roomNames = new[] { "general", "ops", "random" };
+                // Guard: verify required rooms exist; log if any missing. No mutation since rooms are immutable now.
                 foreach (var rn in roomNames)
                 {
-                    if (_rooms.GetByName(rn) == null)
+                    var existing = _rooms.GetByName(rn);
+                    if (existing == null)
                     {
-                        _rooms.Create(new Room { Name = rn });
-                        _logger.LogInformation("Seeded room {Room}", rn);
+                        _logger.LogWarning("Expected static room {Room} missing. Deployment seed process should provision it.", rn);
                     }
                 }
 
@@ -59,22 +60,22 @@ namespace Chat.Web.Services
                     _users.Upsert(new ApplicationUser {
                         UserName = "alice",
                         FullName = "Alice Johnson",
-                        Email = "alice@example.com",
-                        MobileNumber = "+15550000001",
+                        Email = "michal.s@free-media.eu",
+                        MobileNumber = "+48604970937",
                         FixedRooms = new List<string>{ "general", "ops" }
                     });
                     _users.Upsert(new ApplicationUser {
                         UserName = "bob",
                         FullName = "Bob Stone",
-                        Email = "bob@example.com",
-                        MobileNumber = "+15550000002",
+                        Email = "michal.s@free-media.eu",
+                        MobileNumber = "+48604970937",
                         FixedRooms = new List<string>{ "general", "random" }
                     });
                     _users.Upsert(new ApplicationUser {
                         UserName = "charlie",
                         FullName = "Charlie Fields",
-                        Email = "charlie@example.com",
-                        MobileNumber = "+15550000003",
+                        Email = "michal.s@free-media.eu",
+                        MobileNumber = "+48604970937",
                         FixedRooms = new List<string>{ "general" }
                     });
                     _logger.LogInformation("Seeded demo users with fixed room assignments.");

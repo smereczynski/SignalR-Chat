@@ -10,6 +10,10 @@ using Microsoft.AspNetCore.SignalR;
 using Chat.Web.Hubs;
 using Chat.Web.ViewModels;
 using System.Text.RegularExpressions;
+using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Logging;
+using System.Text.Json;
+using Microsoft.Extensions.Configuration;
 
 namespace Chat.Web.Controllers
 {
@@ -27,6 +31,8 @@ namespace Chat.Web.Controllers
         private readonly IUsersRepository _users;
     private readonly IHubContext<ChatHub> _hubContext;
     private readonly Services.IInProcessMetrics _metrics;
+    private readonly ILogger<MessagesController> _logger;
+    private readonly IConfiguration _configuration;
 
         /// <summary>
         /// DI constructor for messages API.
@@ -35,20 +41,41 @@ namespace Chat.Web.Controllers
             IRoomsRepository rooms,
             IUsersRepository users,
             IHubContext<ChatHub> hubContext,
-            Services.IInProcessMetrics metrics)
+            Services.IInProcessMetrics metrics,
+            ILogger<MessagesController> logger,
+            IConfiguration configuration)
         {
             _messages = messages;
             _rooms = rooms;
             _users = users;
             _hubContext = hubContext;
             _metrics = metrics;
+            _logger = logger;
+            _configuration = configuration;
         }
+
+    private bool UseManualSerialization => string.Equals(_configuration["Testing:InMemory"], "true", StringComparison.OrdinalIgnoreCase);
+
+    private ContentResult ManualJson(object obj, int statusCode = StatusCodes.Status200OK, string location = null)
+    {
+        var json = JsonSerializer.Serialize(obj, new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            WriteIndented = false
+        });
+        if (!string.IsNullOrEmpty(location))
+        {
+            Response.Headers["Location"] = location;
+        }
+        Response.StatusCode = statusCode;
+        return Content(json, "application/json");
+    }
 
     /// <summary>
     /// Retrieve a single message by id.
     /// </summary>
     [HttpGet("{id}")]
-    public ActionResult<Room> Get(int id)
+    public ActionResult<MessageViewModel> Get(int id)
         {
             var message = _messages.GetById(id);
             if (message == null)
@@ -93,6 +120,10 @@ namespace Chat.Web.Controllers
                 Room = room.Name,
                 Timestamp = m.Timestamp
             });
+            if (UseManualSerialization)
+            {
+                return ManualJson(items);
+            }
             return Ok(items);
         }
 
@@ -100,39 +131,62 @@ namespace Chat.Web.Controllers
     /// Create and broadcast a message to all clients in the target room.
     /// </summary>
     [HttpPost]
-    public async Task<ActionResult<Message>> Create(MessageViewModel viewModel)
+    public async Task<ActionResult<MessageViewModel>> Create(MessageViewModel viewModel)
         {
-            var user = _users.GetByUserName(User.Identity.Name);
-            var room = _rooms.GetByName(viewModel.Room);
-            if (room == null)
-                return BadRequest();
-
-            var msg = new Message()
+            try
             {
-                Content = Regex.Replace(viewModel.Content, @"<.*?>", string.Empty),
-                FromUser = user,
-                ToRoom = room,
-                Timestamp = DateTime.Now
-            };
+                if (viewModel == null || string.IsNullOrWhiteSpace(viewModel.Room) || string.IsNullOrWhiteSpace(viewModel.Content))
+                {
+                    return BadRequest();
+                }
+                var user = _users.GetByUserName(User.Identity.Name);
+                var room = _rooms.GetByName(viewModel.Room);
+                if (room == null)
+                    return BadRequest();
+                // Authorization: ensure user is allowed for this room (FixedRooms enforcement defense-in-depth)
+                if (user?.FixedRooms != null && user.FixedRooms.Any() && !user.FixedRooms.Contains(room.Name))
+                {
+                    return Forbid();
+                }
 
-            msg = _messages.Create(msg);
+                var msg = new Message()
+                {
+                    Content = Regex.Replace(viewModel.Content, @"<.*?>", string.Empty),
+                    FromUser = user,
+                    ToRoom = room,
+                    Timestamp = DateTime.UtcNow
+                };
 
-            // Broadcast the message
-            var createdMessage = new MessageViewModel
+                msg = _messages.Create(msg);
+
+                var createdMessage = new MessageViewModel
+                {
+                    Id = msg.Id,
+                    Content = msg.Content,
+                    FromUserName = msg.FromUser?.UserName,
+                    FromFullName = msg.FromUser?.FullName,
+                    Avatar = msg.FromUser?.Avatar,
+                    Room = room.Name,
+                    Timestamp = msg.Timestamp,
+                    CorrelationId = viewModel.CorrelationId
+                };
+                await _hubContext.Clients.Group(room.Name).SendAsync("newMessage", createdMessage);
+                _metrics.IncMessagesSent();
+
+                if (UseManualSerialization)
+                {
+                    // TODO(ISSUE-PipeWriter-UnflushedBytes): Remove manual serialization once PipeWriter.UnflushedBytes
+                    // InvalidOperationException is resolved in test environment (see docs/ISSUE-PipeWriter-UnflushedBytes.md)
+                    var location = Url.Action(nameof(Get), new { id = msg.Id });
+                    return ManualJson(createdMessage, StatusCodes.Status201Created, location);
+                }
+                return CreatedAtAction(nameof(Get), new { id = msg.Id }, createdMessage);
+            }
+            catch (Exception ex)
             {
-                Id = msg.Id,
-                Content = msg.Content,
-                FromUserName = msg.FromUser?.UserName,
-                FromFullName = msg.FromUser?.FullName,
-                Avatar = msg.FromUser?.Avatar,
-                Room = room.Name,
-                Timestamp = msg.Timestamp,
-                CorrelationId = viewModel.CorrelationId
-            };
-            await _hubContext.Clients.Group(room.Name).SendAsync("newMessage", createdMessage);
-            _metrics.IncMessagesSent();
-
-            return CreatedAtAction(nameof(Get), new { id = msg.Id }, createdMessage);
+                _logger.LogError(ex, "Message create failed for room {Room}", viewModel?.Room);
+                return StatusCode(StatusCodes.Status500InternalServerError, new { error = "create_failed", detail = ex.Message });
+            }
         }
 
     }
