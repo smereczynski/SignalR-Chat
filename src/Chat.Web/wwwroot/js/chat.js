@@ -68,13 +68,31 @@
   function applyConnectionVisual(stateName){
     if(!els.roomHeader) return;
     els.roomHeader.classList.remove('connection-state-connected','connection-state-reconnecting','connection-state-disconnected');
+    // Preserve original room name so we can append/remove status annotation without losing it.
+    if(!state._baseRoomTitle && els.joinedRoomTitle){
+      state._baseRoomTitle = els.joinedRoomTitle.textContent || '';
+    }
     switch(stateName){
       case 'connected':
-        els.roomHeader.classList.add('connection-state-connected'); break;
+        els.roomHeader.classList.add('connection-state-connected');
+        if(els.joinedRoomTitle && state._baseRoomTitle){
+          els.joinedRoomTitle.textContent = state._baseRoomTitle;
+        }
+        break;
       case 'reconnecting':
-        els.roomHeader.classList.add('connection-state-reconnecting'); break;
+        els.roomHeader.classList.add('connection-state-reconnecting');
+        if(els.joinedRoomTitle && state._baseRoomTitle){
+          // Do not alter title while reconnecting (keep clean name)
+          els.joinedRoomTitle.textContent = state._baseRoomTitle;
+        }
+        break;
       case 'disconnected':
-        els.roomHeader.classList.add('connection-state-disconnected'); break;
+        els.roomHeader.classList.add('connection-state-disconnected');
+        if(els.joinedRoomTitle){
+          const base = state._baseRoomTitle || els.joinedRoomTitle.textContent || '';
+          els.joinedRoomTitle.textContent = base + ' (DISCONNECTED)';
+        }
+        break;
     }
   }
   function computeConnectionState(){
