@@ -89,7 +89,9 @@
         els.roomHeader.classList.add('connection-state-disconnected');
         if(els.joinedRoomTitle){
           const base = state._baseRoomTitle || els.joinedRoomTitle.textContent || '';
-          els.joinedRoomTitle.textContent = base + ' (⚠ DISCONNECTED)';
+          // Use explicit variation selector for broader rendering + fallback triangle if some fonts strip emoji style
+          const warn = '\u26A0\uFE0F'; // ⚠️
+          els.joinedRoomTitle.textContent = base + ' (' + warn + ' DISCONNECTED)';
         }
         break;
     }
@@ -319,6 +321,11 @@
       state.joinedRoom = state.rooms.find(r=>r.name===roomName)||{name:roomName};
       state.pendingJoin = null; state.joinInProgress=false;
       localStorage.setItem('lastRoom',roomName);
+      // Update base room title reference so connection annotations reflect the new room.
+      if(els.joinedRoomTitle){
+        state._baseRoomTitle = state.joinedRoom.name;
+        els.joinedRoomTitle.textContent = state._baseRoomTitle;
+      }
   loadUsers(); loadMessages(); renderRoomContext(); ensureProfileAvatar();
       postTelemetry('room.join.success',{room:roomName, durationMs: Math.round(performance.now()-startedAt)});
       // Flush any queued outbound messages collected while joining
