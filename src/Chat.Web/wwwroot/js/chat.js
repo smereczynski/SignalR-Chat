@@ -178,7 +178,13 @@
     });
     setTimeout(()=> startHub().catch(e=> scheduleReconnect(e)), delay);
   }
-  function wireHub(c){ c.on('getProfileInfo', u=>{ state.profile={userName:u.userName, fullName:u.fullName, avatar:u.avatar}; setLoading(false); renderProfile(); }); c.on('newMessage', m=> {
+  function wireHub(c){ c.on('getProfileInfo', u=>{ state.profile={userName:u.userName, fullName:u.fullName, avatar:u.avatar}; setLoading(false); renderProfile(); });
+    // Full presence snapshot after join (server push) ensures newly joined user and existing members converge
+    c.on('presenceSnapshot', list=> { if(!Array.isArray(list)) return; // Replace users list for current room only
+      if(state.joinedRoom){ state.users = list.filter(u=> u.currentRoom === state.joinedRoom.name || u.CurrentRoom === state.joinedRoom.name); }
+      else { state.users = list; }
+      renderUsers(); });
+    c.on('newMessage', m=> {
       const mineUser = state.profile && state.profile.userName;
       if(mineUser){
         // Prefer correlationId reconciliation
