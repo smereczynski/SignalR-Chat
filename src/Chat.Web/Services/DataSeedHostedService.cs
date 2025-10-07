@@ -62,21 +62,24 @@ namespace Chat.Web.Services
                         FullName = "Alice Johnson",
                         Email = "michal.s@free-media.eu",
                         MobileNumber = "+48604970937",
-                        FixedRooms = new List<string>{ "general", "ops" }
+                        FixedRooms = new List<string>{ "general", "ops" },
+                        DefaultRoom = "general"
                     });
                     _users.Upsert(new ApplicationUser {
                         UserName = "bob",
                         FullName = "Bob Stone",
                         Email = "michal.s@free-media.eu",
                         MobileNumber = "+48604970937",
-                        FixedRooms = new List<string>{ "general", "random" }
+                        FixedRooms = new List<string>{ "general", "random" },
+                        DefaultRoom = "general"
                     });
                     _users.Upsert(new ApplicationUser {
                         UserName = "charlie",
                         FullName = "Charlie Fields",
                         Email = "michal.s@free-media.eu",
                         MobileNumber = "+48604970937",
-                        FixedRooms = new List<string>{ "general" }
+                        FixedRooms = new List<string>{ "general" },
+                        DefaultRoom = "general"
                     });
                     _logger.LogInformation("Seeded demo users with fixed room assignments.");
                 }
