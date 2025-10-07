@@ -114,3 +114,27 @@ body {
         display: flex;
     }
 }
+
+// -------------------------------------------------------------
+// Connection state header coloring (replaces old banner approach)
+// Classes are applied by chat.js (applyConnectionVisual()) on:
+//   .main-content[data-role="room-panel"] .header
+// We keep the selectors reasonably specific to avoid accidental overrides.
+// -------------------------------------------------------------
+.main-content[data-role="room-panel"] {
+    .header {
+        transition: background-color 220ms ease-in-out, color 220ms ease-in-out;
+        &.connection-state-connected {
+            background: #66b97a; // soft green
+            h5 { color: #ffffff; }
+        }
+        &.connection-state-reconnecting {
+            background: #e0b75c; // amber / warning
+            h5 { color: #3a2d00; }
+        }
+        &.connection-state-disconnected {
+            background: #d08d8d; // muted red
+            h5 { color: #3a0707; }
+        }
+    }
+}
