@@ -130,7 +130,14 @@ namespace Chat.Web.Hubs
                 {
                     user.CurrentRoom = roomName;
                 }
-                await Clients.OthersInGroup(roomName).SendAsync("addUser", user);
+                // Broadcast to the entire group (including the caller) so every client receives a consistent
+                // addUser event even if their initial user list isn't yet loaded. This fixes a race where
+                // existing members failed to update presence until another hub action occurred.
+                await Clients.Group(roomName).SendAsync("addUser", user);
+                // After broadcasting the new user, send a full presence snapshot to the caller to ensure
+                // they have every existing user even if some addUser events were missed before subscription.
+                var presenceSnapshot = Snapshot().Where(u => u.CurrentRoom == roomName).Select(u => new { u.UserName, u.FullName, u.Avatar, u.Device, u.CurrentRoom }).ToList();
+                await Clients.Caller.SendAsync("presenceSnapshot", presenceSnapshot);
                 _logger.LogInformation("User {User} joined room {Room}", IdentityName, roomName);
                 _metrics.IncRoomsJoined();
                 _metrics.IncRoomPresence(roomName);
@@ -244,7 +251,8 @@ namespace Chat.Web.Hubs
                             if (!string.IsNullOrEmpty(target))
                             {
                                 Tracing.ActivitySource.StartActivity(strategy)?.Dispose();
-                                _ = Join(target); // fire & forget
+                                // Await join so that any presence broadcast happens deterministically before OnConnected completes
+                                await Join(target);
                             }
                         }
                     }

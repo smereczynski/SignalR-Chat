@@ -511,3 +511,24 @@ body {
     display: flex;
   }
 }
+.main-content[data-role=room-panel] .header {
+  transition: background-color 220ms ease-in-out, color 220ms ease-in-out;
+}
+.main-content[data-role=room-panel] .header.connection-state-connected {
+  background: #66b97a;
+}
+.main-content[data-role=room-panel] .header.connection-state-connected h5 {
+  color: #ffffff;
+}
+.main-content[data-role=room-panel] .header.connection-state-reconnecting {
+  background: #e0b75c;
+}
+.main-content[data-role=room-panel] .header.connection-state-reconnecting h5 {
+  color: #3a2d00;
+}
+.main-content[data-role=room-panel] .header.connection-state-disconnected {
+  background: #d08d8d;
+}
+.main-content[data-role=room-panel] .header.connection-state-disconnected h5 {
+  color: #3a0707;
+}

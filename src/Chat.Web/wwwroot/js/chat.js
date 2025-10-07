@@ -55,12 +55,58 @@
   els.roomsPanel = document.querySelector('[data-role="room-panel"]');
   els.usersCount = document.getElementById('users-count');
   els.queueBadge = document.getElementById('queue-badge');
+  els.roomHeader = document.querySelector('.main-content[data-role="room-panel"] .header');
   }
 
   function setLoading(v){
     state.loading=v;
     if(els.loaderWrapper) els.loaderWrapper.classList.toggle('d-none', !v);
     if(els.app) els.app.classList.toggle('d-none', v);
+  }
+
+  // --------------- Connection Visual (header color) ---------------
+  function applyConnectionVisual(stateName){
+    if(!els.roomHeader) return;
+    els.roomHeader.classList.remove('connection-state-connected','connection-state-reconnecting','connection-state-disconnected');
+    // Preserve original room name so we can append/remove status annotation without losing it.
+    if(!state._baseRoomTitle && els.joinedRoomTitle){
+      state._baseRoomTitle = els.joinedRoomTitle.textContent || '';
+    }
+    switch(stateName){
+      case 'connected':
+        els.roomHeader.classList.add('connection-state-connected');
+        if(els.joinedRoomTitle && state._baseRoomTitle){
+          els.joinedRoomTitle.textContent = state._baseRoomTitle;
+        }
+        break;
+      case 'reconnecting':
+        els.roomHeader.classList.add('connection-state-reconnecting');
+        if(els.joinedRoomTitle && state._baseRoomTitle){
+          els.joinedRoomTitle.textContent = state._baseRoomTitle + ' (RECONNECTING…)';
+        }
+        break;
+      case 'disconnected':
+        els.roomHeader.classList.add('connection-state-disconnected');
+        if(els.joinedRoomTitle){
+          const base = state._baseRoomTitle || els.joinedRoomTitle.textContent || '';
+          // Use explicit variation selector for broader rendering + fallback triangle if some fonts strip emoji style
+          const warn = '\u26A0\uFE0F'; // ⚠️
+          els.joinedRoomTitle.textContent = base + ' (' + warn + ' DISCONNECTED)';
+        }
+        break;
+    }
+  }
+  function computeConnectionState(){
+    if(!hub) return 'disconnected';
+    const stateStr = hub.state && hub.state.toLowerCase ? hub.state.toLowerCase() : '';
+    if(stateStr==='connected') return 'connected';
+    if(stateStr==='connecting') return 'reconnecting';
+    if(stateStr==='reconnecting') return 'reconnecting';
+    return 'disconnected';
+  }
+  function startConnectionStateLoop(){
+    // Poll every 2.5s to catch any missed transitions (safety net)
+    setInterval(()=>{ applyConnectionVisual(computeConnectionState()); }, 2500);
   }
 
   // --------------- Rendering ---------------
@@ -153,10 +199,12 @@
   function startHub(){
     ensureHub();
     log('info','signalr.start');
+  applyConnectionVisual('reconnecting'); // initial connecting state
     const startedAt = performance.now();
     return hub.start().then(()=>{
       reconnectAttempts=0; lastReconnectError=null; loadRooms();
       postTelemetry('hub.connected',{durationMs: Math.round(performance.now()-startedAt)});
+  applyConnectionVisual('connected');
       // Fallback: if we already have a profile (from /api/auth/me) but still showing loading because getProfileInfo hasn't fired, hide loader.
       if(state.profile && state.loading){ setLoading(false); }
     }).catch(err=>{ log('error','signalr.start.fail',{error:err&&err.message}); postTelemetry('hub.connect.fail',{message: (err&&err.message)||''}); scheduleReconnect(err); });
@@ -169,6 +217,7 @@
     if(err) lastReconnectError=err;
     reconnectAttempts++;
     const delay=Math.min(1000*Math.pow(2,reconnectAttempts), maxBackoff);
+  applyConnectionVisual('reconnecting');
     const {cat,msg}=classifyError(lastReconnectError);
     postTelemetry('hub.connect.retry',{
       attempt: reconnectAttempts,
@@ -178,7 +227,14 @@
     });
     setTimeout(()=> startHub().catch(e=> scheduleReconnect(e)), delay);
   }
-  function wireHub(c){ c.on('getProfileInfo', u=>{ state.profile={userName:u.userName, fullName:u.fullName, avatar:u.avatar}; setLoading(false); renderProfile(); }); c.on('newMessage', m=> {
+  function wireHub(c){
+    c.on('getProfileInfo', u=>{ state.profile={userName:u.userName, fullName:u.fullName, avatar:u.avatar}; setLoading(false); renderProfile(); });
+    // Full presence snapshot after join (server push) ensures newly joined user and existing members converge
+    c.on('presenceSnapshot', list=> { if(!Array.isArray(list)) return; // Replace users list for current room only
+      if(state.joinedRoom){ state.users = list.filter(u=> u.currentRoom === state.joinedRoom.name || u.CurrentRoom === state.joinedRoom.name); }
+      else { state.users = list; }
+      renderUsers(); });
+    c.on('newMessage', m=> {
       const mineUser = state.profile && state.profile.userName;
       if(mineUser){
         // Prefer correlationId reconciliation
@@ -199,7 +255,34 @@
         }
       }
       addOrRenderMessage({ ...m, correlationId: m.correlationId });
-  }); c.on('addUser', u=> upsertUser(u)); c.on('removeUser', u=> removeUser(u.userName)); c.on('addChatRoom', r=> upsertRoom(r)); c.on('updateChatRoom', r=> upsertRoom(r)); c.on('removeChatRoom', id=>{ state.rooms=state.rooms.filter(x=>x.id!==id); if(state.joinedRoom && state.joinedRoom.id===id){ state.joinedRoom=null; state.messages=[]; } renderAll(); }); c.on('onError', msg=> showError(msg)); c.on('notify', n=> handleNotify(n)); }
+    });
+    c.on('notify', n=> handleNotify(n));
+    // Automatic reconnect handlers (withAutomaticReconnect is enabled on builder)
+    // On successful re-connect, request a fresh user list for the current room.
+    // This compensates for any missed join/leave events during the disconnected interval.
+    c.onreconnected(connectionId => {
+      try {
+        if(state.joinedRoom){
+          hub.invoke('GetUsers', state.joinedRoom.name).then(users=>{ state.users = users; renderUsers(); });
+        }
+      } catch(_){ }
+  applyConnectionVisual('connected');
+    });
+  c.onreconnecting(err => { log('warn','hub.reconnecting', {message: err && err.message}); applyConnectionVisual('reconnecting'); });
+  c.onclose(()=> { 
+    applyConnectionVisual('disconnected'); 
+    // Clear presence list when fully disconnected to avoid showing stale users.
+    state.users = [];
+    renderUsers();
+  });
+    // Other hub-driven mutations
+    c.on('addUser', u=> upsertUser(u));
+    c.on('removeUser', u=> removeUser(u.userName));
+    c.on('addChatRoom', r=> upsertRoom(r));
+    c.on('updateChatRoom', r=> upsertRoom(r));
+    c.on('removeChatRoom', id=>{ state.rooms=state.rooms.filter(x=>x.id!==id); if(state.joinedRoom && state.joinedRoom.id===id){ state.joinedRoom=null; state.messages=[]; } renderAll(); });
+    c.on('onError', msg=> showError(msg));
+  }
 
   // --------------- Mutators -------------
   function upsertRoom(r){ const e=state.rooms.find(x=>x.id===r.id); if(e){ e.name=r.name; e.admin=r.admin; } else state.rooms.push({id:r.id,name:r.name,admin:r.admin}); renderRooms(); }
@@ -238,6 +321,11 @@
       state.joinedRoom = state.rooms.find(r=>r.name===roomName)||{name:roomName};
       state.pendingJoin = null; state.joinInProgress=false;
       localStorage.setItem('lastRoom',roomName);
+      // Update base room title reference so connection annotations reflect the new room.
+      if(els.joinedRoomTitle){
+        state._baseRoomTitle = state.joinedRoom.name;
+        els.joinedRoomTitle.textContent = state._baseRoomTitle;
+      }
   loadUsers(); loadMessages(); renderRoomContext(); ensureProfileAvatar();
       postTelemetry('room.join.success',{room:roomName, durationMs: Math.round(performance.now()-startedAt)});
       // Flush any queued outbound messages collected while joining
@@ -408,7 +496,7 @@
   }
 
   // --------------- UI Wiring ------------
-  function wireUi(){ if(els.messageInput) els.messageInput.addEventListener('keypress',e=>{ if(e.key==='Enter') sendMessage(); }); const sendBtn=document.getElementById('btn-send-message'); if(sendBtn) sendBtn.addEventListener('click',e=>{ e.preventDefault(); sendMessage(); }); if(els.filterInput) els.filterInput.addEventListener('input',()=>{ state.filter=els.filterInput.value; renderUsers(); }); if(els.btnLogout) els.btnLogout.addEventListener('click',()=>{ fetch('/api/auth/logout',{method:'POST',credentials:'include'}).finally(()=>{ logoutCleanup(); }); }); }
+  function wireUi(){ if(els.messageInput) els.messageInput.addEventListener('keypress',e=>{ if(e.key==='Enter') sendMessage(); }); const sendBtn=document.getElementById('btn-send-message'); if(sendBtn) sendBtn.addEventListener('click',e=>{ e.preventDefault(); sendMessage(); }); if(els.filterInput) els.filterInput.addEventListener('input',()=>{ state.filter=els.filterInput.value; renderUsers(); }); if(els.btnLogout) els.btnLogout.addEventListener('click',()=>{ fetch('/api/auth/logout',{method:'POST',credentials:'include'}).finally(()=>{ try { if(hub && hub.stop) hub.stop(); } catch(_) {} logoutCleanup(); }); }); }
 
   function showError(msg){ if(!els.errorAlert) return; const span=els.errorAlert.querySelector('span'); if(span) span.textContent=msg; els.errorAlert.classList.remove('d-none'); setTimeout(()=> els.errorAlert.classList.add('d-none'),5000); }
 
@@ -473,7 +561,7 @@
   function persistOutbox(){
     try { sessionStorage.setItem('chat.outbox', JSON.stringify(state.outbox)); } catch(_) {}
   }
-  document.addEventListener('DOMContentLoaded',()=>{ cacheDom(); loadOutbox(); setLoading(true); probeAuth(); wireUi(); });
+  document.addEventListener('DOMContentLoaded',()=>{ cacheDom(); loadOutbox(); setLoading(true); probeAuth(); wireUi(); startConnectionStateLoop(); });
   // Fail-safe: if something throws during early init, show the app with a generic error.
   window.addEventListener('error', function(){
     if(state.loading){ setLoading(false); }
