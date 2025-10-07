@@ -13,6 +13,42 @@
       }
     },
     {
+      "label": "npm install",
+      "type": "shell",
+      "command": "npm install",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": [] ,
+      "presentation": { "reveal": "silent", "panel": "shared" },
+      "detail": "Install frontend dependencies (esbuild, sass, etc)."
+    },
+    {
+      "label": "bundle js (prod)",
+      "type": "shell",
+      "command": "npm run build:prod",
+      "dependsOn": ["npm install"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": [],
+      "group": "build",
+      "presentation": { "reveal": "silent", "panel": "shared" },
+      "detail": "Build CSS + minified JS bundles via esbuild (production)."
+    },
+    {
+      "label": "dotnet build",
+      "type": "shell",
+      "command": "dotnet build ./src/Chat.sln --nologo",
+      "group": "build",
+      "problemMatcher": ["$msCompile"],
+      "presentation": { "reveal": "silent", "panel": "shared" },
+      "detail": "Compile the .NET solution." 
+    },
+    {
+      "label": "build all",
+      "dependsOn": ["npm install", "bundle js (prod)", "dotnet build"],
+      "group": "build",
+      "presentation": { "reveal": "silent", "panel": "shared" },
+      "detail": "Full frontend + backend build (npm deps, bundle, then dotnet build)."
+    },
+    {
       "label": "Run Chat (Azure local env)",
       "type": "shell",
       "command": "bash",
@@ -22,7 +58,8 @@
       ],
       "options": { "cwd": "${workspaceFolder}" },
       "problemMatcher": ["$msCompile"],
-      "detail": "Loads secrets from .env.local and runs Chat.Web with Development environment."
+      "detail": "Loads secrets from .env.local and runs Chat.Web with Development environment.",
+      "dependsOn": ["bundle js (prod)"]
     }
   ]
 }

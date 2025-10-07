@@ -25,6 +25,12 @@ namespace Chat.Web.Models
         /// </summary>
         public ICollection<string> FixedRooms { get; set; } = new List<string>();
 
+    /// <summary>
+    /// Preferred starting room. If user has more than one FixedRoom this selects which to auto-join.
+    /// If null/empty and only one FixedRoom exists that one is auto-selected; otherwise first FixedRoom alphabetically.
+    /// </summary>
+    public string DefaultRoom { get; set; }
+
         public ICollection<Room> Rooms { get; set; }
         public ICollection<Message> Messages { get; set; }
     }

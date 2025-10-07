@@ -2,123 +2,106 @@
 
 This document describes the high-level architecture of the SignalR-Chat application, its main components, and key runtime flows.
 
-## Overview
-- **Framework**: ASP.NET Core 9 (Razor Pages host + MVC API + SignalR Hub)
-- **Real-time**: Azure SignalR Service
-- **Data**: Azure Cosmos DB (containers: users, rooms, messages) partitioned for horizontal scale
-- **Cache / OTP**: Redis (stores short-lived OTP codes)
-- **Optional**: Azure Communication Services (Email/SMS) for OTP code delivery
-- **Auth**: Cookie-based session established after OTP verification
-- **Observability**: Serilog (structured logs) + OpenTelemetry Activities (console exporter) + custom request tracing middleware
-- **Client**: Single vanilla JavaScript module (`wwwroot/js/chat.js`) handling state, DOM rendering, optimistic messaging, pagination, and SignalR interaction
+## Current Overview
+- **Framework**: ASP.NET Core (Razor Pages + minimal MVC endpoints + SignalR Hub)
+- **Real-time Transport**: SignalR (in-process hub).
+- **Persistence**: Entity Framework Core (ApplicationDbContext) with underlying relational store (migrations indicate relational usage).
+- **Authentication**: Passwordless one-time passcode (OTP) flow. Short-lived OTP codes stored in Redis; successful verification establishes cookie-auth session.
+- **Redis Usage**: Only for OTP storage (key prefix `otp:`) with TTL; no chat message caching or SignalR backplane configured yet.
+- **Front-End**: Vanilla JavaScript modules (`chat.js`, `site.js`) built & minified (esbuild) into `wwwroot/js/dist/` and only minified bundles are referenced by the Razor layout.
+- **Messaging Model**: All chat messages are sent exclusively through the SignalR hub (`ChatHub`).
+- **Removed Feature**: Private/direct messaging (`/private(user)`) removed; only room-based broadcast remains.
+- **Client Reliability**: Outbox queue with sessionStorage persistence for messages typed while disconnected or during (re)join. Queue flushes automatically after join / reconnect.
+- **Optimistic UI**: Messages render immediately with temporary local metadata and reconcile on authoritative broadcast via correlation ID.
+- **Telemetry / Observability**: Activity/trace correlation through custom fetch wrapper capturing `X-Trace-Id`; client emits structured telemetry events (join attempts, sends, queue flush metrics); server leverages `ActivitySource` spans in hub operations.
 
-## Component Diagram (Conceptual)
-```
-Browser (chat.js)
-   | (HTTPS + Cookie)
-   v
-Chat.Web (ASP.NET Core)
-   |-- Controllers (Auth, Messages, Rooms)
-   |-- SignalR Hub (ChatHub)
-   |-- Repositories (Cosmos*)
-   |-- OTP (Redis + ACS/Console)
-   |-- Observability (Serilog + OTel)
+## Key Components
+| Layer | Component | Responsibility |
+|-------|-----------|----------------|
+| Client | `chat.js` | Connection lifecycle (connect/join/reconnect), outbox queue, optimistic sends, reconciling broadcasts, telemetry emission. |
+| Client | `site.js` | General UI behaviors (sidebar toggles, OTP modal workflow, tooltips, message actions UI). |
+| Real-time | `ChatHub` | Single entry-point for sending messages and joining rooms. Normalizes routing, enriches tracing, broadcasts canonical message DTOs. |
+| Auth | Auth Controllers / OTP API | `start` (generate/store OTP in Redis), `verify` (validate OTP, issue auth cookie), `logout`. |
+| Data | `ApplicationDbContext` & EF migrations | Stores Users, Rooms, Messages. |
+| OTP Store | `RedisOtpStore` | Wrapper over StackExchange.Redis for code set/get/delete with TTL. |
+| Config | `RedisOptions` | Connection string, DB index, OTP TTL seconds. |
+| Build | esbuild tasks (VS Code tasks.json) | Produce minified bundles consumed by layout. |
 
-External Services:
-   - Azure SignalR Service
-   - Azure Cosmos DB (SQL API)
-   - Azure Cache for Redis
-   - Azure Communication Services (optional)
-```
+## SignalR Role
+SignalR provides the real-time bi-directional communication channel between browser clients and the server, handling:
+- Hub method invocation (client → server: send/join operations)
+- Broadcast fan-out scoped to room groups
+- Connection lifecycle events used to trigger auto-join and queued message flush
+- Basic ordering within a single hub instance (optimistic reconciliation on client covers timing gaps)
 
-## Sequence: OTP Authentication Flow
-```mermaid
-sequenceDiagram
-    autonumber
-    participant U as User
-    participant B as Browser
-    participant A as Chat Web
-    participant R as Redis (OTP)
-    participant C as ACS (Email/SMS)
+No Redis backplane is configured; multi-instance scale-out would require adding one (Redis or Azure SignalR Service) to unify group membership and broadcasts.
 
-    U->>B: Enter userName + destination
-    B->>A: POST /api/auth/start { userName, destination }
-    A->>R: Store OTP code (TTL)
-    alt ACS configured
-        A->>C: Send code via Email/SMS
-    else Console fallback
-        A-->>A: Log code to console
-    end
-    A-->>B: 202 Accepted (started)
-    U->>B: Enter received code
-    B->>A: POST /api/auth/verify { userName, code }
-    A->>R: Get & validate OTP
-    alt Code valid
-        A-->>B: 200 OK + profile (Set-Cookie auth)
-        B->>A: SignalR negotiate /chatHub
-        A-->>B: Connection info
-        B-)A: Establish WebSocket (auth cookie)
-        A-->>B: Hub welcome + initial state
-    else Invalid/expired
-        A-->>B: 400/401 error JSON
-    end
-```
+## Redis Role
+Redis is presently limited to OTP storage:
+- Key pattern: `otp:{userName}`
+- Value: plaintext OTP (improve later by hashing) with TTL `RedisOptions.OtpTtlSeconds` (default 300s)
+- Operations: set, get, remove invoked through `RedisOtpStore`
 
-## Sequence: Optimistic Message Send & Reconciliation
-```mermaid
-sequenceDiagram
-    autonumber
-    participant U as User
-    participant B as Browser
-    participant H as SignalR Hub
-    participant S as Chat Web API
-    participant DB as Cosmos (messages)
+Potential future roles: SignalR backplane, presence cache, rate limiting, hot message cache.
 
-    U->>B: Type message + send
-    B->>B: Generate correlationId & tempId (-1, -2 ...)
-    B-->>B: Render optimistic message (pending)
-    B->>H: hub.sendMessage(room, content, correlationId)
-    H->>S: Persist request (room, content, user, correlationId)
-    S->>DB: Insert message (assign real id + timestamp)
-    DB-->>S: Ack (document stored)
-    S-->>H: Message DTO {id, content, user, correlationId}
-    H-->>B: Broadcast message to all clients
-    B->>B: Reconcile optimistic (match correlationId -> replace temp)
-    B-->>U: Show confirmed message (status cleared)
-```
+## Runtime Flows
+### OTP Authentication
+1. Client POSTs `/api/auth/start` (generate + store OTP in Redis)
+2. User receives/displayed code out-of-band (currently minimal delivery)
+3. Client POSTs `/api/auth/verify` with code
+4. Server validates, issues auth cookie
+5. Client opens SignalR connection and auto-joins a room; outbox flush begins
 
-## Data Model Highlights
-| Entity | Key | Partition Key | Notes |
-|--------|-----|---------------|-------|
-| User | userName | /userName | Simple profile (no password; OTP only) |
-| Room | name | /name | Metadata for grouping messages |
-| Message | id (GUID/assigned) | /roomName | Stored with room partition for efficient recent/older pagination |
+### Auto-Join & Queue Flush
+- Determine target room (user default, only room, or first) then invoke hub join
+- Drain sessionStorage queue FIFO, sending each with preserved correlationId
 
-## Pagination Strategy
-1. Initial fetch: newest N messages (descending query → sorted ascending in memory)
-2. Older fetch: pass `before` = oldest currently loaded message timestamp.
-3. Client preprends without losing scroll position.
+### Optimistic Send
+1. User action → allocate correlationId + temporary placeholder
+2. If connected: send through hub; if not: enqueue
+3. Hub persists and broadcasts canonical message (includes correlationId)
+4. Client reconciles & finalizes
 
-## Optimistic Messaging Strategy
-- Client assigns temporary negative IDs + a UUID `correlationId`.
-- On broadcast, matches by `correlationId`; falls back to content/negative ID if necessary.
-- Removes duplicate temporary entries.
+### Reconnect Handling
+- Messages composed offline accumulate in queue
+- On reconnection + join success, queued messages flush automatically
 
-## Configuration Strategy
-- `appsettings.json`: structural placeholders (no secrets)
-- `appsettings.Production.json`: stricter logging
-- Runtime secrets via environment variables / user secrets (`Cosmos__`, `Redis__`, `Acs__`)
+## Build & Front-End Delivery
+- Source JS compiled to `wwwroot/js/dist/` (minified) via esbuild tasks
+- Razor layout references only minified artifacts
+- Dist treated as generated output
 
-## Observability
-- Custom middleware starts an Activity per request; trace id returned via `X-Trace-Id` header.
-- Repository calls add tags (room, counts) for diagnostics.
-- Serilog request logging enriches environment + trace metadata.
+## Observability & Telemetry
+- Server Activities wrap hub operations; `X-Trace-Id` header surfaces trace id to client
+- Client logs join attempts, send outcomes, queue flush metrics; correlates with trace id
 
-## Future Enhancements
-- OTLP exporter for traces / metrics
-- In-memory dev fallback (optional) to run without Cosmos/Redis
-- UI styling for pending optimistic messages (visual difference)
-- Additional integration tests (pagination edge cases, reconnection)
+## Scaling Considerations
+| Concern | Current State | Scale-out Path |
+|---------|---------------|----------------|
+| Real-time fan-out | Single hub instance | Add Redis backplane or Azure SignalR Service |
+| Message persistence | Single EF DB | Shard or move to partitioned store |
+| OTP store | Single Redis | Managed/clustered Redis |
+| Outbox durability | sessionStorage | IndexedDB or server-side queue |
+| Presence tracking | Not implemented | Redis sets / ephemeral keys |
+
+## Security Notes
+- OTP codes currently plaintext in Redis (hashing recommended later)
+- Correlation IDs are opaque UUIDs (avoid embedding user data)
+- Future: rate-limit OTP endpoints (Redis INCR with TTL)
+
+## Future Roadmap (Prioritized)
+1. Introduce backplane (Redis or Azure SignalR) for multi-instance scale
+2. Presence & typing indicators
+3. Hash OTP codes + rate limiting
+4. OTLP exporter integration
+5. CI guard for forbidden legacy patterns
+6. Enhanced pagination UX/accessibility
+
+## Glossary
+- **CorrelationId**: UUID bridging optimistic send and server broadcast
+- **Outbox Queue**: Client sessionStorage FIFO of unsent messages
+- **OTP**: Short-lived passcode enabling passwordless login
+- **Hub**: SignalR abstraction for connections, groups, messaging
 
 ---
-This document will evolve alongside architectural changes.
+This document reflects the current hub-only messaging architecture with private messaging removed and minified JS bundle delivery.

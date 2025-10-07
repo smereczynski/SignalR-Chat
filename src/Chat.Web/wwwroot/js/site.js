@@ -37,26 +37,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const $$ = sel => Array.from(document.querySelectorAll(sel));
     const on = (el, evt, h, opts) => el && el.addEventListener(evt, h, opts||false);
 
-    // User list private message insertion (event delegation)
-    const usersList = document.getElementById('users-list');
-    if (usersList) {
-        usersList.addEventListener('click', e => {
-            const li = e.target.closest('li');
-            if (!li || !usersList.contains(li)) return;
-            const username = li.getAttribute('data-username');
-            const input = document.getElementById('message-input');
-            if (!username || !input) return;
-            let text = input.value || '';
-            if (text.startsWith('/')) {
-                const parts = text.split(')');
-                if (parts.length > 1) text = parts.slice(1).join(')');
-            }
-            text = '/private(' + username + ') ' + text.trim();
-            input.value = text;
-            input.dispatchEvent(new Event('change'));
-            input.focus();
-        });
-    }
+    // Private message feature removed: clicking users no longer injects /private command.
 
     // Sidebar / users panel toggles
     on($('#expand-sidebar'), 'click', () => {
@@ -203,7 +184,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Config
         const container = document.getElementById('otpContainer');
-        const timeoutMs = parseInt(container?.getAttribute('data-otp-timeout-ms')||'8000',10);
+    // Backend/network hard timeout (29s) while UI shows a full 30s countdown for cleaner UX
+    const rawTimeoutMs = parseInt(container?.getAttribute('data-otp-timeout-ms')||'29000',10);
+    const timeoutMs = rawTimeoutMs; // abort / fetch timeout threshold
+    const countdownTotalMs = 30000; // always show 30s countdown visually
         const retryCooldownMs = parseInt(container?.getAttribute('data-otp-retry-cooldown-ms')||'5000',10);
 
         // UI state elements
@@ -240,7 +224,7 @@ document.addEventListener('DOMContentLoaded', () => {
         flow.lastSendCompletedTs = null;
 
         // Timeout countdown
-        let remainingMs = timeoutMs;
+    let remainingMs = countdownTotalMs;
         if (countdownEl) countdownEl.textContent = Math.ceil(remainingMs/1000);
         if (flow.countdownInterval) { clearInterval(flow.countdownInterval); }
         flow.countdownInterval = setInterval(()=>{

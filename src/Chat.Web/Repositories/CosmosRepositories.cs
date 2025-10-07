@@ -59,7 +59,7 @@ namespace Chat.Web.Repositories
     }
 
     // Simple DTOs for Cosmos storage
-    internal class UserDoc { public string id { get; set; } public string userName { get; set; } public string fullName { get; set; } public string avatar { get; set; } public string email { get; set; } public string mobile { get; set; } public string[] fixedRooms { get; set; } }
+    internal class UserDoc { public string id { get; set; } public string userName { get; set; } public string fullName { get; set; } public string avatar { get; set; } public string email { get; set; } public string mobile { get; set; } public string[] fixedRooms { get; set; } public string defaultRoom { get; set; } }
     internal class RoomDoc { public string id { get; set; } public string name { get; set; } public string admin { get; set; } }
     internal class MessageDoc { public string id { get; set; } public string roomName { get; set; } public string content { get; set; } public string fromUser { get; set; } public DateTime timestamp { get; set; } }
 
@@ -84,7 +84,7 @@ namespace Chat.Web.Repositories
                 {
                     var page = q.ReadNextAsync().GetAwaiter().GetResult();
                     activity?.AddEvent(new ActivityEvent("page", tags: new ActivityTagsCollection { {"db.page.count", page.Count} }));
-                    list.AddRange(page.Select(d => new ApplicationUser { UserName = d.userName, FullName = d.fullName, Avatar = d.avatar, Email = d.email, MobileNumber = d.mobile, FixedRooms = d.fixedRooms != null ? new System.Collections.Generic.List<string>(d.fixedRooms) : new System.Collections.Generic.List<string>() }));
+                    list.AddRange(page.Select(d => new ApplicationUser { UserName = d.userName, FullName = d.fullName, Avatar = d.avatar, Email = d.email, MobileNumber = d.mobile, FixedRooms = d.fixedRooms != null ? new System.Collections.Generic.List<string>(d.fixedRooms) : new System.Collections.Generic.List<string>(), DefaultRoom = d.defaultRoom }));
                 }
                 activity?.SetTag("app.result.count", list.Count);
                 return list;
@@ -110,7 +110,7 @@ namespace Chat.Web.Repositories
                     var d = page.FirstOrDefault();
                     if (d != null)
                     {
-                        return new ApplicationUser { UserName = d.userName, FullName = d.fullName, Avatar = d.avatar, Email = d.email, MobileNumber = d.mobile, FixedRooms = d.fixedRooms != null ? new System.Collections.Generic.List<string>(d.fixedRooms) : new System.Collections.Generic.List<string>() };
+                        return new ApplicationUser { UserName = d.userName, FullName = d.fullName, Avatar = d.avatar, Email = d.email, MobileNumber = d.mobile, FixedRooms = d.fixedRooms != null ? new System.Collections.Generic.List<string>(d.fixedRooms) : new System.Collections.Generic.List<string>(), DefaultRoom = d.defaultRoom };
                     }
                 }
                 return null;
@@ -127,7 +127,7 @@ namespace Chat.Web.Repositories
         {
             using var activity = Tracing.ActivitySource.StartActivity("cosmos.users.upsert", ActivityKind.Client);
             activity?.SetTag("app.userName", user.UserName);
-            var doc = new UserDoc { id = user.UserName, userName = user.UserName, fullName = user.FullName, avatar = user.Avatar, email = user.Email, mobile = user.MobileNumber, fixedRooms = user.FixedRooms != null ? System.Linq.Enumerable.ToArray(user.FixedRooms) : null };
+            var doc = new UserDoc { id = user.UserName, userName = user.UserName, fullName = user.FullName, avatar = user.Avatar, email = user.Email, mobile = user.MobileNumber, fixedRooms = user.FixedRooms != null ? System.Linq.Enumerable.ToArray(user.FixedRooms) : null, defaultRoom = user.DefaultRoom };
             try
             {
                 var resp = _users.UpsertItemAsync(doc, new PartitionKey(doc.userName)).GetAwaiter().GetResult();
