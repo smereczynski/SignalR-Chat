@@ -178,7 +178,8 @@
     });
     setTimeout(()=> startHub().catch(e=> scheduleReconnect(e)), delay);
   }
-  function wireHub(c){ c.on('getProfileInfo', u=>{ state.profile={userName:u.userName, fullName:u.fullName, avatar:u.avatar}; setLoading(false); renderProfile(); });
+  function wireHub(c){
+    c.on('getProfileInfo', u=>{ state.profile={userName:u.userName, fullName:u.fullName, avatar:u.avatar}; setLoading(false); renderProfile(); });
     // Full presence snapshot after join (server push) ensures newly joined user and existing members converge
     c.on('presenceSnapshot', list=> { if(!Array.isArray(list)) return; // Replace users list for current room only
       if(state.joinedRoom){ state.users = list.filter(u=> u.currentRoom === state.joinedRoom.name || u.CurrentRoom === state.joinedRoom.name); }
@@ -205,7 +206,27 @@
         }
       }
       addOrRenderMessage({ ...m, correlationId: m.correlationId });
-  }); c.on('addUser', u=> upsertUser(u)); c.on('removeUser', u=> removeUser(u.userName)); c.on('addChatRoom', r=> upsertRoom(r)); c.on('updateChatRoom', r=> upsertRoom(r)); c.on('removeChatRoom', id=>{ state.rooms=state.rooms.filter(x=>x.id!==id); if(state.joinedRoom && state.joinedRoom.id===id){ state.joinedRoom=null; state.messages=[]; } renderAll(); }); c.on('onError', msg=> showError(msg)); c.on('notify', n=> handleNotify(n)); }
+    });
+    c.on('notify', n=> handleNotify(n));
+    // Automatic reconnect handlers (withAutomaticReconnect is enabled on builder)
+    // On successful re-connect, request a fresh user list for the current room.
+    // This compensates for any missed join/leave events during the disconnected interval.
+    c.onreconnected(connectionId => {
+      try {
+        if(state.joinedRoom){
+          hub.invoke('GetUsers', state.joinedRoom.name).then(users=>{ state.users = users; renderUsers(); });
+        }
+      } catch(_){ }
+    });
+    c.onreconnecting(err => { log('warn','hub.reconnecting', {message: err && err.message}); });
+    // Other hub-driven mutations
+    c.on('addUser', u=> upsertUser(u));
+    c.on('removeUser', u=> removeUser(u.userName));
+    c.on('addChatRoom', r=> upsertRoom(r));
+    c.on('updateChatRoom', r=> upsertRoom(r));
+    c.on('removeChatRoom', id=>{ state.rooms=state.rooms.filter(x=>x.id!==id); if(state.joinedRoom && state.joinedRoom.id===id){ state.joinedRoom=null; state.messages=[]; } renderAll(); });
+    c.on('onError', msg=> showError(msg));
+  }
 
   // --------------- Mutators -------------
   function upsertRoom(r){ const e=state.rooms.find(x=>x.id===r.id); if(e){ e.name=r.name; e.admin=r.admin; } else state.rooms.push({id:r.id,name:r.name,admin:r.admin}); renderRooms(); }
