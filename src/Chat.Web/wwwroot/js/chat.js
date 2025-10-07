@@ -118,7 +118,7 @@
     // produce base36-ish string from random bytes
     const bytes = secureRandomBytes(length);
     let chars = '';
-    for(const b of bytes){ chars += (b & 0x0f).toString(16); } // hex nibble -> 2x entropy per byte slice
+    for(const b of bytes){ chars += (b & 0x0f).toString(16); } // hex nibble -> 1x entropy per byte (4 bits used)
     // trim / slice to requested nibble length (length * 2 nibbles currently but we used only lower nibble for stability)
     // We used only lower nibble, so chars length === length. Acceptable for correlation uniqueness.
     return (prefix||'') + chars + '_' + Date.now().toString(36);
