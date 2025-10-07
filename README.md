@@ -1,127 +1,116 @@
 # SignalR-Chat
-Modern real-time chat on .NET 9 using SignalR (hub-only), Redis (OTP), optional Azure Communication Services (OTP delivery), OpenTelemetry instrumentation, and a lightweight vanilla JavaScript client. Cosmos / Azure SignalR are optional future scale-out paths; current implementation runs in-process with EF-based persistence.
+Real-time multi-room chat on .NET 9 using SignalR (in‑process hub), EF Core persistence, Redis for OTP codes (or in‑memory when testing), optional Azure SignalR (configured automatically when not in test mode), OpenTelemetry (traces + metrics + logs) and a small vanilla JavaScript client (bundled/minified).
 
-## Features
-* Multi-room chat (static rooms: general, ops, random)
-* Text-only messages
-* Optimistic message sending with correlation IDs
-* Incremental pagination (newest first + older on scroll-up)
-* Client-side rate limiting for sends
-* Avatar initials with defensive refresh logic
-* OTP-based authentication (cookie session) backed by Redis
-  * Predefined demo users selectable from dropdown (alice, bob, charlie)
-  * Console fallback for OTP delivery; ACS (Email/SMS) optional
-  * Configurable send timeout, retry cooldown, resend support, progress indicator
-* Structured telemetry: OpenTelemetry (traces, metrics, logs) + correlation header propagation
-* Health endpoints: `/healthz` (readiness) and `/healthz/metrics` (light JSON counters)
-* Reconnect backoff telemetry
-* Immutable message log (no edits/deletes); static room topology
-* Private messaging removed (room-only broadcast model)
+The project intentionally keeps scope tight: fixed public rooms, text messages only, no editing/deleting, and OTP-based demo authentication.
 
-## Rooms (Fixed Topology)
-Rooms are a fixed, immutable set (`general`, `ops`, `random`). Interface:
-```
-IEnumerable<Room> GetAll();
-Room? GetById(string id);
-Room? GetByName(string name);
-```
-No runtime create/update/delete methods exist. Seeding ensures expected rooms and demo users if the store is empty.
+## Implemented Features (Current State)
+* Multi-room chat (fixed rooms: `general`, `ops`, `random`)
+* Text messages only (immutable after send)
+* Optimistic send with client correlation IDs and reconciliation
+* Incremental pagination (newest batch first; fetch older on upward scroll)
+* Client-side send pacing (basic rate limiting logic in JS)
+* Avatar initials (derived client-side with cache bust/refresh protection)
+* OTP authentication (cookie session)
+  * Demo users: `alice`, `bob`, `charlie`
+  * OTP code stored in Redis (or in-memory store under test flag)
+  * Console fallback delivery (ACS email/SMS supported only if configured)
+* Connection & reconnect telemetry (duplicate start suppression + backoff attempts counter)
+* OpenTelemetry traces + metrics + logs; custom counters for chat domain events
+* Health endpoint: `/healthz` (readiness/basic liveness)
+* Outbox queue: pending messages buffered while disconnected and flushed after reconnect & room join
+* Duplicate hub start guard (prevents false reconnect storms)
+* SessionStorage backed optimistic message reconciliation
+
+## Fixed Room Topology
+Rooms are static; there is no runtime CRUD. The seeding hosted service ensures the three canonical rooms and demo users exist on startup.
 
 ## Architecture Overview
-**Runtime**: ASP.NET Core 9 (Razor Pages + minimal APIs + SignalR Hub)
-
-**Real-time**: In-process SignalR hub (no backplane yet). All message creation flows through hub methods—there is no REST send endpoint.
-
-**Persistence**: EF Core (`ApplicationDbContext`) for users, rooms, messages (relational). Partitioning strategy conceptually groups messages per room.
-
-**OTP / Cache**: Redis storing short-lived OTP codes (`otp:{user}` keys).
-
-**Auth Flow**: OTP start → code stored in Redis → verify → auth cookie → establish hub connection.
-
-**Observability**:
-* OpenTelemetry Activities around hub & repository operations
-* Optional OTLP / console exporters (selection logic in startup)
-* Structured logs enriched with trace IDs
-* Custom counters (messages sent, rooms joined, reconnect attempts, OTP events, active connections)
-
-**Frontend**: Vanilla JS modules (`chat.js`, `site.js`) + esbuild-generated minified bundles under `wwwroot/js/dist/`. Only minified files are referenced by the pages.
+**Runtime**: ASP.NET Core 9 (Razor Pages + Controllers + SignalR Hub)  
+**Real-time**: SignalR hub (Azure SignalR automatically added when not running in in-memory test mode)  
+**Persistence**: EF Core context for users, rooms, messages (Cosmos repositories or in-memory depending on config)  
+**OTP / Cache**: Redis (or in-memory fallback) storing short-lived OTP codes (`otp:{user}`)  
+**Auth Flow**: Request code → store in OTP store → user enters code → cookie issued → hub connects  
+**Observability**: OpenTelemetry (trace + metric + log providers) with exporter priority (Azure Monitor > OTLP > Console) and domain counters  
+**Frontend**: Source JS in `wwwroot/js/` compiled to minified assets in `wwwroot/js/dist/` (pages reference only the dist versions)
 
 ## Local Development
 Prerequisites:
 * .NET 9 SDK
-* Redis instance (local or hosted)
-* (Optional) ACS for real OTP delivery
+* Redis (unless running with in-memory testing configuration)
+* (Optional) Azure Communication Services connection (email/SMS) for real OTP delivery
 
-### Frontend Build
-`esbuild` bundles `chat.js` and `site.js` into `wwwroot/js/dist/`. Edit the source files, then run the bundle task.
-
-Core npm scripts (see `package.json`):
-* `bundle:js` – build minified JS
-* `build:css` / `build:css:prod` – Sass to CSS
-* `build:prod` – full asset pipeline
-
-VS Code tasks orchestrate: install → bundle → dotnet build.
-
-### Run
+### Build & Run (Manual)
 ```
-dotnet run --project src/Chat.Web/Chat.Web.csproj --urls=http://localhost:5099
+dotnet build ./src/Chat.sln
+dotnet run --project ./src/Chat.Web --urls=http://localhost:5099
 ```
-Open http://localhost:5099
+Navigate to: http://localhost:5099
+
+### VS Code Tasks (Automation)
+The workspace includes curated tasks (see `.vscode/tasks.json`). Key tasks:
+
+| Task Label | Purpose |
+|------------|---------|
+| npm install | Install frontend dependencies (esbuild, sass). |
+| bundle js (prod) | Build/minify JS + compile Sass (depends on npm install). |
+| dotnet build | Compile the .NET solution. |
+| build all | Full pipeline: npm install → bundle js (prod) → dotnet build. |
+| test | Run solution tests (`dotnet test --no-build`). |
+| Run Chat (Azure local env) | Load `.env.local` (if present), set Development environment, run app on http://localhost:5099. |
+| PROD Run Chat (Azure local env) | Same as above but forces `ASPNETCORE_ENVIRONMENT=Production`. |
+
+Recommended editing cycle:
+1. Modify source JS (`wwwroot/js/chat.js` or `site.js`)
+2. Run task: `bundle js (prod)` (or include in `build all`)
+3. Run `Run Chat (Azure local env)` task
+4. Refresh browser
+
+Never edit files under `wwwroot/js/dist/` directly—changes will be overwritten by the bundling step.
 
 ## OTP Authentication (Summary)
-1. Select demo user and initiate send
-2. Code stored in Redis with TTL
-3. Enter code, verify → cookie issued
-4. Hub connection established → auto-join room → flush queued messages
+1. User selects demo identity and requests code
+2. Code persisted with TTL in configured OTP store
+3. User submits code; on success a cookie auth session is issued
+4. Client starts (or reuses) hub connection; queued optimistic messages (if any) flush
 
-Timeouts, resend cooldown, and telemetry instrumentation are all client-managed with clear UI states.
+Console output displays the OTP when ACS is not configured.
 
 ## Messaging Flow
-1. User composes & sends → client assigns correlationId and renders optimistic message
-2. Hub method invoked; server persists & broadcasts canonical DTO with correlationId
-3. Client reconciles optimistic entry (removes temporary state)
-4. Disconnected messages queue in sessionStorage until reconnection & join
+1. User sends → client assigns `correlationId`, renders optimistic message
+2. Hub method persists & broadcasts canonical payload with same `correlationId`
+3. Client reconciles optimistic entry (replaces temp rendering)
+4. If offline/disconnected: message stored in sessionStorage outbox until reconnect & room join
 
-## Scaling (Future)
-| Concern | Current | Path |
-|---------|---------|------|
-| Real-time scale | Single hub instance | Add Redis/Azure SignalR backplane |
-| Persistence | Single DB | Shard / partition store |
-| OTP store | Single Redis | Managed or clustered Redis |
-| Presence | Not implemented | Redis sets / ephemeral keys |
-| Outbox durability | sessionStorage | IndexedDB or server persistence |
+## Telemetry & Metrics
+Exporter selection (in `Startup`) prioritizes: Azure Monitor (when Production + connection string) → OTLP endpoint → Console.
 
-## Security Notes
-* OTP codes stored plaintext (hashing recommended for stronger threat model)
-* Rate limiting (OTP, sends) can be added using built-in ASP.NET rate limiting + Redis counters
-* Correlation IDs are random UUIDs (no sensitive data)
-
-## Telemetry Overview
-Custom metrics (meter `Chat.Web`):
+Custom counters (Meter `Chat.Web`):
 * `chat.messages.sent`
 * `chat.rooms.joined`
 * `chat.otp.requests`
 * `chat.otp.verifications`
-* `chat.connections.active`
 * `chat.reconnect.attempts`
 
-Client telemetry emits join attempts, send failures, queue flush metrics, reconnect attempt metadata.
+Client emits lightweight events for: reconnect attempts, duplicate start skips, message send outcomes, pagination fetches, queue flushes.
+
+## Security Notes
+* OTP codes stored plaintext in the chosen store (hashing can be added for stronger threat model)
+* Rate limiting applied to auth/OTP endpoints via fixed window limiter (configurable limits)
+* Correlation IDs are random UUIDs (no sensitive data embedded)
 
 ## Health
-`/healthz` basic readiness; `/healthz/metrics` lightweight JSON counters + uptime snapshot.
+`/healthz` basic readiness (string "ok"). No additional JSON metrics endpoint is currently exposed.
 
 ## Development Workflow Tips
-* Always edit source (`wwwroot/js/chat.js`, `site.js`) not files in `dist/`
-* Re-bundle after JS changes before refreshing browser
-* Use a watch script if iterating rapidly (add `--watch` to esbuild locally)
-
-## Roadmap
-1. Backplane (Redis or Azure SignalR) for horizontal scale
-2. Presence + typing indicators
-3. Hash OTP codes & rate limiting policies
-4. OTLP exporter hardened for prod + dashboards
-5. CI guard for forbidden patterns (e.g., reintroduction of private messaging)
-6. Enhanced pagination UX (skeleton loading / virtualization)
+* Edit only source JS/CSS; let tasks produce minified output
+* Use `build all` for a clean full pipeline before commits
+* Run `test` task before pushing changes
+* Consider adding a local `--watch` script if iterating frequently (not included by default)
+## Future Enhancements (Not Implemented)
+* Presence / typing indicators
+* Backplane scale-out metrics & multi-instance benchmarks
+* Hashed OTP storage + additional anti-abuse policies
+* Rich pagination UX (virtualization, skeleton loaders)
 
 ## License
 See `LICENSE` file.
