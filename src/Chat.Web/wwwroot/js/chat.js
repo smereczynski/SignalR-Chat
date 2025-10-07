@@ -37,6 +37,11 @@ if(window.__chatAppBooted){
   state._graceEnded = false;            // flag to ensure single grace end telemetry
   const els = {};
 
+  // Grace window helper (auth probe or transitional period)
+  function isWithinAuthGrace(){
+    return !!(state.authGraceUntil && Date.now() < state.authGraceUntil);
+  }
+
   function cacheDom(){
     els.app = document.querySelector('.app');
     // Select the actual loading spinner container, not the outer layout wrapper.
@@ -203,7 +208,7 @@ if(window.__chatAppBooted){
   renderProfile = function(){
     if(!els.profileName){ _renderProfileOriginal(); return; }
     if(!state.profile){
-      const inGrace = state.authGraceUntil && Date.now() < state.authGraceUntil;
+      const inGrace = isWithinAuthGrace();
       if(state.authStatus===AuthStatus.PROBING || inGrace){
         els.profileName.textContent='Signing in…';
         if(els.profileAvatarImg) els.profileAvatarImg.classList.add('d-none');
@@ -722,8 +727,8 @@ if(window.__chatAppBooted){
     // Require profile; if absent we distinguish between uncertain (awaiting probe/profile) vs confirmed unauthenticated.
     if(!state.profile){
       const now = Date.now();
-      const withinGrace = state.authGraceUntil && now < state.authGraceUntil;
-      if(state.authStatus===AuthStatus.UNKNOWN || state.authStatus===AuthStatus.PROBING || withinGrace){
+  const withinGrace = isWithinAuthGrace();
+  if(state.authStatus===AuthStatus.UNKNOWN || state.authStatus===AuthStatus.PROBING || withinGrace){
         queueOutbound(text);
         let reason = 'awaitingProfile';
         if(withinGrace) reason='authGrace';
@@ -771,7 +776,7 @@ if(window.__chatAppBooted){
   state.authGraceUntil = Date.now() + 5000; // 5s grace
     // Schedule a grace finalization: if after grace we are still probing/unknown and no profile, mark unauth
     setTimeout(()=>{
-      if(!state.profile && (state.authStatus===AuthStatus.PROBING || state.authStatus===AuthStatus.UNKNOWN) && Date.now() > (state.authGraceUntil||0)){
+  if(!state.profile && (state.authStatus===AuthStatus.PROBING || state.authStatus===AuthStatus.UNKNOWN) && !isWithinAuthGrace()){
         state.authStatus = AuthStatus.UNAUTHENTICATED;
         postTelemetry('auth.finalize.unauth',{});
         renderProfile();
@@ -781,7 +786,8 @@ if(window.__chatAppBooted){
     return fetch('/api/auth/me',{credentials:'include'})
       .then(r=> r.ok? r.json(): null)
   .then(u=>{ clearTimeout(timeout); if(u&&u.userName){ state.profile={userName:u.userName, fullName:u.fullName, avatar:u.avatar}; state.authStatus = AuthStatus.AUTHENTICATED; postTelemetry('auth.probe.success',{durationMs: Math.round(performance.now()-startedAt)}); startHub(); flushOutbox('authProbe'); state.authGraceUntil=null; } else { setLoading(false); state.authStatus = AuthStatus.UNAUTHENTICATED; postTelemetry('auth.probe.unauth',{durationMs: Math.round(performance.now()-startedAt)}); /* allow UI to show unauth after grace */ } renderProfile(); })
-      .catch(err=>{ clearTimeout(timeout); setLoading(false); const msg=(err&&err.message)||''; const transient=/timeout|network|fetch|offline|temporary|dns|refused/i.test(msg); if(transient){ // extend grace and retry once after short delay
+      .catch(err=>{ clearTimeout(timeout); setLoading(false); const msg=(err&&err.message)||''; // classify transient errors (networkish or recoverable)
+        const transient=/timeout|network|fetch|offline|temporar(?:y|ily)?|dns|refused/i.test(msg); if(transient){ // extend grace and retry once after short delay
         postTelemetry('auth.probe.errorTransient',{durationMs: Math.round(performance.now()-startedAt)});
         state.authGraceUntil = Date.now() + 5000; // extend
         setTimeout(()=>{ if(state.authStatus===AuthStatus.PROBING || state.authStatus===AuthStatus.UNKNOWN){ probeAuth(); } }, 1200);
@@ -901,19 +907,26 @@ if(window.__chatAppBooted){
     function sendNextBatch(){
       if(!toSend.length) return Promise.resolve();
       const slice = toSend.splice(0,batchSize);
-      return Promise.all(slice.map(text=>
-        internalSendMessage(text, /*bypassRateLimit*/ true, /*fromFlush*/ true)
-          .then(()=>{ success++; })
-          .catch(()=>{ failed++; /* requeue handled after */ })
-      )).then(()=> sendNextBatch());
+      const results = [];
+      return Promise.all(slice.map(text=>{
+        return internalSendMessage(text, /*bypassRateLimit*/ true, /*fromFlush*/ true)
+          .then(()=>{ success++; results.push({ok:true}); })
+          .catch(()=>{ failed++; results.push({ok:false, text}); });
+      })).then(()=>{
+        // Requeue failed from this batch immediately to preserve order locality (FIFO semantics with retry tail)
+        const failedItems = results.filter(r=>!r.ok).map(r=> r.text);
+        if(failedItems.length){
+          // Prepend? We choose push to tail so successful sends are not re-ordered; failed go to end for backoff.
+          failedItems.forEach(t=> state.outbox.push(t));
+          persistOutbox();
+          postTelemetry('send.flush.batchFail',{failed: failedItems.length, phase});
+        }
+        return sendNextBatch();
+      });
     }
     sendNextBatch().finally(()=>{
-      // Requeue any failed (limit 50)
       if(failed){
-        // We don't have the specific texts that failed individually; conservative approach: they remain excluded.
-        // For more granular tracking we'd wrap individual promises; here we restore proportionally using placeholder logic.
-        // Since we can't know which ones failed without wrapping earlier, skip requeue to avoid duplicates.
-        postTelemetry('send.flush.partialFail',{failed, success, phase});
+        postTelemetry('send.flush.partialFail',{failed, success, remaining: state.outbox.length, phase});
       }
       postTelemetry('send.flush.done',{room: state.joinedRoom && state.joinedRoom.name, count: total, success, failed, durationMs: Math.round(performance.now()-flushStart), phase});
       flushOutbox._inProgress = false;
