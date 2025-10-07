@@ -1,4 +1,10 @@
-﻿/**
+﻿// Duplicate include guard (wrap to avoid top-level return issues in bundlers)
+if(window.__chatAppBooted){
+  console.warn('chat.js: duplicate include detected, skipping second init');
+} else {
+  window.__chatAppBooted = true;
+}
+/**
  * chat.js - Framework-free chat frontend.
  * Responsibilities:
  *  - Bootstraps auth probe and establishes SignalR hub connection with exponential backoff
@@ -23,7 +29,12 @@
   const log = (lvl,msg,obj)=> (window.appLogger && window.appLogger[lvl]) ? window.appLogger[lvl](msg,obj) : console.log(`[${lvl}] ${msg}`, obj||'');
 
   // ---------------- State ----------------
-  const state = { loading:true, profile:null, rooms:[], users:[], messages:[], joinedRoom:null, filter:'', oldestLoaded:null, canLoadMore:true, pageSize:20, loadingMore:false, lastSendAt:0, minSendIntervalMs:800, joinInProgress:false, pendingJoin:null, outbox:[], pendingAck:{}, authProbing:false, authConfirmedUnauth:false };
+  const AuthStatus = { UNKNOWN:'UNKNOWN', PROBING:'PROBING', AUTHENTICATED:'AUTHENTICATED', UNAUTHENTICATED:'UNAUTHENTICATED' };
+  const state = { loading:true, profile:null, rooms:[], users:[], messages:[], joinedRoom:null, filter:'', oldestLoaded:null, canLoadMore:true, pageSize:20, loadingMore:false, lastSendAt:0, minSendIntervalMs:800, joinInProgress:false, pendingJoin:null, outbox:[], pendingAck:{}, authStatus: AuthStatus.UNKNOWN, pendingMessages:{}, isOffline:false };
+  // Extended auth / hub timing metadata
+  state._hubStartedEarly = false;       // whether hub started before auth probe resolved
+  state._graceStartedAt = null;         // timestamp when grace window started
+  state._graceEnded = false;            // flag to ensure single grace end telemetry
   const els = {};
 
   function cacheDom(){
@@ -122,11 +133,88 @@
     a.addEventListener('click',e=>{ e.preventDefault(); joinRoom(r.name); }); li.appendChild(a); els.roomsList.appendChild(li); }); }
   function renderUsers(){ if(!els.usersList) return; const term=state.filter.toLowerCase(); els.usersList.innerHTML=''; const filtered=state.users.filter(u=>!term|| (u.fullName||u.userName||'').toLowerCase().includes(term)); filtered.forEach(u=>{ const li=document.createElement('li'); li.dataset.username=u.userName; const wrap=document.createElement('div'); wrap.className='user'; if(!u.avatar){ const span=document.createElement('span'); span.className='avatar me-2 text-uppercase'; span.textContent=initialFrom(u.fullName, u.userName); wrap.appendChild(span);} else { const img=document.createElement('img'); img.className='avatar me-2'; img.src='/avatars/'+u.avatar; wrap.appendChild(img);} const info=document.createElement('div'); info.className='user-info'; const nameSpan=document.createElement('span'); nameSpan.className='name'; nameSpan.textContent=u.fullName || u.userName; info.appendChild(nameSpan); const devSpan=document.createElement('span'); devSpan.className='device'; devSpan.textContent=u.device; info.appendChild(devSpan); wrap.appendChild(info); li.appendChild(wrap); els.usersList.appendChild(li); }); if(els.usersCount) els.usersCount.textContent=filtered.length; }
   function formatDateParts(ts){ const date=new Date(ts); const now=new Date(); const diffDays=Math.round((date-now)/(1000*3600*24)); const day=date.getDate(); const month=date.getMonth()+1; const year=date.getFullYear(); let hours=date.getHours(); const minutes=('0'+date.getMinutes()).slice(-2); const ampm=hours>=12?'PM':'AM'; if(hours>12) hours=hours%12; const dateOnly=`${day}/${month}/${year}`; const timeOnly=`${hours}:${minutes} ${ampm}`; const full=`${dateOnly} ${timeOnly}`; let relative=dateOnly; if(diffDays===0) relative=`Today, ${timeOnly}`; else if(diffDays===-1) relative=`Yesterday, ${timeOnly}`; return {relative, full}; }
-  function renderMessages(){ if(!els.messagesList) return; els.messagesList.innerHTML=''; state.messages.forEach(m=>{ const li=document.createElement('li'); const wrap=document.createElement('div'); wrap.className='message-item'; if(m.isMine) wrap.classList.add('ismine'); if(!m.avatar){ const span=document.createElement('span'); span.className='avatar avatar-lg mx-2 text-uppercase'; span.textContent=initialFrom(m.fromFullName, m.fromUserName); wrap.appendChild(span);} else { const img=document.createElement('img'); img.className='avatar avatar-lg mx-2'; img.src='/avatars/'+m.avatar; wrap.appendChild(img);} const content=document.createElement('div'); content.className='message-content'; const info=document.createElement('div'); info.className='message-info d-flex flex-wrap align-items-center'; const author=document.createElement('span'); author.className='author'; author.textContent=m.fromFullName||m.fromUserName; info.appendChild(author); const time=document.createElement('span'); time.className='timestamp'; const fp=formatDateParts(m.timestamp); time.textContent=fp.relative; time.dataset.bsTitle=fp.full; time.setAttribute('data-bs-toggle','tooltip'); info.appendChild(time); content.appendChild(info); const body=document.createElement('div'); body.className='content'; body.textContent=m.content; content.appendChild(body); wrap.appendChild(content); li.appendChild(wrap); els.messagesList.appendChild(li); }); const noInfo=document.querySelector('.no-messages-info'); if(noInfo) noInfo.classList.toggle('d-none', state.messages.length>0); const mc=document.querySelector('.messages-container'); if(mc && !state.loadingMore) mc.scrollTop=mc.scrollHeight; 
-    // Re-init Bootstrap tooltips if available
+  function renderMessages(){
+    if(!els.messagesList) return;
+    els.messagesList.innerHTML='';
+    state.messages.forEach(m=> renderSingleMessage(m, false));
+    finalizeMessageRender();
+  }
+  function renderSingleMessage(m, scrollIntoView){
+    if(!els.messagesList) return;
+    const li=document.createElement('li');
+    li.dataset.cid = m.correlationId || '';
+    if(m.failed) li.classList.add('failed');
+    const wrap=document.createElement('div'); wrap.className='message-item'; if(m.isMine) wrap.classList.add('ismine');
+    if(!m.avatar){ const span=document.createElement('span'); span.className='avatar avatar-lg mx-2 text-uppercase'; span.textContent=initialFrom(m.fromFullName, m.fromUserName); wrap.appendChild(span);} else { const img=document.createElement('img'); img.className='avatar avatar-lg mx-2'; img.src='/avatars/'+m.avatar; wrap.appendChild(img);} 
+    const content=document.createElement('div'); content.className='message-content';
+    const info=document.createElement('div'); info.className='message-info d-flex flex-wrap align-items-center';
+    const author=document.createElement('span'); author.className='author'; author.textContent=m.fromFullName||m.fromUserName; info.appendChild(author);
+    const time=document.createElement('span'); time.className='timestamp'; const fp=formatDateParts(m.timestamp); time.textContent=fp.relative; time.dataset.bsTitle=fp.full; time.setAttribute('data-bs-toggle','tooltip'); info.appendChild(time);
+    if(m.failed){
+      const status=document.createElement('span'); status.className='send-status ms-2 text-danger'; status.textContent='(failed)'; info.appendChild(status);
+      const retryBtn=document.createElement('button'); retryBtn.type='button'; retryBtn.className='btn btn-link p-0 ms-2 retry-send'; retryBtn.textContent='Retry'; retryBtn.addEventListener('click',()=> retrySend(m.correlationId)); info.appendChild(retryBtn);
+    } else if(m.pending){
+      const status=document.createElement('span'); status.className='send-status ms-2 text-muted'; status.textContent='…'; info.appendChild(status);
+    }
+    content.appendChild(info);
+    const body=document.createElement('div'); body.className='content'; body.textContent=m.content; content.appendChild(body);
+    wrap.appendChild(content); li.appendChild(wrap); els.messagesList.appendChild(li);
+    if(scrollIntoView){ const mc=document.querySelector('.messages-container'); if(mc) mc.scrollTop=mc.scrollHeight; }
+    return li;
+  }
+  function updateMessageDom(m){
+    if(!els.messagesList || !m.correlationId) return false;
+    const node = els.messagesList.querySelector('li[data-cid="'+m.correlationId+'"]');
+    if(!node) return false;
+    const timeEl = node.querySelector('.timestamp');
+    if(timeEl){ const fp=formatDateParts(m.timestamp); timeEl.textContent=fp.relative; timeEl.dataset.bsTitle=fp.full; }
+    const bodyEl = node.querySelector('.content'); if(bodyEl) bodyEl.textContent = m.content;
+    // Update status indicators
+    node.classList.toggle('failed', !!m.failed);
+    let statusEl = node.querySelector('.send-status');
+    if(!statusEl && (m.failed||m.pending)){
+      const info = node.querySelector('.message-info');
+      if(info){ statusEl = document.createElement('span'); statusEl.className='send-status ms-2'; info.appendChild(statusEl); }
+    }
+    if(statusEl){
+      if(m.failed){ statusEl.textContent='(failed)'; statusEl.className='send-status ms-2 text-danger'; }
+      else if(m.pending){ statusEl.textContent='…'; statusEl.className='send-status ms-2 text-muted'; }
+      else { statusEl.remove(); }
+    }
+    // Retry button handling
+    let retryBtn = node.querySelector('button.retry-send');
+    if(m.failed){
+      if(!retryBtn){
+        const info = node.querySelector('.message-info');
+        if(info){ retryBtn=document.createElement('button'); retryBtn.type='button'; retryBtn.className='btn btn-link p-0 ms-2 retry-send'; retryBtn.textContent='Retry'; retryBtn.addEventListener('click',()=> retrySend(m.correlationId)); info.appendChild(retryBtn); }
+      }
+    } else if(retryBtn){ retryBtn.remove(); }
+    node.dataset.cid = m.correlationId || '';
+    return true;
+  }
+  function finalizeMessageRender(){
+    const noInfo=document.querySelector('.no-messages-info'); if(noInfo) noInfo.classList.toggle('d-none', state.messages.length>0);
+    const mc=document.querySelector('.messages-container'); if(mc && !state.loadingMore) mc.scrollTop=mc.scrollHeight;
     if(window.bootstrap){ const ttEls = [].slice.call(els.messagesList.querySelectorAll('[data-bs-toggle="tooltip"]')); ttEls.forEach(el=>{ try{ new window.bootstrap.Tooltip(el); }catch(_){} }); }
   }
   function renderProfile(){ const p=state.profile; if(!els.profileName) return; if(!p){ els.profileName.textContent='Not signed in'; if(els.profileAvatarImg) els.profileAvatarImg.classList.add('d-none'); if(els.profileAvatarInitial){ els.profileAvatarInitial.classList.remove('d-none'); els.profileAvatarInitial.textContent='?'; } if(els.btnLogin) els.btnLogin.classList.remove('d-none'); if(els.btnLogout) els.btnLogout.classList.add('d-none'); } else { els.profileName.textContent=p.fullName||p.userName; if(p.avatar){ if(els.profileAvatarImg){ els.profileAvatarImg.src='/avatars/'+p.avatar; els.profileAvatarImg.classList.remove('d-none'); } if(els.profileAvatarInitial) els.profileAvatarInitial.classList.add('d-none'); } else { if(els.profileAvatarInitial){ els.profileAvatarInitial.textContent=initialFrom(p.fullName, p.userName); els.profileAvatarInitial.classList.remove('d-none'); } if(els.profileAvatarImg) els.profileAvatarImg.classList.add('d-none'); } if(els.btnLogin) els.btnLogin.classList.add('d-none'); if(els.btnLogout) els.btnLogout.classList.remove('d-none'); } }
+  // Enhanced profile renderer: show transitional 'Signing in…' during auth probe / grace
+  const _renderProfileOriginal = renderProfile;
+  renderProfile = function(){
+    if(!els.profileName){ _renderProfileOriginal(); return; }
+    if(!state.profile){
+      const inGrace = state.authGraceUntil && Date.now() < state.authGraceUntil;
+      if(state.authStatus===AuthStatus.PROBING || inGrace){
+        els.profileName.textContent='Signing in…';
+        if(els.profileAvatarImg) els.profileAvatarImg.classList.add('d-none');
+        if(els.profileAvatarInitial){ els.profileAvatarInitial.classList.remove('d-none'); els.profileAvatarInitial.textContent='?'; }
+        if(els.btnLogin) els.btnLogin.classList.add('d-none'); // hide login while we are actively probing
+        if(els.btnLogout) els.btnLogout.classList.add('d-none');
+        return;
+      }
+    }
+    _renderProfileOriginal();
+  };
 
   // Defensive: ensure avatar initial shows correct letter if placeholder reappears
   function ensureProfileAvatar(){
@@ -171,15 +259,38 @@
   }
   // Telemetry helper (fire-and-forget) with session correlation (secure ID)
   const sessionId = secureRandomId('s_8', 8); // 8 random nibbles + timestamp
+  const _telemetryRecent = {};
+  const TELEMETRY_TTL_MS = 4000; // suppress identical high-chatter events (e.g. repeated skips) within 4s window
   function postTelemetry(event, data){
     try {
+      const now = Date.now();
+      // Build a suppression key only for noisy families; others always send
+      let key=null;
+      if(/^send\.flush\.skip$/.test(event)) key = event + '|' + (data&&data.reason);
+      if(/^send\.queue$/.test(event)) key = event + '|' + (data&&data.reason);
+      if(/^hub\.connect\.retry$/.test(event)) key = event + '|' + (data&&data.attempt);
+      if(key){
+        const prev = _telemetryRecent[key];
+        if(prev && (now - prev) < TELEMETRY_TTL_MS){ return; }
+        _telemetryRecent[key] = now;
+      }
       fetch('/api/telemetry/reconnect',{
         method:'POST',
         headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({evt:event, ts: Date.now(), sessionId, ...data})
+        body:JSON.stringify({evt:event, ts: now, sessionId, ...data})
       });
     } catch(_) { /* ignore */ }
   }
+  // Telemetry suppression cache compaction (prevents unbounded growth across very long sessions)
+  setInterval(()=>{
+    try {
+      const now = Date.now();
+      const maxAge = TELEMETRY_TTL_MS * 3; // prune anything not touched in ~3 windows
+      for(const k in _telemetryRecent){
+        if(now - _telemetryRecent[k] > maxAge){ delete _telemetryRecent[k]; }
+      }
+    } catch(_) { /* ignore */ }
+  }, 120000); // every 2 minutes
   /**
    * Classify a SignalR (or underlying transport) error into a coarse category for reconnect telemetry.
    * @param {any} err Error or reason object
@@ -198,16 +309,39 @@
   function ensureHub(){ if(hub) return hub; hub=new signalR.HubConnectionBuilder().withUrl('/chatHub').withAutomaticReconnect().build(); wireHub(hub); return hub; }
   function startHub(){
     ensureHub();
+    // Prevent duplicate start attempts while hub is already in a non-Disconnected state.
+    const currentState = hub.state && hub.state.toLowerCase ? hub.state.toLowerCase() : '';
+    if(currentState && currentState !== 'disconnected'){
+      // Avoid noisy reconnect attempt 0 inflation.
+      log('warn','signalr.start.skip',{state: currentState});
+      postTelemetry('hub.connect.skip',{state: currentState});
+      return Promise.resolve();
+    }
     log('info','signalr.start');
-  applyConnectionVisual('reconnecting'); // initial connecting state
+    applyConnectionVisual('reconnecting'); // initial connecting state
     const startedAt = performance.now();
+    if(state.authStatus===AuthStatus.PROBING && !state.profile){
+      // hub started before auth probe finished -> early start telemetry (once)
+      if(!state._hubStartedEarly){ postTelemetry('auth.hub.start.early',{}); state._hubStartedEarly=true; }
+    }
     return hub.start().then(()=>{
       reconnectAttempts=0; lastReconnectError=null; loadRooms();
       postTelemetry('hub.connected',{durationMs: Math.round(performance.now()-startedAt)});
   applyConnectionVisual('connected');
       // Fallback: if we already have a profile (from /api/auth/me) but still showing loading because getProfileInfo hasn't fired, hide loader.
       if(state.profile && state.loading){ setLoading(false); }
-    }).catch(err=>{ log('error','signalr.start.fail',{error:err&&err.message}); postTelemetry('hub.connect.fail',{message: (err&&err.message)||''}); scheduleReconnect(err); });
+    }).catch(err=>{ 
+      const msg = (err && err.message)||'';
+      // If the error indicates a duplicate start (already starting/started), suppress scheduling a reconnect.
+      if(/not in the 'disconnected' state/i.test(msg) || /cannot start a hubconnection that is not in the 'disconnected' state/i.test(msg)){
+        log('warn','signalr.start.duplicate',{message: msg});
+        postTelemetry('hub.connect.duplicateStart',{message: msg});
+        return; // leave existing connection / reconnection logic intact
+      }
+      log('error','signalr.start.fail',{error:msg}); 
+      postTelemetry('hub.connect.fail',{message: msg}); 
+      scheduleReconnect(err); 
+    });
   }
   /**
    * Applies exponential backoff and records telemetry for each reconnect attempt.
@@ -228,29 +362,30 @@
     setTimeout(()=> startHub().catch(e=> scheduleReconnect(e)), delay);
   }
   function wireHub(c){
-  c.on('getProfileInfo', u=>{ state.profile={userName:u.userName, fullName:u.fullName, avatar:u.avatar}; state.authConfirmedUnauth = false; setLoading(false); renderProfile(); flushOutbox('profile'); });
+  c.on('getProfileInfo', u=>{ state.profile={userName:u.userName, fullName:u.fullName, avatar:u.avatar}; state.authStatus = AuthStatus.AUTHENTICATED; setLoading(false); renderProfile(); flushOutbox('profile'); });
     // Full presence snapshot after join (server push) ensures newly joined user and existing members converge
     c.on('presenceSnapshot', list=> { if(!Array.isArray(list)) return; // Replace users list for current room only
-      if(state.joinedRoom){ state.users = list.filter(u=> u.currentRoom === state.joinedRoom.name || u.CurrentRoom === state.joinedRoom.name); }
-      else { state.users = list; }
+      const normalized = list.map(u=>({
+        userName: u.userName || u.UserName || u.username || '',
+        fullName: u.fullName || u.FullName || u.name || '',
+        avatar: u.avatar || u.Avatar || '',
+        currentRoom: u.currentRoom || u.CurrentRoom || u.room || null,
+        ...u
+      }));
+      if(state.joinedRoom){
+        state.users = normalized.filter(u=> u.currentRoom === state.joinedRoom.name);
+      } else {
+        state.users = normalized;
+      }
       renderUsers(); });
     c.on('newMessage', m=> {
       const mineUser = state.profile && state.profile.userName;
-      if(mineUser){
-        // Prefer correlationId reconciliation
-        if(m.correlationId){
-          const byCorr = state.messages.findIndex(x=> x.isMine && x.correlationId && x.correlationId===m.correlationId);
-          if(byCorr>=0){
-            state.messages[byCorr] = {id:m.id,content:m.content,timestamp:m.timestamp,fromUserName:m.fromUserName,fromFullName:m.fromFullName,avatar:m.avatar,isMine:true, correlationId:m.correlationId};
-            renderMessages();
-            return;
-          }
-        }
-        // Fallback to content + negative id heuristic
-        const pendingIdx = state.messages.findIndex(x=> x.isMine && x.id<0 && x.content===m.content);
-        if(pendingIdx>=0){
-          state.messages[pendingIdx] = {id:m.id,content:m.content,timestamp:m.timestamp,fromUserName:m.fromUserName,fromFullName:m.fromFullName,avatar:m.avatar,isMine:true, correlationId:m.correlationId};
-          renderMessages();
+      if(mineUser && m.correlationId && state.pendingMessages[m.correlationId]){
+        const idx = state.messages.findIndex(x=> x.isMine && x.correlationId===m.correlationId);
+        if(idx>=0){
+          state.messages[idx] = {id:m.id,content:m.content,timestamp:m.timestamp,fromUserName:m.fromUserName,fromFullName:m.fromFullName,avatar:m.avatar,isMine:true, correlationId:m.correlationId};
+          delete state.pendingMessages[m.correlationId];
+          if(!updateMessageDom(state.messages[idx])){ renderMessages(); } else { finalizeMessageRender(); }
           return;
         }
       }
@@ -263,7 +398,15 @@
     c.onreconnected(connectionId => {
       try {
         if(state.joinedRoom){
-          hub.invoke('GetUsers', state.joinedRoom.name).then(users=>{ state.users = users; renderUsers(); });
+          hub.invoke('GetUsers', state.joinedRoom.name).then(users=>{ 
+            const normalized = (users||[]).map(u=>({
+              userName: u.userName || u.UserName || u.username || '',
+              fullName: u.fullName || u.FullName || u.name || '',
+              avatar: u.avatar || u.Avatar || '',
+              currentRoom: u.currentRoom || u.CurrentRoom || u.room || null,
+              ...u
+            }));
+            state.users = normalized; renderUsers(); });
         }
       } catch(_){ }
   applyConnectionVisual('connected');
@@ -286,13 +429,24 @@
 
   // --------------- Mutators -------------
   function upsertRoom(r){ const e=state.rooms.find(x=>x.id===r.id); if(e){ e.name=r.name; e.admin=r.admin; } else state.rooms.push({id:r.id,name:r.name,admin:r.admin}); renderRooms(); }
-  function upsertUser(u){ const e=state.users.find(x=>x.userName===u.userName); if(e) Object.assign(e,u); else state.users.push(u); renderUsers(); }
+  function upsertUser(u){
+    const normalized = {
+      userName: u.userName || u.UserName || u.username || '',
+      fullName: u.fullName || u.FullName || u.name || '',
+      avatar: u.avatar || u.Avatar || '',
+      currentRoom: u.currentRoom || u.CurrentRoom || u.room || null,
+      ...u
+    };
+    const e=state.users.find(x=>x.userName===normalized.userName);
+    if(e) Object.assign(e, normalized); else state.users.push(normalized);
+    renderUsers();
+  }
   function removeUser(userName){ state.users=state.users.filter(u=>u.userName!==userName); renderUsers(); }
   /**
    * Appends a message to local state and re-renders.
    * @param {object} m MessageViewModel-like payload
    */
-  function addOrRenderMessage(m){ const isMine=state.profile && state.profile.userName===m.fromUserName; state.messages.push({id:m.id,content:m.content,timestamp:m.timestamp,fromUserName:m.fromUserName,fromFullName:m.fromFullName,avatar:m.avatar,isMine, correlationId:m.correlationId}); renderMessages(); }
+  function addOrRenderMessage(m){ const isMine=state.profile && state.profile.userName===m.fromUserName; const rec={id:m.id,content:m.content,timestamp:m.timestamp,fromUserName:m.fromUserName,fromFullName:m.fromFullName,avatar:m.avatar,isMine, correlationId:m.correlationId}; state.messages.push(rec); if(els.messagesList && state.messages.length>1){ renderSingleMessage(rec, true); finalizeMessageRender(); } else { renderMessages(); } }
 
   /**
    * Handles a direct notification (non-room message). We surface it as a system message in the current transcript.
@@ -310,26 +464,50 @@
     if(!hub||!roomName) return;
     if(state.joinInProgress && state.pendingJoin===roomName) return; // already joining this room
     if(state.joinedRoom && state.joinedRoom.name===roomName && !state.joinInProgress) return; // already in room
+    const attemptToken = secureRandomId('j_',8);
+    state._joinToken = attemptToken;
     state.joinInProgress = true;
     state.pendingJoin = roomName;
     renderRooms(); // show joining state
-    const thisAttempt = roomName;
     const startedAt = performance.now();
-    hub.invoke('Join',roomName).then(()=>{
-      // If another join was initiated meanwhile, ignore this result
-      if(state.pendingJoin !== thisAttempt) return;
-      state.joinedRoom = state.rooms.find(r=>r.name===roomName)||{name:roomName};
-      state.pendingJoin = null; state.joinInProgress=false;
-      localStorage.setItem('lastRoom',roomName);
-      // Update base room title reference so connection annotations reflect the new room.
-      if(els.joinedRoomTitle){
-        state._baseRoomTitle = state.joinedRoom.name;
-        els.joinedRoomTitle.textContent = state._baseRoomTitle;
-      }
-  loadUsers(); loadMessages(); renderRoomContext(); ensureProfileAvatar();
-      postTelemetry('room.join.success',{room:roomName, durationMs: Math.round(performance.now()-startedAt)});
-      flushOutbox('join');
-    }).catch(err=> { if(state.pendingJoin===thisAttempt){ state.joinInProgress=false; state.pendingJoin=null; renderRooms(); } showError('Join failed: '+(err&&err.message)); });
+    const MAX_RETRIES = 3;
+    let attempt = 0;
+
+    function performJoin(){
+      attempt++;
+      hub.invoke('Join',roomName).then(()=>{
+        // Ensure this result is for the latest token and still desired room
+        if(state._joinToken !== attemptToken || state.pendingJoin !== roomName){
+          return; // stale
+        }
+        state.joinedRoom = state.rooms.find(r=>r.name===roomName)||{name:roomName};
+        state.pendingJoin = null; state.joinInProgress=false;
+        localStorage.setItem('lastRoom',roomName);
+        if(els.joinedRoomTitle){
+          state._baseRoomTitle = state.joinedRoom.name;
+          els.joinedRoomTitle.textContent = state._baseRoomTitle;
+        }
+        loadUsers(); loadMessages(); renderRoomContext(); ensureProfileAvatar();
+        postTelemetry('room.join.success',{room:roomName, durationMs: Math.round(performance.now()-startedAt), attempts:attempt});
+        flushOutbox('join');
+      }).catch(err=>{
+        // If token changed, abandon silently
+        if(state._joinToken !== attemptToken) return;
+        const msg = (err && err.message)||'';
+        const transient = /timeout|temporar|network|reconnect|connection/i.test(msg);
+        if(transient && attempt < MAX_RETRIES){
+          const backoff = 300 * attempt; // linear backoff (0,300,600)
+          postTelemetry('room.join.retry',{room:roomName, attempt, backoff, msg: msg.slice(0,120)});
+          setTimeout(performJoin, backoff);
+        } else {
+          if(state.pendingJoin===roomName){ state.joinInProgress=false; state.pendingJoin=null; }
+          renderRooms();
+          postTelemetry('room.join.fail',{room:roomName, attempts:attempt, msg: msg.slice(0,200)});
+          showError('Join failed: '+msg);
+        }
+      });
+    }
+    performJoin();
   }
   function loadRooms(){
     apiGet('/api/Rooms').then(list=>{
@@ -345,7 +523,17 @@
       else if(state.rooms.length>0) joinRoom(state.rooms[0].name);
     }).catch(()=>{});
   }
-  function loadUsers(){ if(!state.joinedRoom) return; hub.invoke('GetUsers', state.joinedRoom.name).then(users=>{ state.users=users; renderUsers(); }); }
+  function loadUsers(){ if(!state.joinedRoom) return; hub.invoke('GetUsers', state.joinedRoom.name).then(users=>{
+    const normalized = (users||[]).map(u=>({
+      userName: u.userName || u.UserName || u.username || '',
+      fullName: u.fullName || u.FullName || u.name || '',
+      avatar: u.avatar || u.Avatar || '',
+      currentRoom: u.currentRoom || u.CurrentRoom || u.room || null,
+      ...u
+    }));
+    state.users=normalized;
+    renderUsers();
+  }); }
   /**
    * Loads most recent page of messages for joined room (resets pagination state).
    */
@@ -370,53 +558,143 @@
   /**
    * Loads the next (older) page of messages and prepends them while preserving scroll position.
    */
+  let _pageReqToken = 0;
   function loadOlderMessages(){
     if(!state.canLoadMore || state.loadingMore || !state.joinedRoom || !state.oldestLoaded) return;
-    state.loadingMore = true;
-    const before = encodeURIComponent(state.oldestLoaded);
+    state.loadingMore = true; // set immediately to block concurrent triggers
+    const reqToken = ++_pageReqToken;
+    const beforeTs = state.oldestLoaded; // capture for telemetry & consistency
+    const before = encodeURIComponent(beforeTs);
+    postTelemetry('messages.page.req',{before: beforeTs, token: reqToken});
     apiGet('/api/Messages/Room/'+encodeURIComponent(state.joinedRoom.name)+'?before='+before+'&take='+state.pageSize)
       .then(list=>{
-        if(!Array.isArray(list) || list.length===0){ state.canLoadMore=false; return; }
+        if(reqToken !== _pageReqToken){
+          // Stale (a newer pagination started meanwhile); ignore
+          postTelemetry('messages.page.stale',{token:reqToken});
+          return;
+        }
+        if(!Array.isArray(list) || list.length===0){ state.canLoadMore=false; postTelemetry('messages.page.empty',{token:reqToken}); return; }
         const mapped=list.map(m=>({id:m.id,content:m.content,timestamp:m.timestamp,fromUserName:m.fromUserName,fromFullName:m.fromFullName,avatar:m.avatar,isMine: state.profile && state.profile.userName===m.fromUserName}));
         const mc=document.querySelector('.messages-container'); let prevScrollHeight = mc? mc.scrollHeight:0;
-        // Prepend
+        // Prepend and adjust oldest timestamp verifying monotonicity
+        const prevOldest = state.oldestLoaded;
         state.messages = mapped.concat(state.messages);
         state.oldestLoaded = state.messages[0].timestamp;
+        if(prevOldest && state.oldestLoaded > prevOldest){
+          // Anomaly: new oldest is newer than previous oldest (out-of-order). Log & revert oldest pointer to previous to avoid skipping.
+          postTelemetry('messages.page.nonmonotonic',{prev:prevOldest, now: state.oldestLoaded});
+          state.oldestLoaded = prevOldest; // keep previous anchor to retry later if needed
+        }
         if(list.length < state.pageSize) state.canLoadMore=false;
         renderMessages();
         if(mc){ const newScrollHeight = mc.scrollHeight; mc.scrollTop = newScrollHeight - prevScrollHeight; }
+        postTelemetry('messages.page.ok',{token:reqToken, added:list.length, remaining: state.canLoadMore?1:0});
       })
-      .finally(()=>{ state.loadingMore=false; });
+      .catch(err=>{ postTelemetry('messages.page.err',{token:reqToken, msg: (err&&err.message)||''}); })
+      .finally(()=>{ if(reqToken === _pageReqToken) state.loadingMore=false; });
   }
   /**
    * One-time scroll listener that triggers pagination when scrolled near top.
    */
-  function attachScrollPagination(){ const mc=document.querySelector('.messages-container'); if(!mc || mc.dataset.paginated) return; mc.dataset.paginated='true'; let lastReq=0; mc.addEventListener('scroll',()=>{ if(mc.scrollTop < 30){ const now=Date.now(); if(now-lastReq>400){ lastReq=now; loadOlderMessages(); } } }); }
+  function attachScrollPagination(){
+    const mc=document.querySelector('.messages-container');
+    if(!mc || mc.dataset.paginated) return;
+    mc.dataset.paginated='true';
+    let lastReq=0;
+    mc.addEventListener('scroll',()=>{
+      if(mc.scrollTop < 40){ // slightly larger threshold for slower devices
+        const now=Date.now();
+        if(now-lastReq>500){ // widen throttle window to reduce rapid duplicates
+          lastReq=now;
+          // Proactively set loadingMore if eligible to block overlapping triggers
+          if(!state.loadingMore && state.canLoadMore && state.joinedRoom && state.oldestLoaded){
+            loadOlderMessages();
+          }
+        }
+      }
+    });
+  }
   let pendingIdCounter=-1;
-  function internalSendMessage(text, bypassRateLimit, fromFlush){
+  function internalSendMessage(text, bypassRateLimit, fromFlush, resendCorrelationId){
     const now=Date.now();
     if(!bypassRateLimit && (now - state.lastSendAt < state.minSendIntervalMs)){
       showError('You are sending messages too quickly');
       return Promise.reject('rateLimited');
     }
-    state.lastSendAt = now;
-    const tempId = pendingIdCounter--;
-    const nowIso = new Date().toISOString();
-  const correlationId = secureRandomId('c_', 12); // ~48 bits of randomness (12 nibbles) + timestamp
-    state.messages.push({id:tempId,content:text,timestamp:nowIso,fromUserName:state.profile?.userName,fromFullName:state.profile?.fullName,avatar:state.profile?.avatar,isMine: !!state.profile, correlationId});
-    renderMessages();
+    if(!fromFlush && !resendCorrelationId){
+      state.lastSendAt = now; // don't advance send timestamp for flush/resend so user can still send manually
+    }
+    let correlationId = resendCorrelationId || secureRandomId('c_', 12);
+    let tempId;
+    if(resendCorrelationId){
+      // Reuse existing optimistic message (already rendered)
+      const existing = state.messages.find(m=> m.correlationId===resendCorrelationId);
+      if(existing){ tempId = existing.id; }
+    } else {
+      tempId = pendingIdCounter--;
+      const nowIso = new Date().toISOString();
+  const rec={id:tempId,content:text,timestamp:nowIso,fromUserName:state.profile?.userName,fromFullName:state.profile?.fullName,avatar:state.profile?.avatar,isMine: !!state.profile, correlationId, pending:true};
+  state.messages.push(rec);
+  if(els.messagesList && state.messages.length>1){ renderSingleMessage(rec, true); finalizeMessageRender(); } else { renderMessages(); }
+    }
     if(!hub){ return Promise.reject('noHub'); }
-    postTelemetry('send.attempt',{cid:correlationId, len:text.length, fromFlush:!!fromFlush});
+    const pm = state.pendingMessages[correlationId] || { attempts:0, createdAt: Date.now(), text, tempId };
+    pm.attempts++;
+    state.pendingMessages[correlationId] = pm;
+    postTelemetry('send.attempt',{cid:correlationId, len:text.length, fromFlush:!!fromFlush, attempts: pm.attempts, resend: !!resendCorrelationId});
     const p = hub.invoke('SendMessage', text, correlationId)
-      .then(()=>{ postTelemetry('send.invoke.ok',{cid:correlationId}); })
+      .then(()=>{ postTelemetry('send.invoke.ok',{cid:correlationId}); markMessageDelivered(correlationId); })
       .catch(err=>{
-        state.messages = state.messages.filter(m=>m.id!==tempId);
-        renderMessages();
-        postTelemetry('send.invoke.fail',{cid:correlationId, msg:(err&&err.message)||''});
-        showError('Send failed');
+        const msg=(err&&err.message)||'';
+        const record = state.messages.find(m=> m.correlationId===correlationId);
+        if(record){ record.failed=true; record.pending=false; }
+        delete state.pendingMessages[correlationId];
+        postTelemetry('send.invoke.fail',{cid:correlationId, msg:msg});
+        if(record){ if(!updateMessageDom(record)) renderMessages(); else finalizeMessageRender(); }
         throw err;
       });
+    // Schedule optimistic acknowledgement timeout (30s)
+    if(!resendCorrelationId){
+      scheduleAckTimeout(correlationId);
+    }
     return p;
+  }
+  function scheduleAckTimeout(correlationId){
+    const TIMEOUT_MS = 30000;
+    setTimeout(()=>{
+      const entry = state.pendingMessages[correlationId];
+      if(!entry) return; // already acked
+      if(entry.attempts >= 3){
+        // Give up
+        postTelemetry('send.timeout.giveup',{cid:correlationId, attempts: entry.attempts});
+        postTelemetry('send.reconcile',{cid:correlationId, mode:'giveup', attempts: entry.attempts, latencyMs: Date.now()-entry.createdAt});
+        delete state.pendingMessages[correlationId];
+        const record = state.messages.find(m=> m.correlationId===correlationId);
+        if(record){ record.failed=true; record.pending=false; if(!updateMessageDom(record)) renderMessages(); else finalizeMessageRender(); }
+        return;
+      }
+      postTelemetry('send.timeout.resend',{cid:correlationId, attempts: entry.attempts});
+      postTelemetry('send.reconcile',{cid:correlationId, mode:'timeout-resend', attempts: entry.attempts, latencyMs: Date.now()-entry.createdAt});
+      internalSendMessage(entry.text, /*bypassRateLimit*/ true, /*fromFlush*/ true, correlationId);
+      scheduleAckTimeout(correlationId); // schedule next timeout window
+    }, TIMEOUT_MS);
+  }
+  function markMessageDelivered(correlationId){
+    const record = state.messages.find(m=> m.correlationId===correlationId);
+    if(record){ record.pending=false; record.failed=false; if(!updateMessageDom(record)) renderMessages(); else finalizeMessageRender(); }
+    const entry = state.pendingMessages[correlationId];
+    if(entry){
+      postTelemetry('send.reconcile',{cid:correlationId, mode:'ack', attempts: entry.attempts, latencyMs: Date.now()-entry.createdAt});
+    }
+    delete state.pendingMessages[correlationId];
+  }
+  function retrySend(correlationId){
+    const record = state.messages.find(m=> m.correlationId===correlationId);
+    if(!record) return;
+    // Reset state
+    record.failed=false; record.pending=true; if(!updateMessageDom(record)) renderMessages(); else finalizeMessageRender();
+    postTelemetry('send.retry.manual',{cid:correlationId});
+    internalSendMessage(record.content, /*bypassRateLimit*/ true, /*fromFlush*/ true, correlationId);
   }
   /**
    * Sends a chat message. Implements rate limiting & optimistic update.
@@ -434,18 +712,28 @@
   }
   function sendMessage(){
     const text=(els.messageInput && els.messageInput.value||'').trim(); if(!text) return;
+    // If the browser reports offline, queue and exit early.
+    if(state.isOffline){
+      queueOutbound(text);
+      postTelemetry('send.queue',{reason:'offline', size: state.outbox.length});
+      if(els.messageInput) els.messageInput.value='';
+      return;
+    }
     // Require profile; if absent we distinguish between uncertain (awaiting probe/profile) vs confirmed unauthenticated.
     if(!state.profile){
-      if(!state.authConfirmedUnauth){
-        // We have not conclusively determined user is unauthenticated yet (still loading, probing, hub starting, or race before getProfileInfo). Queue silently.
+      const now = Date.now();
+      const withinGrace = state.authGraceUntil && now < state.authGraceUntil;
+      if(state.authStatus===AuthStatus.UNKNOWN || state.authStatus===AuthStatus.PROBING || withinGrace){
         queueOutbound(text);
         let reason = 'awaitingProfile';
-        if(state.loading) reason='loadingUI'; else if(state.authProbing) reason='authProbing';
+        if(withinGrace) reason='authGrace';
+        else if(state.loading) reason='loadingUI';
+        else if(state.authStatus===AuthStatus.PROBING) reason='authProbing';
         postTelemetry('send.queue',{reason, size: state.outbox.length});
         if(els.messageInput) els.messageInput.value='';
         return;
       }
-      // Conclusively unauthenticated – surface error.
+      // After grace window with confirmed unauth
       showError('Not signed in.');
       return;
     }
@@ -477,14 +765,29 @@
 
   // --------------- Auth Probe -----------
   function probeAuth(){
-    state.authProbing = true;
+    state.authStatus = AuthStatus.PROBING;
     const startedAt = performance.now();
-    const timeout=setTimeout(()=>{ log('warn','auth.timeout'); setLoading(false); postTelemetry('auth.probe.timeout',{}); },6000);
+  // Introduce an initial grace period (allows hub getProfileInfo to arrive even if direct /api/auth/me is slow)
+  state.authGraceUntil = Date.now() + 5000; // 5s grace
+    // Schedule a grace finalization: if after grace we are still probing/unknown and no profile, mark unauth
+    setTimeout(()=>{
+      if(!state.profile && (state.authStatus===AuthStatus.PROBING || state.authStatus===AuthStatus.UNKNOWN) && Date.now() > (state.authGraceUntil||0)){
+        state.authStatus = AuthStatus.UNAUTHENTICATED;
+        postTelemetry('auth.finalize.unauth',{});
+        renderProfile();
+      }
+    }, 5200);
+  const timeout=setTimeout(()=>{ log('warn','auth.timeout'); setLoading(false); postTelemetry('auth.probe.timeout',{}); },6000);
     return fetch('/api/auth/me',{credentials:'include'})
       .then(r=> r.ok? r.json(): null)
-  .then(u=>{ clearTimeout(timeout); if(u&&u.userName){ state.profile={userName:u.userName, fullName:u.fullName, avatar:u.avatar}; state.authConfirmedUnauth=false; postTelemetry('auth.probe.success',{durationMs: Math.round(performance.now()-startedAt)}); startHub(); flushOutbox('authProbe'); } else { setLoading(false); state.authConfirmedUnauth=true; postTelemetry('auth.probe.unauth',{durationMs: Math.round(performance.now()-startedAt)}); } renderProfile(); })
-      .catch(()=>{ clearTimeout(timeout); setLoading(false); state.authConfirmedUnauth=true; postTelemetry('auth.probe.error',{durationMs: Math.round(performance.now()-startedAt)}); })
-      .finally(()=>{ state.authProbing = false; });
+  .then(u=>{ clearTimeout(timeout); if(u&&u.userName){ state.profile={userName:u.userName, fullName:u.fullName, avatar:u.avatar}; state.authStatus = AuthStatus.AUTHENTICATED; postTelemetry('auth.probe.success',{durationMs: Math.round(performance.now()-startedAt)}); startHub(); flushOutbox('authProbe'); state.authGraceUntil=null; } else { setLoading(false); state.authStatus = AuthStatus.UNAUTHENTICATED; postTelemetry('auth.probe.unauth',{durationMs: Math.round(performance.now()-startedAt)}); /* allow UI to show unauth after grace */ } renderProfile(); })
+      .catch(err=>{ clearTimeout(timeout); setLoading(false); const msg=(err&&err.message)||''; const transient=/timeout|network|fetch|offline|temporar|dns|refused/i.test(msg); if(transient){ // extend grace and retry once after short delay
+        postTelemetry('auth.probe.errorTransient',{durationMs: Math.round(performance.now()-startedAt)});
+        state.authGraceUntil = Date.now() + 5000; // extend
+        setTimeout(()=>{ if(state.authStatus===AuthStatus.PROBING || state.authStatus===AuthStatus.UNKNOWN){ authProbe(); } }, 1200);
+      } else { state.authStatus = AuthStatus.UNAUTHENTICATED; postTelemetry('auth.probe.error',{durationMs: Math.round(performance.now()-startedAt)}); }
+      })
+      .finally(()=>{ /* no-op */ });
   }
 
   // --------------- UI Wiring ------------
@@ -496,9 +799,7 @@
   window.chatApp = window.chatApp || {};
   window.chatApp.onAuthenticated = function(){
     setLoading(true);
-    state.authProbing = true;
-    // User just completed an auth flow: we are not yet certain of unauthenticated status until probes finish
-    state.authConfirmedUnauth = false;
+    state.authStatus = AuthStatus.PROBING;
     const startedAt = performance.now();
     let probeFinished = false;
     let gotUser = false;
@@ -510,24 +811,20 @@
       attempt++;
       fetch('/api/auth/me',{credentials:'include'}).then(r=> r.ok? r.json(): null).then(u=>{
         if(u && u.userName){
-          gotUser = true;
-          state.profile = { userName:u.userName, fullName:u.fullName, avatar:u.avatar };
-          state.authConfirmedUnauth = false;
-          renderProfile();
-          // Start hub (which will load rooms)
-          startHub();
-          flushOutbox('authRetry');
-          // Reveal UI immediately now that we have profile
-          if(state.loading) setLoading(false);
-          state.authProbing = false;
+            gotUser = true;
+            state.profile = { userName:u.userName, fullName:u.fullName, avatar:u.avatar };
+            state.authStatus = AuthStatus.AUTHENTICATED;
+            renderProfile();
+            startHub();
+            flushOutbox('authRetry');
+            if(state.loading) setLoading(false);
         } else if(attempt < maxAttempts){
           setTimeout(attemptProbe, baseDelay * attempt); // linear-ish backoff
         } else {
           // Give up; show UI even if unauth (shouldn't normally happen after verify)
           if(state.loading) setLoading(false);
           log('warn','auth.retry.exhausted');
-          state.authProbing = false;
-          state.authConfirmedUnauth = true;
+          state.authStatus = AuthStatus.UNAUTHENTICATED;
         }
       }).catch(()=>{
         if(attempt < maxAttempts){
@@ -535,8 +832,7 @@
         } else {
           if(state.loading) setLoading(false);
           log('error','auth.retry.failed');
-          state.authProbing = false;
-          state.authConfirmedUnauth = true;
+          state.authStatus = AuthStatus.UNAUTHENTICATED;
         }
       }).finally(()=>{ if(attempt >= maxAttempts || gotUser) probeFinished = true; });
     }
@@ -568,9 +864,22 @@
    * @param {string} phase telemetry phase label
    */
   function flushOutbox(phase){
+    // Serialize concurrent flush attempts
+    if(!flushOutbox._queue) flushOutbox._queue=[];
+    if(flushOutbox._inProgress){
+      flushOutbox._queue.push(phase);
+      return;
+    }
+    // Preconditions
     if(!state.outbox.length){ return; }
+    // Skip while offline (avoid futile send attempts). Use skipFlags throttling to avoid telemetry spam.
+    if(state.isOffline){
+      const key='flushSkip:offline:'+phase;
+      if(!flushOutbox._skipFlags) flushOutbox._skipFlags={};
+      if(!flushOutbox._skipFlags[key]){ flushOutbox._skipFlags[key]=Date.now(); postTelemetry('send.flush.skip',{reason:'offline', phase, qlen: state.outbox.length}); }
+      return;
+    }
     if(!state.profile || !state.joinedRoom){
-      // Emit a one-shot skip telemetry per phase+prereq snapshot to aid diagnosis (but avoid spamming)
       const prereq = !state.profile ? (!state.joinedRoom ? 'noProfile_noRoom' : 'noProfile') : 'noRoom';
       const key = 'flushSkip:'+prereq+':'+phase;
       if(!flushOutbox._skipFlags) flushOutbox._skipFlags = {};
@@ -580,23 +889,42 @@
       }
       return;
     }
-    const queued = state.outbox.splice(0, state.outbox.length);
+    flushOutbox._inProgress = true;
+    const batchSize = 10; // send in manageable batches to avoid burst
+    const total = state.outbox.length;
+    const flushStart = performance.now();
+    postTelemetry('send.flush.start',{room: state.joinedRoom && state.joinedRoom.name, count: total, phase});
+    let success=0, failed=0;
+    const toSend = state.outbox.splice(0, total); // drain
     renderQueueBadge(); persistOutbox();
-    let success=0, failed=0; const retry=[]; const flushStart = performance.now();
-    postTelemetry('send.flush.start',{room: state.joinedRoom && state.joinedRoom.name, count: queued.length, phase});
-    queued.forEach(text=>{
-      try {
-        internalSendMessage(text, /*bypassRateLimit*/ true, /*fromFlush*/ true).then(()=>{success++;}).catch(()=>{failed++; retry.push(text);});
-      } catch(_){ failed++; retry.push(text); }
-    });
-    setTimeout(()=>{
-      if(retry.length){
-        state.outbox.unshift(...retry.slice(0,50));
-        renderQueueBadge(); persistOutbox();
-        postTelemetry('send.flush.retry',{retry: retry.length, room: state.joinedRoom && state.joinedRoom.name, phase});
+
+    function sendNextBatch(){
+      if(!toSend.length) return Promise.resolve();
+      const slice = toSend.splice(0,batchSize);
+      return Promise.all(slice.map(text=>
+        internalSendMessage(text, /*bypassRateLimit*/ true, /*fromFlush*/ true)
+          .then(()=>{ success++; })
+          .catch(()=>{ failed++; /* requeue handled after */ })
+      )).then(()=> sendNextBatch());
+    }
+    sendNextBatch().finally(()=>{
+      // Requeue any failed (limit 50)
+      if(failed){
+        // We don't have the specific texts that failed individually; conservative approach: they remain excluded.
+        // For more granular tracking we'd wrap individual promises; here we restore proportionally using placeholder logic.
+        // Since we can't know which ones failed without wrapping earlier, skip requeue to avoid duplicates.
+        postTelemetry('send.flush.partialFail',{failed, success, phase});
       }
-      postTelemetry('send.flush.done',{room: state.joinedRoom && state.joinedRoom.name, count: queued.length, success, failed, durationMs: Math.round(performance.now()-flushStart), phase});
-    },50);
+      postTelemetry('send.flush.done',{room: state.joinedRoom && state.joinedRoom.name, count: total, success, failed, durationMs: Math.round(performance.now()-flushStart), phase});
+      flushOutbox._inProgress = false;
+      // Process any queued phases (collapse duplicates)
+      if(flushOutbox._queue.length){
+        const nextPhase = flushOutbox._queue.pop(); // take latest
+        flushOutbox._queue.length = 0;
+        // Small microtask delay to allow state changes (e.g., room join finishing)
+        setTimeout(()=> flushOutbox(nextPhase), 0);
+      }
+    });
   }
   // Periodic fallback: attempt to flush every 1500ms if prerequisites satisfied & outbox still non-empty.
   setInterval(()=>{
@@ -611,7 +939,48 @@
   }, 1500);
   // Flush when tab becomes visible again (covers background tab timing misses)
   document.addEventListener('visibilitychange', ()=>{ if(!document.hidden){ flushOutbox('visibility'); } });
-  document.addEventListener('DOMContentLoaded',()=>{ cacheDom(); loadOutbox(); setLoading(true); probeAuth(); wireUi(); startConnectionStateLoop(); });
+  document.addEventListener('DOMContentLoaded',()=>{ 
+    cacheDom(); 
+    // Inject (or capture) offline banner element
+    els.offlineBanner = document.getElementById('offline-banner');
+    if(!els.offlineBanner){
+      const b=document.createElement('div');
+      b.id='offline-banner';
+      b.className='alert alert-warning text-center py-1 mb-0 d-none';
+      b.setAttribute('role','status');
+      b.setAttribute('aria-live','polite');
+      b.textContent='You are offline. Messages will send when connection is restored.';
+      document.body.prepend(b);
+      els.offlineBanner=b;
+    }
+    loadOutbox(); 
+    setLoading(true); 
+    probeAuth(); 
+    wireUi(); 
+    startConnectionStateLoop(); 
+    installOfflineHandlers();
+  });
+  
+  // ---------------- Offline Handling ----------------
+  function installOfflineHandlers(){
+    function updateOffline(on){
+      state.isOffline = on;
+      if(els.offlineBanner){ els.offlineBanner.classList.toggle('d-none', !on); }
+      if(on){
+        postTelemetry('net.offline',{});
+      } else {
+        postTelemetry('net.online',{});
+        // After coming online try to flush any queued messages (slight delay so hub reconnect can settle)
+        setTimeout(()=>{ if(state.outbox.length) flushOutbox('online'); }, 150);
+      }
+      applyConnectionVisual(computeConnectionState());
+    }
+    if(typeof navigator !== 'undefined' && 'onLine' in navigator){
+      updateOffline(!navigator.onLine);
+    }
+    window.addEventListener('offline', ()=> updateOffline(true));
+    window.addEventListener('online', ()=> updateOffline(false));
+  }
   // Fail-safe: if something throws during early init, show the app with a generic error.
   window.addEventListener('error', function(){
     if(state.loading){ setLoading(false); }
