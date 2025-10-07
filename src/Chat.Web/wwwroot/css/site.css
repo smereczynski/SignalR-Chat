@@ -427,6 +427,26 @@ body {
   background-color: white;
 }
 
+/* Connection status banner */
+.connection-banner {
+  height: 50px; /* match .header height */
+  min-height: 50px;
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: .5px;
+  border-bottom: 1px solid #eee;
+  position: relative;
+  z-index: 5;
+  transition: background-color 180ms ease-in-out, color 180ms ease-in-out, opacity 180ms ease-in-out;
+}
+.connection-banner.status-connected { background:#1d7f42; color:#fff; }
+.connection-banner.status-reconnecting { background:#c98607; color:#fff; }
+.connection-banner.status-disconnected { background:#b52424; color:#fff; }
+.connection-banner.fade-out { opacity:0; pointer-events:none; }
+
 .disabled-link {
   pointer-events: none;
   opacity: 0.55;
