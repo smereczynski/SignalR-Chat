@@ -23,7 +23,7 @@
   const log = (lvl,msg,obj)=> (window.appLogger && window.appLogger[lvl]) ? window.appLogger[lvl](msg,obj) : console.log(`[${lvl}] ${msg}`, obj||'');
 
   // ---------------- State ----------------
-  const state = { loading:true, profile:null, rooms:[], users:[], messages:[], joinedRoom:null, filter:'', oldestLoaded:null, canLoadMore:true, pageSize:20, loadingMore:false, lastSendAt:0, minSendIntervalMs:800, joinInProgress:false, pendingJoin:null, outbox:[], pendingAck:{} };
+  const state = { loading:true, profile:null, rooms:[], users:[], messages:[], joinedRoom:null, filter:'', oldestLoaded:null, canLoadMore:true, pageSize:20, loadingMore:false, lastSendAt:0, minSendIntervalMs:800, joinInProgress:false, pendingJoin:null, outbox:[], pendingAck:{}, authProbing:false };
   const els = {};
 
   function cacheDom(){
@@ -456,6 +456,13 @@
     const text=(els.messageInput && els.messageInput.value||'').trim(); if(!text) return;
     // Require profile; if absent, show explicit message
     if(!state.profile){
+      // If auth probing is in progress, queue instead of erroring to avoid user confusion.
+      if(state.authProbing){
+        queueOutbound(text);
+        postTelemetry('send.queue',{reason:'authProbing', size: state.outbox.length});
+        if(els.messageInput) els.messageInput.value='';
+        return;
+      }
       showError('Not signed in.');
       return;
     }
@@ -487,12 +494,14 @@
 
   // --------------- Auth Probe -----------
   function probeAuth(){
+    state.authProbing = true;
     const startedAt = performance.now();
     const timeout=setTimeout(()=>{ log('warn','auth.timeout'); setLoading(false); postTelemetry('auth.probe.timeout',{}); },6000);
     return fetch('/api/auth/me',{credentials:'include'})
       .then(r=> r.ok? r.json(): null)
       .then(u=>{ clearTimeout(timeout); if(u&&u.userName){ state.profile={userName:u.userName, fullName:u.fullName, avatar:u.avatar}; postTelemetry('auth.probe.success',{durationMs: Math.round(performance.now()-startedAt)}); startHub(); } else { setLoading(false); postTelemetry('auth.probe.unauth',{durationMs: Math.round(performance.now()-startedAt)}); } renderProfile(); })
-      .catch(()=>{ clearTimeout(timeout); setLoading(false); postTelemetry('auth.probe.error',{durationMs: Math.round(performance.now()-startedAt)}); });
+      .catch(()=>{ clearTimeout(timeout); setLoading(false); postTelemetry('auth.probe.error',{durationMs: Math.round(performance.now()-startedAt)}); })
+      .finally(()=>{ state.authProbing = false; });
   }
 
   // --------------- UI Wiring ------------
@@ -504,6 +513,7 @@
   window.chatApp = window.chatApp || {};
   window.chatApp.onAuthenticated = function(){
     setLoading(true);
+    state.authProbing = true;
     const startedAt = performance.now();
     let probeFinished = false;
     let gotUser = false;
@@ -522,12 +532,14 @@
           startHub();
           // Reveal UI immediately now that we have profile
           if(state.loading) setLoading(false);
+          state.authProbing = false;
         } else if(attempt < maxAttempts){
           setTimeout(attemptProbe, baseDelay * attempt); // linear-ish backoff
         } else {
           // Give up; show UI even if unauth (shouldn't normally happen after verify)
           if(state.loading) setLoading(false);
           log('warn','auth.retry.exhausted');
+          state.authProbing = false;
         }
       }).catch(()=>{
         if(attempt < maxAttempts){
@@ -535,6 +547,7 @@
         } else {
           if(state.loading) setLoading(false);
           log('error','auth.retry.failed');
+          state.authProbing = false;
         }
       }).finally(()=>{ if(attempt >= maxAttempts || gotUser) probeFinished = true; });
     }
