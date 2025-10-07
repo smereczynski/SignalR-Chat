@@ -23,7 +23,7 @@
   const log = (lvl,msg,obj)=> (window.appLogger && window.appLogger[lvl]) ? window.appLogger[lvl](msg,obj) : console.log(`[${lvl}] ${msg}`, obj||'');
 
   // ---------------- State ----------------
-  const state = { loading:true, profile:null, rooms:[], users:[], messages:[], joinedRoom:null, filter:'', oldestLoaded:null, canLoadMore:true, pageSize:20, loadingMore:false, lastSendAt:0, minSendIntervalMs:800, joinInProgress:false, pendingJoin:null, outbox:[], pendingAck:{}, authProbing:false };
+  const state = { loading:true, profile:null, rooms:[], users:[], messages:[], joinedRoom:null, filter:'', oldestLoaded:null, canLoadMore:true, pageSize:20, loadingMore:false, lastSendAt:0, minSendIntervalMs:800, joinInProgress:false, pendingJoin:null, outbox:[], pendingAck:{}, authProbing:false, authConfirmedUnauth:false };
   const els = {};
 
   function cacheDom(){
@@ -228,7 +228,7 @@
     setTimeout(()=> startHub().catch(e=> scheduleReconnect(e)), delay);
   }
   function wireHub(c){
-    c.on('getProfileInfo', u=>{ state.profile={userName:u.userName, fullName:u.fullName, avatar:u.avatar}; setLoading(false); renderProfile(); });
+  c.on('getProfileInfo', u=>{ state.profile={userName:u.userName, fullName:u.fullName, avatar:u.avatar}; state.authConfirmedUnauth = false; setLoading(false); renderProfile(); flushOutbox('profile'); });
     // Full presence snapshot after join (server push) ensures newly joined user and existing members converge
     c.on('presenceSnapshot', list=> { if(!Array.isArray(list)) return; // Replace users list for current room only
       if(state.joinedRoom){ state.users = list.filter(u=> u.currentRoom === state.joinedRoom.name || u.CurrentRoom === state.joinedRoom.name); }
@@ -328,27 +328,7 @@
       }
   loadUsers(); loadMessages(); renderRoomContext(); ensureProfileAvatar();
       postTelemetry('room.join.success',{room:roomName, durationMs: Math.round(performance.now()-startedAt)});
-      // Flush any queued outbound messages collected while joining
-      if(state.outbox && state.outbox.length){
-        const queued = state.outbox.splice(0, state.outbox.length);
-        renderQueueBadge(); persistOutbox();
-        let success=0, failed=0; const retry=[];
-        const flushStart = performance.now();
-        queued.forEach(text=> {
-          try {
-            internalSendMessage(text, /*bypassRateLimit*/ true, /*fromFlush*/ true).then(()=>{success++;}).catch(()=>{failed++; retry.push(text);});
-          } catch(_){ failed++; retry.push(text); }
-        });
-        // Simple async settle after a tick
-        setTimeout(()=>{
-          if(retry.length){
-            state.outbox.unshift(...retry.slice(0,50)); // put back (cap to 50)
-            renderQueueBadge(); persistOutbox();
-            postTelemetry('send.flush.retry',{retry:retry.length, room: roomName});
-          }
-          postTelemetry('send.flush.done',{room:roomName,count:queued.length,success,failed,durationMs: Math.round(performance.now()-flushStart)});
-        },50);
-      }
+      flushOutbox('join');
     }).catch(err=> { if(state.pendingJoin===thisAttempt){ state.joinInProgress=false; state.pendingJoin=null; renderRooms(); } showError('Join failed: '+(err&&err.message)); });
   }
   function loadRooms(){
@@ -454,16 +434,18 @@
   }
   function sendMessage(){
     const text=(els.messageInput && els.messageInput.value||'').trim(); if(!text) return;
-    // Require profile; if absent, show explicit message
+    // Require profile; if absent we distinguish between uncertain (awaiting probe/profile) vs confirmed unauthenticated.
     if(!state.profile){
-      // While loading spinner visible or auth probing, optimistically queue.
-      if(state.loading || state.authProbing){
+      if(!state.authConfirmedUnauth){
+        // We have not conclusively determined user is unauthenticated yet (still loading, probing, hub starting, or race before getProfileInfo). Queue silently.
         queueOutbound(text);
-        postTelemetry('send.queue',{reason: state.loading ? 'loadingUI' : 'authProbing', size: state.outbox.length});
+        let reason = 'awaitingProfile';
+        if(state.loading) reason='loadingUI'; else if(state.authProbing) reason='authProbing';
+        postTelemetry('send.queue',{reason, size: state.outbox.length});
         if(els.messageInput) els.messageInput.value='';
         return;
       }
-      // If we reach here, probe finished and user truly unauthenticated.
+      // Conclusively unauthenticated – surface error.
       showError('Not signed in.');
       return;
     }
@@ -500,8 +482,8 @@
     const timeout=setTimeout(()=>{ log('warn','auth.timeout'); setLoading(false); postTelemetry('auth.probe.timeout',{}); },6000);
     return fetch('/api/auth/me',{credentials:'include'})
       .then(r=> r.ok? r.json(): null)
-      .then(u=>{ clearTimeout(timeout); if(u&&u.userName){ state.profile={userName:u.userName, fullName:u.fullName, avatar:u.avatar}; postTelemetry('auth.probe.success',{durationMs: Math.round(performance.now()-startedAt)}); startHub(); } else { setLoading(false); postTelemetry('auth.probe.unauth',{durationMs: Math.round(performance.now()-startedAt)}); } renderProfile(); })
-      .catch(()=>{ clearTimeout(timeout); setLoading(false); postTelemetry('auth.probe.error',{durationMs: Math.round(performance.now()-startedAt)}); })
+  .then(u=>{ clearTimeout(timeout); if(u&&u.userName){ state.profile={userName:u.userName, fullName:u.fullName, avatar:u.avatar}; state.authConfirmedUnauth=false; postTelemetry('auth.probe.success',{durationMs: Math.round(performance.now()-startedAt)}); startHub(); flushOutbox('authProbe'); } else { setLoading(false); state.authConfirmedUnauth=true; postTelemetry('auth.probe.unauth',{durationMs: Math.round(performance.now()-startedAt)}); } renderProfile(); })
+      .catch(()=>{ clearTimeout(timeout); setLoading(false); state.authConfirmedUnauth=true; postTelemetry('auth.probe.error',{durationMs: Math.round(performance.now()-startedAt)}); })
       .finally(()=>{ state.authProbing = false; });
   }
 
@@ -515,6 +497,8 @@
   window.chatApp.onAuthenticated = function(){
     setLoading(true);
     state.authProbing = true;
+    // User just completed an auth flow: we are not yet certain of unauthenticated status until probes finish
+    state.authConfirmedUnauth = false;
     const startedAt = performance.now();
     let probeFinished = false;
     let gotUser = false;
@@ -528,9 +512,11 @@
         if(u && u.userName){
           gotUser = true;
           state.profile = { userName:u.userName, fullName:u.fullName, avatar:u.avatar };
+          state.authConfirmedUnauth = false;
           renderProfile();
           // Start hub (which will load rooms)
           startHub();
+          flushOutbox('authRetry');
           // Reveal UI immediately now that we have profile
           if(state.loading) setLoading(false);
           state.authProbing = false;
@@ -541,6 +527,7 @@
           if(state.loading) setLoading(false);
           log('warn','auth.retry.exhausted');
           state.authProbing = false;
+          state.authConfirmedUnauth = true;
         }
       }).catch(()=>{
         if(attempt < maxAttempts){
@@ -549,6 +536,7 @@
           if(state.loading) setLoading(false);
           log('error','auth.retry.failed');
           state.authProbing = false;
+          state.authConfirmedUnauth = true;
         }
       }).finally(()=>{ if(attempt >= maxAttempts || gotUser) probeFinished = true; });
     }
@@ -575,6 +563,54 @@
   function persistOutbox(){
     try { sessionStorage.setItem('chat.outbox', JSON.stringify(state.outbox)); } catch(_) {}
   }
+  /**
+   * Attempts to flush queued outbound messages if we have both a profile and a joined room.
+   * @param {string} phase telemetry phase label
+   */
+  function flushOutbox(phase){
+    if(!state.outbox.length){ return; }
+    if(!state.profile || !state.joinedRoom){
+      // Emit a one-shot skip telemetry per phase+prereq snapshot to aid diagnosis (but avoid spamming)
+      const prereq = !state.profile ? (!state.joinedRoom ? 'noProfile_noRoom' : 'noProfile') : 'noRoom';
+      const key = 'flushSkip:'+prereq+':'+phase;
+      if(!flushOutbox._skipFlags) flushOutbox._skipFlags = {};
+      if(!flushOutbox._skipFlags[key]){
+        flushOutbox._skipFlags[key] = Date.now();
+        postTelemetry('send.flush.skip',{reason:prereq, phase, qlen: state.outbox.length});
+      }
+      return;
+    }
+    const queued = state.outbox.splice(0, state.outbox.length);
+    renderQueueBadge(); persistOutbox();
+    let success=0, failed=0; const retry=[]; const flushStart = performance.now();
+    postTelemetry('send.flush.start',{room: state.joinedRoom && state.joinedRoom.name, count: queued.length, phase});
+    queued.forEach(text=>{
+      try {
+        internalSendMessage(text, /*bypassRateLimit*/ true, /*fromFlush*/ true).then(()=>{success++;}).catch(()=>{failed++; retry.push(text);});
+      } catch(_){ failed++; retry.push(text); }
+    });
+    setTimeout(()=>{
+      if(retry.length){
+        state.outbox.unshift(...retry.slice(0,50));
+        renderQueueBadge(); persistOutbox();
+        postTelemetry('send.flush.retry',{retry: retry.length, room: state.joinedRoom && state.joinedRoom.name, phase});
+      }
+      postTelemetry('send.flush.done',{room: state.joinedRoom && state.joinedRoom.name, count: queued.length, success, failed, durationMs: Math.round(performance.now()-flushStart), phase});
+    },50);
+  }
+  // Periodic fallback: attempt to flush every 1500ms if prerequisites satisfied & outbox still non-empty.
+  setInterval(()=>{
+    try {
+      if(state.outbox.length){ flushOutbox('periodic'); }
+      // Repair UI badge if it became stale (e.g., DOM mutated / replaced)
+      if(state.outbox.length===0 && els.queueBadge && els.queueBadge.textContent !== '0' && !els.queueBadge.classList.contains('d-none')){
+        els.queueBadge.textContent = '0';
+        els.queueBadge.classList.add('d-none');
+      }
+    } catch(_){ /* swallow */ }
+  }, 1500);
+  // Flush when tab becomes visible again (covers background tab timing misses)
+  document.addEventListener('visibilitychange', ()=>{ if(!document.hidden){ flushOutbox('visibility'); } });
   document.addEventListener('DOMContentLoaded',()=>{ cacheDom(); loadOutbox(); setLoading(true); probeAuth(); wireUi(); startConnectionStateLoop(); });
   // Fail-safe: if something throws during early init, show the app with a generic error.
   window.addEventListener('error', function(){
