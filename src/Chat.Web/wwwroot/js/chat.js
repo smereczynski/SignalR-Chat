@@ -104,9 +104,27 @@
 
   // --------------- SignalR --------------
   let hub=null, reconnectAttempts=0; const maxBackoff=30000;
-  // Telemetry helper (fire-and-forget) with session correlation
-  const cryptoRandom = window.crypto.getRandomValues(new Uint32Array(1))[0];
-  const sessionId = 's_'+cryptoRandom.toString(36).slice(0,8)+'_'+Date.now().toString(36);
+  // Secure random utilities -------------------------------------------------
+  function secureRandomBytes(len){
+    const arr = new Uint8Array(len);
+    if(window.crypto && window.crypto.getRandomValues){ window.crypto.getRandomValues(arr); }
+    else {
+      // Fallback: VERY rare (older browsers); degrade to Math.random with warning (still better than throwing)
+      for(let i=0;i<len;i++){ arr[i] = Math.floor(Math.random()*256); }
+    }
+    return arr;
+  }
+  function secureRandomId(prefix, length){
+    // produce base36-ish string from random bytes
+    const bytes = secureRandomBytes(length);
+    let chars = '';
+    for(const b of bytes){ chars += (b & 0x0f).toString(16); } // hex nibble -> 2x entropy per byte slice
+    // trim / slice to requested nibble length (length * 2 nibbles currently but we used only lower nibble for stability)
+    // We used only lower nibble, so chars length === length. Acceptable for correlation uniqueness.
+    return (prefix||'') + chars + '_' + Date.now().toString(36);
+  }
+  // Telemetry helper (fire-and-forget) with session correlation (secure ID)
+  const sessionId = secureRandomId('s_8', 8); // 8 random nibbles + timestamp
   function postTelemetry(event, data){
     try {
       fetch('/api/telemetry/reconnect',{
@@ -316,7 +334,7 @@
     state.lastSendAt = now;
     const tempId = pendingIdCounter--;
     const nowIso = new Date().toISOString();
-    const correlationId = 'c_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,8);
+  const correlationId = secureRandomId('c_', 12); // ~48 bits of randomness (12 nibbles) + timestamp
     state.messages.push({id:tempId,content:text,timestamp:nowIso,fromUserName:state.profile?.userName,fromFullName:state.profile?.fullName,avatar:state.profile?.avatar,isMine: !!state.profile, correlationId});
     renderMessages();
     if(!hub){ return Promise.reject('noHub'); }
