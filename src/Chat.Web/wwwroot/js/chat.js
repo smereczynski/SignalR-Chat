@@ -82,15 +82,14 @@
       case 'reconnecting':
         els.roomHeader.classList.add('connection-state-reconnecting');
         if(els.joinedRoomTitle && state._baseRoomTitle){
-          // Do not alter title while reconnecting (keep clean name)
-          els.joinedRoomTitle.textContent = state._baseRoomTitle;
+          els.joinedRoomTitle.textContent = state._baseRoomTitle + ' (RECONNECTING…)';
         }
         break;
       case 'disconnected':
         els.roomHeader.classList.add('connection-state-disconnected');
         if(els.joinedRoomTitle){
           const base = state._baseRoomTitle || els.joinedRoomTitle.textContent || '';
-          els.joinedRoomTitle.textContent = base + ' (DISCONNECTED)';
+          els.joinedRoomTitle.textContent = base + ' (⚠ DISCONNECTED)';
         }
         break;
     }
@@ -268,7 +267,12 @@
   applyConnectionVisual('connected');
     });
   c.onreconnecting(err => { log('warn','hub.reconnecting', {message: err && err.message}); applyConnectionVisual('reconnecting'); });
-  c.onclose(()=> { applyConnectionVisual('disconnected'); });
+  c.onclose(()=> { 
+    applyConnectionVisual('disconnected'); 
+    // Clear presence list when fully disconnected to avoid showing stale users.
+    state.users = [];
+    renderUsers();
+  });
     // Other hub-driven mutations
     c.on('addUser', u=> upsertUser(u));
     c.on('removeUser', u=> removeUser(u.userName));
