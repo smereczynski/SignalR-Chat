@@ -130,7 +130,10 @@ namespace Chat.Web.Hubs
                 {
                     user.CurrentRoom = roomName;
                 }
-                await Clients.OthersInGroup(roomName).SendAsync("addUser", user);
+                // Broadcast to the entire group (including the caller) so every client receives a consistent
+                // addUser event even if their initial user list isn't yet loaded. This fixes a race where
+                // existing members failed to update presence until another hub action occurred.
+                await Clients.Group(roomName).SendAsync("addUser", user);
                 _logger.LogInformation("User {User} joined room {Room}", IdentityName, roomName);
                 _metrics.IncRoomsJoined();
                 _metrics.IncRoomPresence(roomName);
