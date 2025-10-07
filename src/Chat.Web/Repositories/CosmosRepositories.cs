@@ -244,7 +244,7 @@ namespace Chat.Web.Repositories
             catch (CosmosException ex)
             {
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-                _logger.LogError(ex, "Cosmos room get by name failed {Room}", LogSanitizer.Sanitize(name));
+                _logger.LogError(ex, "Cosmos room get by name failed Room=\"{Room}\"", LogSanitizer.Sanitize(name));
                 throw;
             }
         }
@@ -355,7 +355,7 @@ namespace Chat.Web.Repositories
             catch (CosmosException ex)
             {
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-                _logger.LogError(ex, "Cosmos recent messages failed {Room}", LogSanitizer.Sanitize(roomName));
+                _logger.LogError(ex, "Cosmos recent messages failed Room=\"{Room}\"", LogSanitizer.Sanitize(roomName));
                 throw;
             }
         }
@@ -387,7 +387,7 @@ namespace Chat.Web.Repositories
             catch (CosmosException ex)
             {
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-                _logger.LogError(ex, "Cosmos messages before failed {Room}", LogSanitizer.Sanitize(roomName));
+                _logger.LogError(ex, "Cosmos messages before failed Room=\"{Room}\"", LogSanitizer.Sanitize(roomName));
                 throw;
             }
         }
