@@ -265,7 +265,7 @@ if(window.__chatAppBooted){
     try {
       const now = Date.now();
       // Build a suppression key only for noisy families; others always send
-      let key=null;
+      let key;
       if(/^send\.flush\.skip$/.test(event)) key = event + '|' + (data&&data.reason);
       if(/^send\.queue$/.test(event)) key = event + '|' + (data&&data.reason);
       if(/^hub\.connect\.retry$/.test(event)) key = event + '|' + (data&&data.attempt);
