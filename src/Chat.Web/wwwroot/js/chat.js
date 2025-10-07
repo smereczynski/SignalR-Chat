@@ -781,7 +781,7 @@ if(window.__chatAppBooted){
     return fetch('/api/auth/me',{credentials:'include'})
       .then(r=> r.ok? r.json(): null)
   .then(u=>{ clearTimeout(timeout); if(u&&u.userName){ state.profile={userName:u.userName, fullName:u.fullName, avatar:u.avatar}; state.authStatus = AuthStatus.AUTHENTICATED; postTelemetry('auth.probe.success',{durationMs: Math.round(performance.now()-startedAt)}); startHub(); flushOutbox('authProbe'); state.authGraceUntil=null; } else { setLoading(false); state.authStatus = AuthStatus.UNAUTHENTICATED; postTelemetry('auth.probe.unauth',{durationMs: Math.round(performance.now()-startedAt)}); /* allow UI to show unauth after grace */ } renderProfile(); })
-      .catch(err=>{ clearTimeout(timeout); setLoading(false); const msg=(err&&err.message)||''; const transient=/timeout|network|fetch|offline|temporar|dns|refused/i.test(msg); if(transient){ // extend grace and retry once after short delay
+      .catch(err=>{ clearTimeout(timeout); setLoading(false); const msg=(err&&err.message)||''; const transient=/timeout|network|fetch|offline|temporary|dns|refused/i.test(msg); if(transient){ // extend grace and retry once after short delay
         postTelemetry('auth.probe.errorTransient',{durationMs: Math.round(performance.now()-startedAt)});
         state.authGraceUntil = Date.now() + 5000; // extend
         setTimeout(()=>{ if(state.authStatus===AuthStatus.PROBING || state.authStatus===AuthStatus.UNKNOWN){ probeAuth(); } }, 1200);
