@@ -784,7 +784,7 @@ if(window.__chatAppBooted){
       .catch(err=>{ clearTimeout(timeout); setLoading(false); const msg=(err&&err.message)||''; const transient=/timeout|network|fetch|offline|temporar|dns|refused/i.test(msg); if(transient){ // extend grace and retry once after short delay
         postTelemetry('auth.probe.errorTransient',{durationMs: Math.round(performance.now()-startedAt)});
         state.authGraceUntil = Date.now() + 5000; // extend
-        setTimeout(()=>{ if(state.authStatus===AuthStatus.PROBING || state.authStatus===AuthStatus.UNKNOWN){ authProbe(); } }, 1200);
+        setTimeout(()=>{ if(state.authStatus===AuthStatus.PROBING || state.authStatus===AuthStatus.UNKNOWN){ probeAuth(); } }, 1200);
       } else { state.authStatus = AuthStatus.UNAUTHENTICATED; postTelemetry('auth.probe.error',{durationMs: Math.round(performance.now()-startedAt)}); }
       })
       .finally(()=>{ /* no-op */ });
