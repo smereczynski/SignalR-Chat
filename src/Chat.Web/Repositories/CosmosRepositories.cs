@@ -141,8 +141,8 @@ namespace Chat.Web.Repositories
             catch (CosmosException ex)
             {
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-                // Delimit user-controlled value explicitly to avoid ambiguity in logs
-                _logger.LogError(ex, "Cosmos user lookup failed User=\"{User}\"", LogSanitizer.Sanitize(userName));
+                // Removed user-supplied value from log to avoid any disclosure/log forging risk
+                _logger.LogError(ex, "Cosmos user lookup failed");
                 throw;
             }
         }
@@ -244,7 +244,8 @@ namespace Chat.Web.Repositories
             catch (CosmosException ex)
             {
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-                _logger.LogError(ex, "Cosmos room get by name failed Room=\"{Room}\"", LogSanitizer.Sanitize(name));
+                // Removed user-supplied room name from log to avoid disclosure/log forging risk
+                _logger.LogError(ex, "Cosmos room get by name failed");
                 throw;
             }
         }
@@ -355,7 +356,8 @@ namespace Chat.Web.Repositories
             catch (CosmosException ex)
             {
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-                _logger.LogError(ex, "Cosmos recent messages failed Room=\"{Room}\"", LogSanitizer.Sanitize(roomName));
+                // Removed user-supplied room name from log
+                _logger.LogError(ex, "Cosmos recent messages failed");
                 throw;
             }
         }
@@ -387,7 +389,8 @@ namespace Chat.Web.Repositories
             catch (CosmosException ex)
             {
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-                _logger.LogError(ex, "Cosmos messages before failed Room=\"{Room}\"", LogSanitizer.Sanitize(roomName));
+                // Removed user-supplied room name from log
+                _logger.LogError(ex, "Cosmos messages before failed");
                 throw;
             }
         }
