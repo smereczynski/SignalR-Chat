@@ -105,7 +105,8 @@
   // --------------- SignalR --------------
   let hub=null, reconnectAttempts=0; const maxBackoff=30000;
   // Telemetry helper (fire-and-forget) with session correlation
-  const sessionId = 's_'+Math.random().toString(36).slice(2,10)+'_'+Date.now().toString(36);
+  const cryptoRandom = window.crypto.getRandomValues(new Uint32Array(1))[0];
+  const sessionId = 's_'+cryptoRandom.toString(36).slice(0,8)+'_'+Date.now().toString(36);
   function postTelemetry(event, data){
     try {
       fetch('/api/telemetry/reconnect',{
