@@ -32,16 +32,24 @@ namespace Chat.Web.Hubs
         /// </summary>
         private static readonly Dictionary<string, string> _ConnectionsMap = new Dictionary<string, string>();
 
-        private readonly Repositories.IUsersRepository _users;
+    private readonly Repositories.IUsersRepository _users;
+    private readonly Repositories.IMessagesRepository _messages;
+    private readonly Repositories.IRoomsRepository _rooms;
         private readonly ILogger<ChatHub> _logger;
         private readonly Services.IInProcessMetrics _metrics;
 
         /// <summary>
         /// Creates a new Hub instance.
         /// </summary>
-        public ChatHub(Repositories.IUsersRepository users, ILogger<ChatHub> logger, Services.IInProcessMetrics metrics)
+        public ChatHub(Repositories.IUsersRepository users,
+            Repositories.IMessagesRepository messages,
+            Repositories.IRoomsRepository rooms,
+            ILogger<ChatHub> logger,
+            Services.IInProcessMetrics metrics)
         {
             _users = users;
+            _messages = messages;
+            _rooms = rooms;
             _logger = logger;
             _metrics = metrics;
         }
@@ -86,27 +94,46 @@ namespace Chat.Web.Hubs
                 {
                     user = _Connections.FirstOrDefault(u => u.UserName == IdentityName);
                 }
-                if (user != null && user.CurrentRoom != roomName)
+                // If user not yet tracked (race with OnConnected) create an entry.
+                if (user == null)
                 {
-                    var previous = user.CurrentRoom;
-                    if (!string.IsNullOrEmpty(previous))
+                    user = new UserViewModel
                     {
-                        await Clients.OthersInGroup(previous).SendAsync("removeUser", user);
-                        _logger.LogDebug("User {User} leaving room {Prev}", IdentityName, previous);
-                        activity?.AddEvent(new ActivityEvent("leave", tags: new ActivityTagsCollection {{"chat.room.prev", previous}}));
-                        _metrics.DecRoomPresence(previous);
-                    }
-                    await Leave(previous);
-                    await Groups.AddToGroupAsync(Context.ConnectionId, roomName);
+                        UserName = profile?.UserName ?? IdentityName,
+                        FullName = profile?.FullName ?? IdentityName,
+                        Avatar = profile?.Avatar,
+                        Device = GetDevice(),
+                        CurrentRoom = string.Empty
+                    };
                     lock (_ConnectionsLock)
                     {
-                        user.CurrentRoom = roomName;
+                        _Connections.Add(user);
                     }
-                    await Clients.OthersInGroup(roomName).SendAsync("addUser", user);
-                    _logger.LogInformation("User {User} joined room {Room}", IdentityName, roomName);
-                    _metrics.IncRoomsJoined();
-                    _metrics.IncRoomPresence(roomName);
+                    _ConnectionsMap[IdentityName] = Context.ConnectionId;
                 }
+                if (user.CurrentRoom == roomName)
+                {
+                    // Already in requested room; no-op
+                    return;
+                }
+                var previous = user.CurrentRoom;
+                if (!string.IsNullOrEmpty(previous))
+                {
+                    await Clients.OthersInGroup(previous).SendAsync("removeUser", user);
+                    _logger.LogDebug("User {User} leaving room {Prev}", IdentityName, previous);
+                    activity?.AddEvent(new ActivityEvent("leave", tags: new ActivityTagsCollection {{"chat.room.prev", previous}}));
+                    _metrics.DecRoomPresence(previous);
+                    await Groups.RemoveFromGroupAsync(Context.ConnectionId, previous);
+                }
+                await Groups.AddToGroupAsync(Context.ConnectionId, roomName);
+                lock (_ConnectionsLock)
+                {
+                    user.CurrentRoom = roomName;
+                }
+                await Clients.OthersInGroup(roomName).SendAsync("addUser", user);
+                _logger.LogInformation("User {User} joined room {Room}", IdentityName, roomName);
+                _metrics.IncRoomsJoined();
+                _metrics.IncRoomPresence(roomName);
             }
             catch (Exception ex)
             {
@@ -190,6 +217,41 @@ namespace Chat.Web.Hubs
                     _metrics.IncActiveConnections();
                     _metrics.UserAvailable(IdentityName, device);
                     await Clients.Caller.SendAsync("getProfileInfo", userViewModel);
+
+                    // Auto-join default room logic
+                    try
+                    {
+                        var fixedRooms = user?.FixedRooms ?? new System.Collections.Generic.List<string>();
+                        if (fixedRooms.Any())
+                        {
+                            string target = null;
+                            string strategy = null;
+                            if (!string.IsNullOrWhiteSpace(user?.DefaultRoom) && fixedRooms.Contains(user.DefaultRoom))
+                            {
+                                target = user.DefaultRoom;
+                                strategy = "autoJoin.default";
+                            }
+                            else if (fixedRooms.Count == 1)
+                            {
+                                target = fixedRooms.First();
+                                strategy = "autoJoin.single";
+                            }
+                            else
+                            {
+                                target = fixedRooms.OrderBy(r => r).First();
+                                strategy = "autoJoin.firstAlphabetical";
+                            }
+                            if (!string.IsNullOrEmpty(target))
+                            {
+                                Tracing.ActivitySource.StartActivity(strategy)?.Dispose();
+                                _ = Join(target); // fire & forget
+                            }
+                        }
+                    }
+                    catch (System.Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Auto-join default room failed for {User}", IdentityName);
+                    }
                 }
             }
             catch (Exception ex)
@@ -283,6 +345,81 @@ namespace Chat.Web.Hubs
                     Device = c.Device
                 }).ToList();
             }
+        }
+
+        /// <summary>
+        /// Hub-based message send to the caller's current room. CorrelationId flows from client for optimistic reconciliation.
+        /// </summary>
+        public async Task SendMessage(string content, string correlationId)
+        {
+            using var activity = Tracing.ActivitySource.StartActivity("ChatHub.SendMessage");
+            activity?.SetTag("chat.correlationId", correlationId);
+            activity?.SetTag("chat.content.length", content?.Length ?? 0);
+            if (string.IsNullOrWhiteSpace(content)) { activity?.AddEvent(new ActivityEvent("empty_content")); return; }
+            UserViewModel user;
+            lock (_ConnectionsLock)
+            {
+                user = _Connections.FirstOrDefault(u => u.UserName == IdentityName);
+            }
+            if (user == null || string.IsNullOrEmpty(user.CurrentRoom))
+            {
+                _logger.LogWarning("SendMessage denied (no room) user={User}", IdentityName);
+                activity?.SetStatus(ActivityStatusCode.Error, "no_room");
+                await Clients.Caller.SendAsync("onError", "You are not in a room.");
+                return;
+            }
+            var domainUser = _users.GetByUserName(IdentityName);
+            if (domainUser?.FixedRooms != null && domainUser.FixedRooms.Any() && !domainUser.FixedRooms.Contains(user.CurrentRoom))
+            {
+                _logger.LogWarning("SendMessage unauthorized user={User} room={Room}", IdentityName, user.CurrentRoom);
+                activity?.SetStatus(ActivityStatusCode.Error, "unauthorized");
+                await Clients.Caller.SendAsync("onError", "Not authorized for this room.");
+                return;
+            }
+            var room = _rooms.GetByName(user.CurrentRoom);
+            if (room == null)
+            {
+                _logger.LogWarning("SendMessage room missing user={User} room={Room}", IdentityName, user.CurrentRoom);
+                activity?.SetStatus(ActivityStatusCode.Error, "room_missing");
+                await Clients.Caller.SendAsync("onError", "Room no longer exists.");
+                return;
+            }
+            // Basic sanitization (strip tags)
+            var sanitized = System.Text.RegularExpressions.Regex.Replace(content, @"<.*?>", string.Empty);
+            activity?.SetTag("chat.room", room.Name);
+            activity?.SetTag("chat.sanitized.length", sanitized.Length);
+            var msg = new Models.Message
+            {
+                Content = sanitized,
+                FromUser = domainUser,
+                ToRoom = room,
+                Timestamp = System.DateTime.UtcNow
+            };
+            try
+            {
+                msg = _messages.Create(msg);
+            }
+            catch (System.Exception ex)
+            {
+                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+                _logger.LogError(ex, "SendMessage persistence failed user={User} room={Room}", IdentityName, room.Name);
+                await Clients.Caller.SendAsync("onError", "Failed to persist message.");
+                return;
+            }
+            var vm = new ViewModels.MessageViewModel
+            {
+                Id = msg.Id,
+                Content = msg.Content,
+                FromUserName = msg.FromUser?.UserName,
+                FromFullName = msg.FromUser?.FullName,
+                Avatar = msg.FromUser?.Avatar,
+                Room = room.Name,
+                Timestamp = msg.Timestamp,
+                CorrelationId = correlationId
+            };
+            await Clients.Group(room.Name).SendAsync("newMessage", vm);
+            _metrics.IncMessagesSent();
+            activity?.SetStatus(ActivityStatusCode.Ok);
         }
     }
 }
