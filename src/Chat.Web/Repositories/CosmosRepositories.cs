@@ -141,7 +141,8 @@ namespace Chat.Web.Repositories
             catch (CosmosException ex)
             {
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-                _logger.LogError(ex, "Cosmos user lookup failed {User}", LogSanitizer.Sanitize(userName));
+                // Delimit user-controlled value explicitly to avoid ambiguity in logs
+                _logger.LogError(ex, "Cosmos user lookup failed User=\"{User}\"", LogSanitizer.Sanitize(userName));
                 throw;
             }
         }
