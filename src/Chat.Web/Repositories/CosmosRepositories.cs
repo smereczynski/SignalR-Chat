@@ -9,9 +9,32 @@ using Chat.Web.Options;
 using System.Diagnostics;
 using Chat.Web.Observability;
 using Microsoft.Extensions.Logging;
+using System.Text;
 
 namespace Chat.Web.Repositories
 {
+    internal static class LogSanitizer
+    {
+        // Remove characters that could forge new log lines or control terminal output.
+        // Limits length to a reasonable size to avoid log spam amplification.
+        public static string Sanitize(string input, int max = 200)
+        {
+            if (string.IsNullOrEmpty(input)) return input ?? string.Empty;
+            var sb = new StringBuilder(input.Length);
+            foreach (var ch in input)
+            {
+                if (ch == '\r' || ch == '\n') continue; // drop new lines entirely
+                if (char.IsControl(ch)) continue; // remove other control chars (tabs, etc.)
+                sb.Append(ch);
+                if (sb.Length >= max)
+                {
+                    sb.Append("…");
+                    break;
+                }
+            }
+            return sb.ToString();
+        }
+    }
     public class CosmosClients
     {
         public CosmosClient Client { get; }
@@ -59,7 +82,7 @@ namespace Chat.Web.Repositories
     }
 
     // Simple DTOs for Cosmos storage
-    internal class UserDoc { public string id { get; set; } public string userName { get; set; } public string fullName { get; set; } public string avatar { get; set; } public string email { get; set; } public string mobile { get; set; } public string[] fixedRooms { get; set; } }
+    internal class UserDoc { public string id { get; set; } public string userName { get; set; } public string fullName { get; set; } public string avatar { get; set; } public string email { get; set; } public string mobile { get; set; } public string[] fixedRooms { get; set; } public string defaultRoom { get; set; } }
     internal class RoomDoc { public string id { get; set; } public string name { get; set; } public string admin { get; set; } }
     internal class MessageDoc { public string id { get; set; } public string roomName { get; set; } public string content { get; set; } public string fromUser { get; set; } public DateTime timestamp { get; set; } }
 
@@ -84,7 +107,7 @@ namespace Chat.Web.Repositories
                 {
                     var page = q.ReadNextAsync().GetAwaiter().GetResult();
                     activity?.AddEvent(new ActivityEvent("page", tags: new ActivityTagsCollection { {"db.page.count", page.Count} }));
-                    list.AddRange(page.Select(d => new ApplicationUser { UserName = d.userName, FullName = d.fullName, Avatar = d.avatar, Email = d.email, MobileNumber = d.mobile, FixedRooms = d.fixedRooms != null ? new System.Collections.Generic.List<string>(d.fixedRooms) : new System.Collections.Generic.List<string>() }));
+                    list.AddRange(page.Select(d => new ApplicationUser { UserName = d.userName, FullName = d.fullName, Avatar = d.avatar, Email = d.email, MobileNumber = d.mobile, FixedRooms = d.fixedRooms != null ? new System.Collections.Generic.List<string>(d.fixedRooms) : new System.Collections.Generic.List<string>(), DefaultRoom = d.defaultRoom }));
                 }
                 activity?.SetTag("app.result.count", list.Count);
                 return list;
@@ -110,7 +133,7 @@ namespace Chat.Web.Repositories
                     var d = page.FirstOrDefault();
                     if (d != null)
                     {
-                        return new ApplicationUser { UserName = d.userName, FullName = d.fullName, Avatar = d.avatar, Email = d.email, MobileNumber = d.mobile, FixedRooms = d.fixedRooms != null ? new System.Collections.Generic.List<string>(d.fixedRooms) : new System.Collections.Generic.List<string>() };
+                        return new ApplicationUser { UserName = d.userName, FullName = d.fullName, Avatar = d.avatar, Email = d.email, MobileNumber = d.mobile, FixedRooms = d.fixedRooms != null ? new System.Collections.Generic.List<string>(d.fixedRooms) : new System.Collections.Generic.List<string>(), DefaultRoom = d.defaultRoom };
                     }
                 }
                 return null;
@@ -118,7 +141,8 @@ namespace Chat.Web.Repositories
             catch (CosmosException ex)
             {
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-                _logger.LogError(ex, "Cosmos user lookup failed {User}", userName);
+                // Removed user-supplied value from log to avoid any disclosure/log forging risk
+                _logger.LogError(ex, "Cosmos user lookup failed");
                 throw;
             }
         }
@@ -127,7 +151,7 @@ namespace Chat.Web.Repositories
         {
             using var activity = Tracing.ActivitySource.StartActivity("cosmos.users.upsert", ActivityKind.Client);
             activity?.SetTag("app.userName", user.UserName);
-            var doc = new UserDoc { id = user.UserName, userName = user.UserName, fullName = user.FullName, avatar = user.Avatar, email = user.Email, mobile = user.MobileNumber, fixedRooms = user.FixedRooms != null ? System.Linq.Enumerable.ToArray(user.FixedRooms) : null };
+            var doc = new UserDoc { id = user.UserName, userName = user.UserName, fullName = user.FullName, avatar = user.Avatar, email = user.Email, mobile = user.MobileNumber, fixedRooms = user.FixedRooms != null ? System.Linq.Enumerable.ToArray(user.FixedRooms) : null, defaultRoom = user.DefaultRoom };
             try
             {
                 var resp = _users.UpsertItemAsync(doc, new PartitionKey(doc.userName)).GetAwaiter().GetResult();
@@ -136,7 +160,7 @@ namespace Chat.Web.Repositories
             catch (CosmosException ex)
             {
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-                _logger.LogError(ex, "Cosmos user upsert failed {User}", user.UserName);
+                _logger.LogError(ex, "Cosmos user upsert failed {User}", LogSanitizer.Sanitize(user.UserName));
                 throw;
             }
         }
@@ -220,7 +244,8 @@ namespace Chat.Web.Repositories
             catch (CosmosException ex)
             {
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-                _logger.LogError(ex, "Cosmos room get by name failed {Room}", name);
+                // Removed user-supplied room name from log to avoid disclosure/log forging risk
+                _logger.LogError(ex, "Cosmos room get by name failed");
                 throw;
             }
         }
@@ -256,7 +281,7 @@ namespace Chat.Web.Repositories
             catch (CosmosException ex)
             {
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-                _logger.LogError(ex, "Cosmos message create failed {Room}", pk);
+                _logger.LogError(ex, "Cosmos message create failed {Room}", LogSanitizer.Sanitize(pk));
                 throw;
             }
             return message;
@@ -278,7 +303,7 @@ namespace Chat.Web.Repositories
                 catch (CosmosException ex)
                 {
                     activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-                    _logger.LogError(ex, "Cosmos message delete failed {Id}", id);
+                    _logger.LogError(ex, "Cosmos message delete failed {Id}", id); // id is integer; no sanitization needed
                     throw;
                 }
             }
@@ -331,7 +356,8 @@ namespace Chat.Web.Repositories
             catch (CosmosException ex)
             {
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-                _logger.LogError(ex, "Cosmos recent messages failed {Room}", roomName);
+                // Removed user-supplied room name from log
+                _logger.LogError(ex, "Cosmos recent messages failed");
                 throw;
             }
         }
@@ -363,7 +389,8 @@ namespace Chat.Web.Repositories
             catch (CosmosException ex)
             {
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-                _logger.LogError(ex, "Cosmos messages before failed {Room}", roomName);
+                // Removed user-supplied room name from log
+                _logger.LogError(ex, "Cosmos messages before failed");
                 throw;
             }
         }

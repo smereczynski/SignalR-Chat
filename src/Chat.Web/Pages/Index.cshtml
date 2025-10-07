@@ -72,12 +72,12 @@
         </div>
         <div class="message-input-container">
             <input id="message-input" type="text" value="" maxlength="500" placeholder="What's on your mind?" />
-            <div class="actions d-flex align-items-center">
+            <div class="actions d-flex align-items-center gap-2">
+                <span id="queue-badge" class="badge bg-secondary d-none" title="Messages waiting to send">0</span>
                 <a role="button" id="btn-send-message">
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-send"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
                 </a>
             </div>
-            
         </div>
     </div>
     <div class="users-container">
@@ -111,7 +111,7 @@
 @section Scripts {
     <script src="~/lib/microsoft-signalr/signalr.min.js"></script>
     <script src="~/js/site.js" asp-append-version="true"></script>
-    <script src="~/js/chat.js" asp-append-version="true"></script>
+    <script src="~/js/dist/chat.js" asp-append-version="true"></script>
 }
 
 <!-- OTP Login Modal -->
