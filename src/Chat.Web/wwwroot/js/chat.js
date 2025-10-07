@@ -55,7 +55,7 @@
   els.roomsPanel = document.querySelector('[data-role="room-panel"]');
   els.usersCount = document.getElementById('users-count');
   els.queueBadge = document.getElementById('queue-badge');
-  els.connectionBanners = Array.from(document.querySelectorAll('[data-role="connection-banner"]'));
+  els.roomHeader = document.querySelector('.main-content[data-role="room-panel"] .header');
   }
 
   function setLoading(v){
@@ -64,33 +64,30 @@
     if(els.app) els.app.classList.toggle('d-none', v);
   }
 
-  // --------------- Connection Banner ---------------
-  function updateConnectionBanner(status){
-    if(!els.connectionBanners || !els.connectionBanners.length) return;
-    els.connectionBanners.forEach(b=>{
-      b.classList.remove('d-none','status-connected','status-reconnecting','status-disconnected','fade-out');
-      let text='';
-      switch(status){
-        case 'connected':
-          b.classList.add('status-connected');
-          text='Connected';
-          // Auto fade after short delay
-          setTimeout(()=>{ if(b.classList.contains('status-connected')) b.classList.add('fade-out'); }, 1800);
-          break;
-        case 'reconnecting':
-          b.classList.add('status-reconnecting');
-          text='Reconnecting…';
-          break;
-        case 'disconnected':
-          b.classList.add('status-disconnected');
-          text='Disconnected';
-          break;
-        case 'hidden':
-          b.classList.add('d-none');
-          return;
-      }
-      b.textContent = text;
-    });
+  // --------------- Connection Visual (header color) ---------------
+  function applyConnectionVisual(stateName){
+    if(!els.roomHeader) return;
+    els.roomHeader.classList.remove('connection-state-connected','connection-state-reconnecting','connection-state-disconnected');
+    switch(stateName){
+      case 'connected':
+        els.roomHeader.classList.add('connection-state-connected'); break;
+      case 'reconnecting':
+        els.roomHeader.classList.add('connection-state-reconnecting'); break;
+      case 'disconnected':
+        els.roomHeader.classList.add('connection-state-disconnected'); break;
+    }
+  }
+  function computeConnectionState(){
+    if(!hub) return 'disconnected';
+    const stateStr = hub.state && hub.state.toLowerCase ? hub.state.toLowerCase() : '';
+    if(stateStr==='connected') return 'connected';
+    if(stateStr==='connecting') return 'reconnecting';
+    if(stateStr==='reconnecting') return 'reconnecting';
+    return 'disconnected';
+  }
+  function startConnectionStateLoop(){
+    // Poll every 2.5s to catch any missed transitions (safety net)
+    setInterval(()=>{ applyConnectionVisual(computeConnectionState()); }, 2500);
   }
 
   // --------------- Rendering ---------------
@@ -183,12 +180,12 @@
   function startHub(){
     ensureHub();
     log('info','signalr.start');
-    updateConnectionBanner('reconnecting'); // initial connecting state
+  applyConnectionVisual('reconnecting'); // initial connecting state
     const startedAt = performance.now();
     return hub.start().then(()=>{
       reconnectAttempts=0; lastReconnectError=null; loadRooms();
       postTelemetry('hub.connected',{durationMs: Math.round(performance.now()-startedAt)});
-      updateConnectionBanner('connected');
+  applyConnectionVisual('connected');
       // Fallback: if we already have a profile (from /api/auth/me) but still showing loading because getProfileInfo hasn't fired, hide loader.
       if(state.profile && state.loading){ setLoading(false); }
     }).catch(err=>{ log('error','signalr.start.fail',{error:err&&err.message}); postTelemetry('hub.connect.fail',{message: (err&&err.message)||''}); scheduleReconnect(err); });
@@ -201,7 +198,7 @@
     if(err) lastReconnectError=err;
     reconnectAttempts++;
     const delay=Math.min(1000*Math.pow(2,reconnectAttempts), maxBackoff);
-    updateConnectionBanner('reconnecting');
+  applyConnectionVisual('reconnecting');
     const {cat,msg}=classifyError(lastReconnectError);
     postTelemetry('hub.connect.retry',{
       attempt: reconnectAttempts,
@@ -250,10 +247,10 @@
           hub.invoke('GetUsers', state.joinedRoom.name).then(users=>{ state.users = users; renderUsers(); });
         }
       } catch(_){ }
-      updateConnectionBanner('connected');
+  applyConnectionVisual('connected');
     });
-    c.onreconnecting(err => { log('warn','hub.reconnecting', {message: err && err.message}); });
-    c.onclose(()=> { updateConnectionBanner('disconnected'); });
+  c.onreconnecting(err => { log('warn','hub.reconnecting', {message: err && err.message}); applyConnectionVisual('reconnecting'); });
+  c.onclose(()=> { applyConnectionVisual('disconnected'); });
     // Other hub-driven mutations
     c.on('addUser', u=> upsertUser(u));
     c.on('removeUser', u=> removeUser(u.userName));
@@ -535,7 +532,7 @@
   function persistOutbox(){
     try { sessionStorage.setItem('chat.outbox', JSON.stringify(state.outbox)); } catch(_) {}
   }
-  document.addEventListener('DOMContentLoaded',()=>{ cacheDom(); loadOutbox(); setLoading(true); probeAuth(); wireUi(); });
+  document.addEventListener('DOMContentLoaded',()=>{ cacheDom(); loadOutbox(); setLoading(true); probeAuth(); wireUi(); startConnectionStateLoop(); });
   // Fail-safe: if something throws during early init, show the app with a generic error.
   window.addEventListener('error', function(){
     if(state.loading){ setLoading(false); }

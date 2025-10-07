@@ -427,25 +427,13 @@ body {
   background-color: white;
 }
 
-/* Connection status banner */
-.connection-banner {
-  height: 50px; /* match .header height */
-  min-height: 50px;
-  display: flex;
-  align-items: center;
-  padding: 0 14px;
-  font-size: 14px;
-  font-weight: 500;
-  letter-spacing: .5px;
-  border-bottom: 1px solid #eee;
-  position: relative;
-  z-index: 5;
-  transition: background-color 180ms ease-in-out, color 180ms ease-in-out, opacity 180ms ease-in-out;
-}
-.connection-banner.status-connected { background:#1d7f42; color:#fff; }
-.connection-banner.status-reconnecting { background:#c98607; color:#fff; }
-.connection-banner.status-disconnected { background:#b52424; color:#fff; }
-.connection-banner.fade-out { opacity:0; pointer-events:none; }
+/* Connection state coloring for room header */
+.main-content .header.connection-state-connected { background:#66b97a; transition: background-color 160ms ease-in-out; }
+.main-content .header.connection-state-reconnecting { background:#e0b75c; }
+.main-content .header.connection-state-disconnected { background:#d08d8d; }
+.main-content .header.connection-state-connected h5,
+.main-content .header.connection-state-reconnecting h5,
+.main-content .header.connection-state-disconnected h5 { color:#1d1d1d; }
 
 .disabled-link {
   pointer-events: none;
