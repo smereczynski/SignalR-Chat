@@ -9,9 +9,32 @@ using Chat.Web.Options;
 using System.Diagnostics;
 using Chat.Web.Observability;
 using Microsoft.Extensions.Logging;
+using System.Text;
 
 namespace Chat.Web.Repositories
 {
+    internal static class LogSanitizer
+    {
+        // Remove characters that could forge new log lines or control terminal output.
+        // Limits length to a reasonable size to avoid log spam amplification.
+        public static string Sanitize(string input, int max = 200)
+        {
+            if (string.IsNullOrEmpty(input)) return input ?? string.Empty;
+            var sb = new StringBuilder(input.Length);
+            foreach (var ch in input)
+            {
+                if (ch == '\r' || ch == '\n') continue; // drop new lines entirely
+                if (char.IsControl(ch)) continue; // remove other control chars (tabs, etc.)
+                sb.Append(ch);
+                if (sb.Length >= max)
+                {
+                    sb.Append("…");
+                    break;
+                }
+            }
+            return sb.ToString();
+        }
+    }
     public class CosmosClients
     {
         public CosmosClient Client { get; }
@@ -118,7 +141,7 @@ namespace Chat.Web.Repositories
             catch (CosmosException ex)
             {
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-                _logger.LogError(ex, "Cosmos user lookup failed {User}", userName);
+                _logger.LogError(ex, "Cosmos user lookup failed {User}", LogSanitizer.Sanitize(userName));
                 throw;
             }
         }
@@ -136,7 +159,7 @@ namespace Chat.Web.Repositories
             catch (CosmosException ex)
             {
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-                _logger.LogError(ex, "Cosmos user upsert failed {User}", user.UserName);
+                _logger.LogError(ex, "Cosmos user upsert failed {User}", LogSanitizer.Sanitize(user.UserName));
                 throw;
             }
         }
@@ -220,7 +243,7 @@ namespace Chat.Web.Repositories
             catch (CosmosException ex)
             {
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-                _logger.LogError(ex, "Cosmos room get by name failed {Room}", name);
+                _logger.LogError(ex, "Cosmos room get by name failed {Room}", LogSanitizer.Sanitize(name));
                 throw;
             }
         }
@@ -256,7 +279,7 @@ namespace Chat.Web.Repositories
             catch (CosmosException ex)
             {
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-                _logger.LogError(ex, "Cosmos message create failed {Room}", pk);
+                _logger.LogError(ex, "Cosmos message create failed {Room}", LogSanitizer.Sanitize(pk));
                 throw;
             }
             return message;
@@ -278,7 +301,7 @@ namespace Chat.Web.Repositories
                 catch (CosmosException ex)
                 {
                     activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-                    _logger.LogError(ex, "Cosmos message delete failed {Id}", id);
+                    _logger.LogError(ex, "Cosmos message delete failed {Id}", id); // id is integer; no sanitization needed
                     throw;
                 }
             }
@@ -331,7 +354,7 @@ namespace Chat.Web.Repositories
             catch (CosmosException ex)
             {
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-                _logger.LogError(ex, "Cosmos recent messages failed {Room}", roomName);
+                _logger.LogError(ex, "Cosmos recent messages failed {Room}", LogSanitizer.Sanitize(roomName));
                 throw;
             }
         }
@@ -363,7 +386,7 @@ namespace Chat.Web.Repositories
             catch (CosmosException ex)
             {
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-                _logger.LogError(ex, "Cosmos messages before failed {Room}", roomName);
+                _logger.LogError(ex, "Cosmos messages before failed {Room}", LogSanitizer.Sanitize(roomName));
                 throw;
             }
         }
