@@ -49,7 +49,7 @@
     </div>
     <div class="main-content d-none" data-role="room-panel">
         <div class="header">
-            <h5 id="joinedRoom">Lobby</h5>
+            <h5 id="joinedRoom"></h5>
             <div class="room-actions" data-role="room-actions"></div>
         </div>
         <div class="messages-container position-relative">
@@ -109,9 +109,7 @@
 
 
 @section Scripts {
-    <script src="~/lib/microsoft-signalr/signalr.min.js"></script>
-    <script src="~/js/site.js" asp-append-version="true"></script>
-    <script src="~/js/dist/chat.js" asp-append-version="true"></script>
+    <!-- Use scripts provided in _Layout per environment. Removed duplicate direct dist/chat.js include. -->
 }
 
 <!-- OTP Login Modal -->
