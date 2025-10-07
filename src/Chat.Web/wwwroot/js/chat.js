@@ -456,13 +456,14 @@
     const text=(els.messageInput && els.messageInput.value||'').trim(); if(!text) return;
     // Require profile; if absent, show explicit message
     if(!state.profile){
-      // If auth probing is in progress, queue instead of erroring to avoid user confusion.
-      if(state.authProbing){
+      // While loading spinner visible or auth probing, optimistically queue.
+      if(state.loading || state.authProbing){
         queueOutbound(text);
-        postTelemetry('send.queue',{reason:'authProbing', size: state.outbox.length});
+        postTelemetry('send.queue',{reason: state.loading ? 'loadingUI' : 'authProbing', size: state.outbox.length});
         if(els.messageInput) els.messageInput.value='';
         return;
       }
+      // If we reach here, probe finished and user truly unauthenticated.
       showError('Not signed in.');
       return;
     }
