@@ -40,6 +40,7 @@ using OpenTelemetry.Metrics;
 using OpenTelemetry.Logs;
 using System.Diagnostics.Metrics;
 using OpenTelemetry.Instrumentation.Runtime;
+using OpenTelemetry.Instrumentation.StackExchangeRedis;
 
 namespace Chat.Web
 {
@@ -150,28 +151,9 @@ namespace Chat.Web
     public void ConfigureServices(IServiceCollection services)
         {
             var inMemoryTest = string.Equals(Configuration["Testing:InMemory"], "true", StringComparison.OrdinalIgnoreCase);
-            // OpenTelemetry Tracing
+            // Defer OpenTelemetry registration until after external clients (Cosmos, Redis) are registered
             var otlpEndpoint = Configuration["OTel:OtlpEndpoint"]; // e.g. http://localhost:4317 or https://otlp.yourdomain:4317
             var assemblyVersion = typeof(Startup).Assembly.GetName().Version?.ToString() ?? "unknown";
-            services.AddOpenTelemetry()
-                .ConfigureResource(rb => rb.AddService(Tracing.ServiceName, serviceVersion: assemblyVersion))
-                .WithTracing(builder =>
-                {
-                    builder.AddSource(Tracing.ServiceName);
-                    try {
-                        builder.AddAspNetCoreInstrumentation();
-                        builder.AddHttpClientInstrumentation();
-                    } catch { }
-                    AddSelectedExporter(builder, otlpEndpoint, Configuration);
-                })
-                .WithMetrics(builder =>
-                {
-                    builder.AddRuntimeInstrumentation();
-              builder.AddAspNetCoreInstrumentation()
-                  .AddHttpClientInstrumentation()
-                           .AddMeter(Metrics.InstrumentationName);
-                    AddSelectedExporter(builder, otlpEndpoint, Configuration);
-                });
 
             // OpenTelemetry logging provider (simple; Serilog remains primary)
             services.AddLogging(lb =>
@@ -283,6 +265,36 @@ namespace Chat.Web
             // Seeding service (runs once at startup)
             // Background service: seeds default room/users if they do not yet exist (idempotent on restart).
             services.AddHostedService<DataSeedHostedService>();
+            // Now that external dependencies (Cosmos client, Redis multiplexer) are registered, configure OpenTelemetry
+            services.AddOpenTelemetry()
+                .ConfigureResource(rb => rb.AddService(Tracing.ServiceName, serviceVersion: assemblyVersion))
+                .WithTracing(builder =>
+                {
+                    builder.AddSource(Tracing.ServiceName);
+                    try
+                    {
+                        builder.AddAspNetCoreInstrumentation();
+                        builder.AddHttpClientInstrumentation();
+                        // Redis instrumentation (dependency spans for StackExchange.Redis) is only enabled
+                        // when running against real Redis (not in Testing:InMemory mode) because the
+                        // instrumentation extension resolves IConnectionMultiplexer from DI at provider
+                        // build time. In integration tests we deliberately do not register Redis.
+                        if (!string.Equals(Configuration["Testing:InMemory"], "true", StringComparison.OrdinalIgnoreCase))
+                        {
+                            builder.AddRedisInstrumentation();
+                        }
+                    }
+                    catch { }
+                    AddSelectedExporter(builder, otlpEndpoint, Configuration);
+                })
+                .WithMetrics(builder =>
+                {
+                    builder.AddRuntimeInstrumentation();
+                    builder.AddAspNetCoreInstrumentation()
+                           .AddHttpClientInstrumentation()
+                           .AddMeter(Metrics.InstrumentationName);
+                    AddSelectedExporter(builder, otlpEndpoint, Configuration);
+                });
             services.AddLogging(logging =>
             {
                 logging.AddFilter("Microsoft.AspNetCore.SignalR", LogLevel.Information);
