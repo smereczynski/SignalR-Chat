@@ -12,7 +12,7 @@
     "build:prod": "npm run build && npm run bundle:js"
   },
   "devDependencies": {
-    "esbuild": "^0.23.1",
+    "esbuild": "^0.25.0",
     "sass": "^1.77.0"
   },
   "dependencies": {
