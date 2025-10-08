@@ -25,7 +25,8 @@ namespace Chat.IntegrationTests
                     // Test-tuned rate limiter (fast window for deterministic rejection & quick reset)
                     ["RateLimiting:Auth:PermitLimit"] = "5",
                     ["RateLimiting:Auth:WindowSeconds"] = "5",
-                    ["RateLimiting:Auth:QueueLimit"] = "0"
+                    ["RateLimiting:Auth:QueueLimit"] = "0",
+                    ["Features:EnableRestPostMessages"] = "true"
                 };
                 config.AddInMemoryCollection(dict!);
             });

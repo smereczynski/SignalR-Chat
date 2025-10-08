@@ -21,7 +21,9 @@ namespace Chat.Web.Controllers
     [Route("api/[controller]")]
     [ApiController]
     /// <summary>
-    /// REST endpoints for querying chat messages (GET only). All message creation occurs exclusively via the SignalR hub.
+    /// REST endpoints for querying chat messages. A lightweight POST is (re)introduced primarily for
+    /// integration tests and extremely early user interactions (the race right after authentication
+    /// before the SignalR hub is fully ready). The authoritative/normal realtime path remains the hub.
     /// </summary>
     public class MessagesController : ControllerBase
     {
@@ -126,6 +128,80 @@ namespace Chat.Web.Controllers
             return Ok(items);
         }
 
-        // Note: POST creation removed. All message creation flows through SignalR hub methods.
+        /// <summary>
+        /// Create a message in a room (fallback path used by tests / immediate post after auth race mitigation).
+        /// Still broadcasts over the hub for consistency with realtime clients.
+        /// </summary>
+        public class CreateMessageDto
+        {
+            public string Room { get; set; }
+            public string Content { get; set; }
+            public string CorrelationId { get; set; }
+        }
+
+        [HttpPost]
+        public IActionResult Post([FromBody] CreateMessageDto dto)
+        {
+            // Feature flag: disable REST creation path unless explicitly enabled (tests / emergency fallback)
+            var enabled = string.Equals(_configuration["Features:EnableRestPostMessages"], "true", StringComparison.OrdinalIgnoreCase);
+            if (!enabled)
+            {
+                return NotFound(); // Pretend endpoint absent in production
+            }
+            if (dto == null || string.IsNullOrWhiteSpace(dto.Room) || string.IsNullOrWhiteSpace(dto.Content))
+                return BadRequest();
+
+            var room = _rooms.GetByName(dto.Room);
+            if (room == null)
+                return NotFound();
+
+            // Basic authz: ensure user profile allows this room when FixedRooms is defined.
+            var user = _users.GetByUserName(User?.Identity?.Name);
+            if (user?.FixedRooms != null && user.FixedRooms.Any() && !user.FixedRooms.Contains(room.Name))
+            {
+                return Forbid();
+            }
+
+            // Sanitize (strip tags) similar to hub path.
+            var sanitized = Regex.Replace(dto.Content, @"<.*?>", string.Empty);
+            var message = new Message
+            {
+                Content = sanitized,
+                FromUser = user,
+                ToRoom = room,
+                Timestamp = DateTime.UtcNow
+            };
+            try
+            {
+                message = _messages.Create(message);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "REST message create failed user={User} room={Room}", User?.Identity?.Name, room.Name);
+                return StatusCode(StatusCodes.Status500InternalServerError);
+            }
+
+            var vm = new MessageViewModel
+            {
+                Id = message.Id,
+                Content = message.Content,
+                FromUserName = message.FromUser?.UserName,
+                FromFullName = message.FromUser?.FullName,
+                Avatar = message.FromUser?.Avatar,
+                Room = room.Name,
+                Timestamp = message.Timestamp,
+                CorrelationId = dto.CorrelationId
+            };
+
+            // Fire-and-forget hub broadcast (do not block API latency on network fan-out)
+            _ = _hubContext.Clients.Group(room.Name).SendAsync("newMessage", vm);
+            _metrics.IncMessagesSent();
+
+            if (UseManualSerialization)
+            {
+                return ManualJson(vm, StatusCodes.Status201Created, $"/api/Messages/{vm.Id}");
+            }
+            return Created($"/api/Messages/{vm.Id}", vm);
+        }
     }
 }
