@@ -81,6 +81,12 @@ Console output displays the OTP when ACS is not configured.
 3. Client reconciles optimistic entry (replaces temp rendering)
 4. If offline/disconnected: message stored in sessionStorage outbox until reconnect & room join
 
+### REST Fallback (Feature-Flagged)
+A narrow REST POST endpoint (`POST /api/Messages`) exists solely to satisfy the
+"immediate post after authentication" integration scenario and is **disabled by default**.
+It can be enabled by setting configuration key `Features:EnableRestPostMessages=true` (tests do this via the custom factory).
+In production the endpoint returns 404, encouraging clients to use only the SignalR hub path.
+
 ## Telemetry & Metrics
 Exporter selection (in `Startup`) prioritizes: Azure Monitor (when Production + connection string) → OTLP endpoint → Console.
 
