@@ -40,5 +40,7 @@
     <PackageReference Include="Azure.Monitor.OpenTelemetry.Exporter" Version="1.0.0" />
   <!-- Metrics & Logs -->
   <PackageReference Include="OpenTelemetry.Instrumentation.Runtime" Version="1.9.0" />
+  <!-- Additional dependency instrumentation -->
+  <PackageReference Include="OpenTelemetry.Instrumentation.StackExchangeRedis" Version="1.0.0-rc9" />
   </ItemGroup>
 </Project>
