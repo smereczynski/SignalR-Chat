@@ -19,7 +19,7 @@ namespace Chat.Web.Repositories
         // Limits length to a reasonable size to avoid log spam amplification.
         public static string Sanitize(string input, int max = 200)
         {
-            if (string.IsNullOrEmpty(input)) return input ?? string.Empty;
+            if (string.IsNullOrEmpty(input)) return string.Empty;
             var sb = new StringBuilder(input.Length);
             foreach (var ch in input)
             {

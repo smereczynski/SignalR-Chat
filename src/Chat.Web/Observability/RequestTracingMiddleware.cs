@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
+using Chat.Web.Repositories; // for LogSanitizer
 
 namespace Chat.Web.Observability
 {
@@ -47,7 +48,10 @@ namespace Chat.Web.Observability
                 {
                     activity.SetStatus(ActivityStatusCode.Error, ex.Message);
                 }
-                _logger.LogError(ex, "Unhandled exception processing {Method} {Path}", context.Request.Method, path);
+                // Sanitize user-controlled values before logging to prevent log forging (CWE-117)
+                var safeMethod = LogSanitizer.Sanitize(context.Request.Method, max: 16);
+                var safePath = LogSanitizer.Sanitize(path);
+                _logger.LogError(ex, "Unhandled exception processing \"{Method}\" \"{Path}\"", safeMethod, safePath);
                 throw;
             }
             finally

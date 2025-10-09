@@ -1,166 +1,23 @@
 ﻿@page
 @model IndexModel
 
-<div class="alert alert-warning alert-dismissible d-none" id="errorAlert" role="alert" data-role="error-alert">
-    <span id="errorAlertMessage"></span>
-    <button type="button" class="btn-close" aria-label="Close"></button>
-</div>
-
-<div class="d-flex flex-column justify-content-center align-items-center vh-100" data-role="loading-wrapper">
-    <div class="spinner-border text-primary" role="status">
-        <span class="visually-hidden">Loading...</span>
-    </div>
-</div>
-
-<div class="app d-none" data-role="app-root">
-    <div class="sidebar">
-        <div class="header">
-            <h5>Chat Rooms</h5>
-            <div class="actions">
-                <a role="button" class="ms-3" id="expand-users-list">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-users"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
-                </a>
-                <a role="button" id="expand-sidebar">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-menu"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
-                </a>
-            </div>
-        </div>
-        <ul class="rooms list-unstyled" id="rooms-list" data-role="rooms-list">
-            <li>
-                <a href="#" data-roomId="" data-role="room-link"></a>
-            </li>
-        </ul>
-        <div class="profile">
-            <div class="d-flex align-items-center flex-grow-1">
-                <span class="avatar me-2 text-uppercase d-none" id="profileAvatarInitial">?</span>
-                <img class="avatar me-2 d-none" id="profileAvatarImg" />
-                <span id="profileName">Not signed in</span>
-            </div>
-            <div>
-                <button type="button" id="btn-login" class="btn-sign-in" data-bs-toggle="modal" data-bs-target="#otp-login-modal">Sign In</button>
-                <button type="button" id="btn-logout" class="btn-sign-out d-none">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-log-out"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
-                </button>
-            </div>
-        </div>
-    </div>
-    <div class="main-content" data-role="no-room-selected">
-        <span class="m-auto">Please select room to join!</span>
-    </div>
-    <div class="main-content d-none" data-role="room-panel">
-        <div class="header">
-            <h5 id="joinedRoom"></h5>
-            <div class="room-actions" data-role="room-actions"></div>
-        </div>
-        <div class="messages-container position-relative">
-            <div class="no-messages-info">There are no messages.</div>
-            <ul class="list-unstyled" id="messages-list" data-role="messages-list">
-                <li>
-                    <div class="message-item">
-                        <span class="avatar avatar-lg mx-2 text-uppercase d-none"></span>
-                        <img class="avatar avatar-lg mx-2 d-none" />
-                        <div class="message-content">
-                            <div class="message-info d-flex flex-wrap align-items-center">
-                                <span class="author"></span>
-                                <span class="timestamp" data-bs-toggle="tooltip" data-bs-placement="top"></span>
-                            </div>
-                            <div class="content"></div>
-                        </div>
-                    </div>
-                </li>
-            </ul>
-        </div>
-        <div class="message-input-container">
-            <input id="message-input" type="text" value="" maxlength="500" placeholder="What's on your mind?" />
-            <div class="actions d-flex align-items-center gap-2">
-                <span id="queue-badge" class="badge bg-secondary d-none" title="Messages waiting to send">0</span>
-                <a role="button" id="btn-send-message">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-send"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
-                </a>
-            </div>
-        </div>
-    </div>
-    <div class="users-container">
-        <div class="header">
-            <h5>Who's Here (<span id="users-count">0</span>)</h5>
-        </div>
-        <ul class="list-unstyled flex-grow-1" id="users-list" data-role="users-list">
-            <li>
-                <div class="user">
-                    <span class="avatar me-2 text-uppercase d-none"></span>
-                    <img class="avatar me-2 d-none" />
-                    <div class="user-info">
-                        <span class="name"></span>
-                        <span class="device"></span>
-                    </div>
-                </div>
-            </li>
-        </ul>
-        <div class="position-relative search-container text-secondary">
-            <input type="text" class="" placeholder="Search" />
-            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-        </div>
-    </div>
-</div>
-
-<!-- Dynamic room management (create/rename/delete) removed: rooms are now static & predefined -->
-
-
-@section Scripts {
-    <!-- Use scripts provided in _Layout per environment. Removed duplicate direct dist/chat.js include. -->
+@{
+    var isAuth = User?.Identity?.IsAuthenticated == true;
 }
 
-<!-- OTP Login Modal -->
-<div class="modal fade" id="otp-login-modal" tabindex="-1" aria-labelledby="otpLoginModalLabel" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="otpLoginModalLabel">Sign in</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body" id="otpContainer" data-otp-timeout-ms="8000" data-otp-retry-cooldown-ms="5000" data-otp-resend-delay-ms="300000">
-                <div id="otp-step1">
-                    <div class="mb-2">
-                        <label for="otpUserName" class="form-label">User</label>
-                        <select class="form-select" id="otpUserName">
-                            <option value="" selected disabled>Loading users...</option>
-                        </select>
-                        <div class="form-text">Pick a demo user to receive the OTP (sent to stored email & mobile).</div>
-                    </div>
-                    <button type="button" class="btn btn-primary" id="btn-send-otp">Send code</button>
-                </div>
-                <div id="otp-step2" class="d-none">
-                    <div class="mb-2">
-                        <label for="otpCode" class="form-label">Code</label>
-                        <input type="text" class="form-control" id="otpCode" placeholder="6-digit code" />
-                        <div class="form-text">
-                            Code expires in 5 minutes. <button type="button" id="btn-resend-otp" class="btn btn-link p-0 align-baseline" disabled>Resend</button>
-                        </div>
-                    </div>
-                    <button type="button" class="btn btn-primary" id="btn-verify-otp">Verify</button>
-                </div>
-                <div id="otpSendingIndicator" class="mt-2 small d-none fade-soft">
-                        <div data-state="sending" class="d-flex align-items-center">
-                            <div class="spinner-border spinner-border-sm me-2" role="status">
-                                <span class="visually-hidden">Sending...</span>
-                            </div>
-                            <span>Sending code (<span id="otpSendCountdown">0</span>s)...</span>
-                        </div>
-                        <div data-state="success" class="d-flex align-items-center text-success d-none">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="me-2" viewBox="0 0 16 16"><path d="M13.485 1.929a1.25 1.25 0 0 1 0 1.768l-6.93 6.93-3.09-3.09a1.25 1.25 0 1 1 1.768-1.768l1.322 1.322 5.162-5.162a1.25 1.25 0 0 1 1.768 0z"/></svg>
-                            <span>Sent to email & mobile</span>
-                        </div>
-                        <div data-state="error" class="d-flex align-items-center text-danger d-none">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="me-2" viewBox="0 0 16 16"><path d="M8.982 1.566a1.13 1.13 0 0 0-1.964 0L.165 13.233c-.457.778.091 1.767.982 1.767h13.706c.89 0 1.438-.99.982-1.767L8.982 1.566zM8 5c.535 0 .954.462.9.995l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 5.995A.905.905 0 0 1 8 5zm.002 6a1 1 0 1 1 0 2 1 1 0 0 1 0-2z"/></svg>
-                            <span class="me-2">Failed to send</span>
-                            <a href="#" id="otpRetryLink" class="disabled-link" data-cooldown-left="0">Retry</a>
-                            <span class="ms-2 text-muted small" id="otpRetryCountdown"></span>
-                        </div>
-                    </div>
-                <div class="text-danger mt-2 d-none" id="otpError"></div>
-            </div>
-        </div>
+<div class="container py-5">
+  <div class="row justify-content-center">
+    <div class="col-md-8 text-center">
+      <h1 class="mb-3">SignalR Chat</h1>
+  <p class="text-muted">Real-time chat application.</p>
+      @if (isAuth)
+      {
+          <a class="btn btn-primary" href="/chat">Go to Chat</a>
+      }
+      else
+      {
+          <a class="btn btn-primary" href="/login?ReturnUrl=%2Fchat">Sign in to continue</a>
+      }
     </div>
-    </div>
+  </div>
+</div>

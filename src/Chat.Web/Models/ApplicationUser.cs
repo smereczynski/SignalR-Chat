@@ -4,7 +4,7 @@ namespace Chat.Web.Models
 {
     /// <summary>
     /// Lightweight user profile used for authentication, presence display and message attribution.
-    /// Extended with fixed channel membership and basic contact details (email/mobile) for demo seeding.
+    /// Extended with fixed channel membership and basic contact details (email/mobile) to support notifications and seeding.
     /// </summary>
     public class ApplicationUser
     {

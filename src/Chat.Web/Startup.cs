@@ -255,9 +255,12 @@ namespace Chat.Web
                 services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
                     .AddCookie(options =>
                     {
-                        options.LoginPath = "/"; // the SPA handles login UI
-                        options.AccessDeniedPath = "/";
+                        // Redirect unauthenticated users to dedicated login page
+                        options.LoginPath = "/login";
+                        options.AccessDeniedPath = "/login";
                         options.SlidingExpiration = true;
+                        // Preserve ReturnUrl to bounce back to the originally requested page (/chat by default)
+                        options.ReturnUrlParameter = "ReturnUrl";
                     });
             }
             // SignalR transport: use Azure in normal mode, in-memory during tests
