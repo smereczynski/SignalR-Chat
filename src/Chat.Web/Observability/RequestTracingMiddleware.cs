@@ -51,7 +51,7 @@ namespace Chat.Web.Observability
                 // Sanitize user-controlled values before logging to prevent log forging (CWE-117)
                 var safeMethod = LogSanitizer.Sanitize(context.Request.Method, max: 16);
                 var safePath = LogSanitizer.Sanitize(path);
-                _logger.LogError(ex, "Unhandled exception processing {Method} {Path}", safeMethod, safePath);
+                _logger.LogError(ex, "Unhandled exception processing \"{Method}\" \"{Path}\"", safeMethod, safePath);
                 throw;
             }
             finally
