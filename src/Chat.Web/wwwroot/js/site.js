@@ -180,6 +180,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const sendBtn = document.getElementById('btn-send-otp');
         if (sendBtn && sendBtn.disabled && !isResend) return; // prevent duplicate primary sends
         const resendBtn = document.getElementById('btn-resend-otp');
+        // Acquire container first, then read configured attributes from it
+        const container = document.getElementById('otpContainer');
         // Enforce resend delay window (default 5 min via data-otp-resend-delay-ms)
         const resendDelayMs = parseInt(container?.getAttribute('data-otp-resend-delay-ms')||'300000',10);
         flow.firstSendAt = flow.firstSendAt || 0;
@@ -196,7 +198,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         // Config
-        const container = document.getElementById('otpContainer');
     // Backend/network hard timeout (29s) while UI shows a full 30s countdown for cleaner UX
     const rawTimeoutMs = parseInt(container?.getAttribute('data-otp-timeout-ms')||'29000',10);
     const timeoutMs = rawTimeoutMs; // abort / fetch timeout threshold
