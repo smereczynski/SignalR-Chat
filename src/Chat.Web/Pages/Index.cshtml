@@ -120,7 +120,7 @@
                 <h5 class="modal-title" id="otpLoginModalLabel">Sign in</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <div class="modal-body" id="otpContainer" data-otp-timeout-ms="8000" data-otp-retry-cooldown-ms="5000">
+            <div class="modal-body" id="otpContainer" data-otp-timeout-ms="8000" data-otp-retry-cooldown-ms="5000" data-otp-resend-delay-ms="300000">
                 <div id="otp-step1">
                     <div class="mb-2">
                         <label for="otpUserName" class="form-label">User</label>
@@ -136,7 +136,7 @@
                         <label for="otpCode" class="form-label">Code</label>
                         <input type="text" class="form-control" id="otpCode" placeholder="6-digit code" />
                         <div class="form-text">
-                            Code expires shortly. <button type="button" id="btn-resend-otp" class="btn btn-link p-0 align-baseline">Resend</button>
+                            Code expires in 5 minutes. <button type="button" id="btn-resend-otp" class="btn btn-link p-0 align-baseline" disabled>Resend</button>
                         </div>
                     </div>
                     <button type="button" class="btn btn-primary" id="btn-verify-otp">Verify</button>

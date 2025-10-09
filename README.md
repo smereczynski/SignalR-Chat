@@ -1,5 +1,5 @@
 # SignalR-Chat
-Real-time multi-room chat on .NET 9 using SignalR (in‑process hub), EF Core persistence, Redis for OTP codes (or in‑memory when testing), optional Azure SignalR (configured automatically when not in test mode), OpenTelemetry (traces + metrics + logs) and a small vanilla JavaScript client (bundled/minified).
+Real-time multi-room chat on .NET 9 using SignalR (in‑process hub), EF Core persistence, Redis for OTP codes (or in‑memory when testing), optional Azure SignalR (configured automatically when not in test mode), OpenTelemetry (traces + metrics + logs) and a small vanilla JavaScript client (bundled/minified). OTP codes are stored hashed by default using Argon2id with a per-code salt and an environment-supplied pepper.
 
 The project intentionally keeps scope tight: fixed public rooms, text messages only, no editing/deleting, and OTP-based demo authentication.
 
@@ -13,6 +13,7 @@ The project intentionally keeps scope tight: fixed public rooms, text messages o
 * OTP authentication (cookie session)
   * Demo users: `alice`, `bob`, `charlie`
   * OTP code stored in Redis (or in-memory store under test flag)
+  * Hashed storage by default (Argon2id + salt + pepper) with a versioned format
   * Console fallback delivery (ACS email/SMS supported only if configured)
 * Connection & reconnect telemetry (duplicate start suppression + backoff attempts counter)
 * OpenTelemetry traces + metrics + logs; custom counters for chat domain events
@@ -69,11 +70,24 @@ Never edit files under `wwwroot/js/dist/` directly—changes will be overwritten
 
 ## OTP Authentication (Summary)
 1. User selects demo identity and requests code
-2. Code persisted with TTL in configured OTP store
+2. Code persisted with TTL in configured OTP store; when hashing is enabled, the stored value has the format `OtpHash:v2:argon2id:...`
 3. User submits code; on success a cookie auth session is issued
 4. Client starts (or reuses) hub connection; queued optimistic messages (if any) flush
 
 Console output displays the OTP when ACS is not configured.
+
+### Hashing details
+- Algorithm: Argon2id (Isopoh.Cryptography.Argon2)
+- Format: `OtpHash:v2:argon2id:m={KB},t={it},p={par}:{saltB64}:{encoded}`
+- Preimage: `pepper || userName || ':' || salt || ':' || code`
+- Configuration via `Otp` options:
+  - `Otp:HashingEnabled` (default: true)
+  - `Otp:MemoryKB` (default: 65536), `Otp:Iterations` (default: 3), `Otp:Parallelism` (default: 1), `Otp:OutputLength` (default: 32)
+  - `Otp__Pepper` environment variable overrides `Otp:Pepper` and must be a Base64 string
+
+Testing notes:
+- Integration tests run with `Testing:InMemory=true` and a console OTP sender.
+- The verify endpoint isn’t invoked by tests due to a known test harness middleware interaction; tests assert storage format via the DI-resolved `IOtpStore`.
 
 ## Messaging Flow
 1. User sends → client assigns `correlationId`, renders optimistic message
@@ -100,7 +114,8 @@ Custom counters (Meter `Chat.Web`):
 Client emits lightweight events for: reconnect attempts, duplicate start skips, message send outcomes, pagination fetches, queue flushes.
 
 ## Security Notes
-* OTP codes stored plaintext in the chosen store (hashing can be added for stronger threat model)
+* OTP codes are stored hashed by default. To support legacy/testing scenarios, plaintext storage can be toggled with `Otp:HashingEnabled=false`.
+* Provide a high-entropy Base64 pepper via `Otp__Pepper` in each environment. Keep this secret out of source control.
 * Rate limiting applied to auth/OTP endpoints via fixed window limiter (configurable limits)
 * Correlation IDs are random UUIDs (no sensitive data embedded)
 
@@ -115,7 +130,7 @@ Client emits lightweight events for: reconnect attempts, duplicate start skips, 
 ## Future Enhancements (Not Implemented)
 * Presence / typing indicators
 * Backplane scale-out metrics & multi-instance benchmarks
-* Hashed OTP storage + additional anti-abuse policies
+* Additional anti-abuse policies for OTP attempts (per-user/IP counters in Redis)
 * Rich pagination UX (virtualization, skeleton loaders)
 
 ## License
