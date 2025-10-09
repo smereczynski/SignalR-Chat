@@ -1,0 +1,61 @@
+@page
+@model Chat.Web.Pages.LoginModel
+
+<div class="container py-5">
+  <div class="row justify-content-center">
+    <div class="col-sm-10 col-md-7 col-lg-5">
+      <div class="card shadow-sm">
+        <div class="card-body">
+          <h5 class="card-title mb-3">Sign in</h5>
+          <div id="otpContainer" data-otp-timeout-ms="8000" data-otp-retry-cooldown-ms="5000" data-otp-resend-delay-ms="300000">
+            <div id="otp-step1">
+              <div class="mb-2">
+                <label for="otpUserName" class="form-label">User</label>
+                <select class="form-select" id="otpUserName">
+                  <option value="" selected disabled>Loading users...</option>
+                </select>
+                <div class="form-text">Pick a demo user to receive the OTP (email & mobile).</div>
+              </div>
+              <button type="button" class="btn btn-primary" id="btn-send-otp">Send code</button>
+            </div>
+
+            <div id="otp-step2" class="d-none">
+              <div class="mb-2">
+                <label for="otpCode" class="form-label">Code</label>
+                <input type="text" class="form-control" id="otpCode" placeholder="6-digit code" />
+                <div class="form-text">
+                  Code expires in 5 minutes. <button type="button" id="btn-resend-otp" class="btn btn-link p-0 align-baseline" disabled>Resend</button>
+                </div>
+              </div>
+              <button type="button" class="btn btn-primary" id="btn-verify-otp">Verify</button>
+            </div>
+
+            <div id="otpSendingIndicator" class="mt-2 small d-none fade-soft">
+              <div data-state="sending" class="d-flex align-items-center">
+                <div class="spinner-border spinner-border-sm me-2" role="status"><span class="visually-hidden">Sending...</span></div>
+                <span>Sending code (<span id="otpSendCountdown">0</span>s)...</span>
+              </div>
+              <div data-state="success" class="d-flex align-items-center text-success d-none">
+                <span class="me-2">✔</span>
+                <span>Sent to email & mobile</span>
+              </div>
+              <div data-state="error" class="d-flex align-items-center text-danger d-none">
+                <span class="me-2">⚠</span>
+                <span class="me-2">Failed to send</span>
+                <a href="#" id="otpRetryLink" class="disabled-link" data-cooldown-left="0">Retry</a>
+                <span class="ms-2 text-muted small" id="otpRetryCountdown"></span>
+              </div>
+            </div>
+
+            <div class="text-danger mt-2 d-none" id="otpError"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+@section Scripts {
+  <script src="~/lib/bootstrap/js/bootstrap.bundle.min.js"></script>
+  <script src="~/js/login.js" asp-append-version="true"></script>
+}

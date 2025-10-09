@@ -141,6 +141,22 @@
 				"$msCompile"
 			],
 			"group": "build"
+		},
+		{
+			"label": "build web with new pages",
+			"type": "shell",
+			"command": "npm run build:prod && dotnet build ./src/Chat.sln --nologo",
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "re-bundle login.js",
+			"type": "shell",
+			"command": "npm run bundle:js",
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
 		}
 	]
 }
