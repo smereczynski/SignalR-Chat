@@ -17,9 +17,7 @@
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.10.0" />
   </ItemGroup>
   <!-- Keep lightweight by linking specific files where possible; also reference web project for Argon2 hasher tests -->
-  <ItemGroup>
-    <Compile Include="../../src/Chat.Web/Configuration/ConfigurationGuards.cs" Link="Configuration/ConfigurationGuards.cs" />
-  </ItemGroup>
+  <!-- Removed file link to avoid CS0436 duplicate type warnings; use the type from Chat.Web project reference instead. -->
   <ItemGroup>
     <ProjectReference Include="../../src/Chat.Web/Chat.Web.csproj" />
   </ItemGroup>
