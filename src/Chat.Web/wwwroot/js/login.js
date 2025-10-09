@@ -119,7 +119,16 @@
           const params = new URLSearchParams(window.location.search);
           const allowedPaths = ['/chat', '/profile', '/settings']; // add more valid paths as needed
           let ret = params.get('ReturnUrl');
-          if (!allowedPaths.includes(ret)) {
+          // Only allow exact matches to allowed paths, prohibiting query, fragments, encoding, schema, etc.
+          if (
+            !ret ||
+            typeof ret !== 'string' ||
+            !allowedPaths.includes(ret) ||
+            ret.includes('//') ||      // prohibit protocol-relative or absolute URLs
+            ret.includes(':')  ||      // prohibit any schema (e.g., http:)
+            ret.includes('?')  ||      // prohibit query string
+            ret.includes('#')          // prohibit fragment
+          ) {
             ret = '/chat';
           }
           window.location.href = ret;
