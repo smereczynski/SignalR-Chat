@@ -12,7 +12,7 @@ This document describes the high-level architecture of SignalR-Chat with focus o
 ## OTP authentication and hashing
 
 ### Goals
-- Avoid storing OTP codes in plaintext while preserving simple demo UX.
+- Avoid storing OTP codes in plaintext while preserving a simple UX.
 - Support a migration path from legacy plaintext values without breaking existing sessions.
 - Keep implementation configurable and versioned for future upgrades.
 
@@ -45,7 +45,7 @@ This document describes the high-level architecture of SignalR-Chat with focus o
   - Otherwise → Redis via `IConnectionMultiplexer` and `RedisOtpStore`
 - Sender selection:
   - If ACS configured → `AcsOtpSender`
-  - Else → `ConsoleOtpSender` (writes OTP to console for demo)
+  - Else → `ConsoleOtpSender` (writes OTP to console for local development)
 
 ### Controller behavior
 - `AuthController`:

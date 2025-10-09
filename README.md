@@ -1,7 +1,7 @@
 # SignalR-Chat
 Real-time multi-room chat on .NET 9 using SignalR (in‑process hub), EF Core persistence, Redis for OTP codes (or in‑memory when testing), optional Azure SignalR (configured automatically when not in test mode), OpenTelemetry (traces + metrics + logs) and a small vanilla JavaScript client (bundled/minified). OTP codes are stored hashed by default using Argon2id with a per-code salt and an environment-supplied pepper.
 
-The project intentionally keeps scope tight: fixed public rooms, text messages only, no editing/deleting, and OTP-based demo authentication.
+The project intentionally keeps scope tight: fixed public rooms, text messages only, no editing/deleting, and OTP-based authentication.
 
 ## Implemented Features (Current State)
 * Multi-room chat (fixed rooms: `general`, `ops`, `random`)
@@ -11,7 +11,7 @@ The project intentionally keeps scope tight: fixed public rooms, text messages o
 * Client-side send pacing (basic rate limiting logic in JS)
 * Avatar initials (derived client-side with cache bust/refresh protection)
 * OTP authentication (cookie session)
-  * Demo users: `alice`, `bob`, `charlie`
+  * Users: `alice`, `bob`, `charlie`
   * OTP code stored in Redis (or in-memory store under test flag)
   * Hashed storage by default (Argon2id + salt + pepper) with a versioned format
   * Console fallback delivery (ACS email/SMS supported only if configured)
@@ -23,7 +23,7 @@ The project intentionally keeps scope tight: fixed public rooms, text messages o
 * SessionStorage backed optimistic message reconciliation
 
 ## Fixed Room Topology
-Rooms are static; there is no runtime CRUD. The seeding hosted service ensures the three canonical rooms and demo users exist on startup.
+Rooms are static; there is no runtime CRUD. The seeding hosted service ensures the three canonical rooms and initial users exist on startup.
 
 ## Architecture Overview
 **Runtime**: ASP.NET Core 9 (Razor Pages + Controllers + SignalR Hub)  
@@ -69,7 +69,7 @@ Recommended editing cycle:
 Never edit files under `wwwroot/js/dist/` directly—changes will be overwritten by the bundling step.
 
 ## OTP Authentication (Summary)
-1. User selects demo identity and requests code
+1. User selects identity and requests code
 2. Code persisted with TTL in configured OTP store; when hashing is enabled, the stored value has the format `OtpHash:v2:argon2id:...`
 3. User submits code; on success a cookie auth session is issued
 4. Client starts (or reuses) hub connection; queued optimistic messages (if any) flush

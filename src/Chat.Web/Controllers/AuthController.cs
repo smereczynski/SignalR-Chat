@@ -44,7 +44,7 @@ namespace Chat.Web.Controllers
         }
 
         /// <summary>
-        /// Returns a lightweight list of users that can log in (for dropdown population). Public to simplify demo UX.
+    /// Returns a lightweight list of users that can log in (for dropdown population). Public to simplify sign-in UX.
         /// </summary>
         [AllowAnonymous]
         [HttpGet("users")]

@@ -81,7 +81,7 @@ namespace Chat.Web.Services
                         FixedRooms = new List<string>{ "general" },
                         DefaultRoom = "general"
                     });
-                    _logger.LogInformation("Seeded demo users with fixed room assignments.");
+                    _logger.LogInformation("Seeded initial users with fixed room assignments.");
                 }
             }
             catch (Exception ex)

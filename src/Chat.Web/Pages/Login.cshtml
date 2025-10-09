@@ -1,4 +1,4 @@
-@page
+@page "/login"
 @model Chat.Web.Pages.LoginModel
 
 <div class="container py-5">
@@ -14,7 +14,7 @@
                 <select class="form-select" id="otpUserName">
                   <option value="" selected disabled>Loading users...</option>
                 </select>
-                <div class="form-text">Pick a demo user to receive the OTP (email & mobile).</div>
+                <div class="form-text">Pick a user to receive the OTP (email & mobile).</div>
               </div>
               <button type="button" class="btn btn-primary" id="btn-send-otp">Send code</button>
             </div>
