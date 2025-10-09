@@ -199,6 +199,16 @@ namespace Chat.Web
                     UsersContainer = Configuration["Cosmos:UsersContainer"] ?? "users",
                     RoomsContainer = Configuration["Cosmos:RoomsContainer"] ?? "rooms",
                 };
+                // Configure messages TTL: set to a number (seconds), -1 to enable TTL with no expiry, or null/empty to disable TTL entirely
+                var ttlRaw = Configuration["Cosmos:MessagesTtlSeconds"];
+                if (string.Equals(ttlRaw, "null", StringComparison.OrdinalIgnoreCase) || string.IsNullOrWhiteSpace(ttlRaw))
+                {
+                    cosmosOpts.MessagesTtlSeconds = null; // disable TTL
+                }
+                else if (int.TryParse(ttlRaw, out var ttlParsed))
+                {
+                    cosmosOpts.MessagesTtlSeconds = ttlParsed;
+                }
                 services.AddSingleton(new CosmosClients(cosmosOpts));
                 services.AddSingleton<IUsersRepository, CosmosUsersRepository>();
                 services.AddSingleton<IRoomsRepository, CosmosRoomsRepository>();
