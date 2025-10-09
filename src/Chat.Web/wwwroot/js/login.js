@@ -117,13 +117,12 @@
         .then(r => { if (!r.ok) throw new Error('Invalid code'); return r.json().catch(()=>({})); })
         .then(() => {
           const params = new URLSearchParams(window.location.search);
-          const ret = params.get('ReturnUrl') || '/chat';
-          // Basic safety for local redirects only
-          if (ret.startsWith('/') && !ret.startsWith('//')) {
-            window.location.href = ret;
-          } else {
-            window.location.href = '/chat';
+          const allowedPaths = ['/chat', '/profile', '/settings']; // add more valid paths as needed
+          let ret = params.get('ReturnUrl');
+          if (!allowedPaths.includes(ret)) {
+            ret = '/chat';
           }
+          window.location.href = ret;
         })
         .catch(e2 => setOtpError(e2.message || 'Verification failed'))
         .finally(()=>{ flow.verifyInFlight = false; if (btn) btn.disabled = false; });
