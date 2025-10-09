@@ -82,9 +82,13 @@ namespace Chat.Web.Controllers
             code = new Random().Next(100000, 999999).ToString();
             var toStore = hashingEnabled ? _otpHasher.Hash(req.UserName, code) : code;
             await _otpStore.SetAsync(req.UserName, toStore, TimeSpan.FromMinutes(5));
-            // Send to email and mobile when available (fire-and-forget pattern)
-            // Primary channel: email (if present) otherwise mobile else fallback to username.
-            var primary = user.Email ?? user.MobileNumber ?? req.UserName;
+            // Prepare to send via all available channels (email + SMS) without preference.
+            // Collect unique destinations to avoid duplicate sends if username equals email, etc.
+            var destinations = new System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (!string.IsNullOrWhiteSpace(user.Email)) destinations.Add(user.Email);
+            if (!string.IsNullOrWhiteSpace(user.MobileNumber)) destinations.Add(user.MobileNumber);
+            if (destinations.Count == 0 && !string.IsNullOrWhiteSpace(req.UserName)) destinations.Add(req.UserName);
+
             // Dispatch background sends to avoid blocking the request on external provider cold-starts
             void FireAndForget(Func<Task> op, string dest)
             {
@@ -94,8 +98,10 @@ namespace Chat.Web.Controllers
                     catch (Exception ex) { _logger.LogWarning(ex, "OTP dispatch failed to {Destination} for {User}", dest, req.UserName); }
                 });
             }
-            // Prefer a single primary channel to avoid duplicate messages. If email exists, do not send SMS.
-            FireAndForget(() => _otpSender.SendAsync(req.UserName, primary, code), primary);
+            foreach (var dest in destinations)
+            {
+                FireAndForget(() => _otpSender.SendAsync(req.UserName, dest, code), dest);
+            }
             _metrics.IncOtpRequests();
             // Indicate asynchronous processing
             return Accepted();
