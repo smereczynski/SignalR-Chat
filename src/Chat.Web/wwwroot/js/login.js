@@ -18,7 +18,21 @@
       fetch('/api/auth/users', { credentials: 'same-origin' })
         .then(r => { if (!r.ok) throw new Error('Failed to load users'); return r.json(); })
         .then(users => {
-          sel.innerHTML = '<option value="" disabled selected>Select user...</option>' + users.map(u => `<option value="${u.userName}">${u.fullName || u.userName}</option>`).join('');
+          // Clear any existing content
+          sel.innerHTML = '';
+          const placeholder = document.createElement('option');
+          placeholder.value = '';
+          placeholder.disabled = true;
+          placeholder.selected = true;
+          placeholder.textContent = 'Select user...';
+          sel.appendChild(placeholder);
+          // Append options using textContent to avoid HTML injection
+          (users || []).forEach(u => {
+            const opt = document.createElement('option');
+            opt.value = String(u.userName || '');
+            opt.textContent = String(u.fullName || u.userName || '');
+            sel.appendChild(opt);
+          });
           sel.dataset.loaded = 'true';
         })
         .catch(err => setOtpError(err.message));
@@ -113,18 +127,17 @@
       const code = (document.getElementById('otpCode')?.value || '').trim();
       if (!userName || !code) { setOtpError('User and code are required'); return; }
       const btn = document.getElementById('btn-verify-otp'); if (btn) btn.disabled = true; flow.verifyInFlight = true;
-      postJson('/api/auth/verify', { userName, code })
+      const returnUrl = (typeof window.__returnUrl === 'string' ? window.__returnUrl : '/chat');
+      postJson('/api/auth/verify', { userName, code, returnUrl })
         .then(r => { if (!r.ok) throw new Error('Invalid code'); return r.json().catch(()=>({})); })
-        .then(() => {
-          const params = new URLSearchParams(window.location.search);
-          const allowedPaths = ['/chat', '/profile', '/settings']; // add more valid paths as needed
-          const returnUrl = params.get('ReturnUrl');
-          // Only redirect to one of the strictly predefined allowed paths, and never to a user-controlled value
-          let safePath = '/chat';
-          if (typeof returnUrl === 'string' && allowedPaths.includes(returnUrl)) {
-            safePath = returnUrl;
+        .then(body => {
+          const next = body && typeof body.nextUrl === 'string' ? body.nextUrl : '/chat';
+          // As an extra safety net, client ensures it's an app-local path
+          if (next.startsWith('/') && !next.startsWith('//')) {
+            window.location.href = next;
+          } else {
+            window.location.href = '/chat';
           }
-          window.location.href = safePath;
         })
         .catch(e2 => setOtpError(e2.message || 'Verification failed'))
         .finally(()=>{ flow.verifyInFlight = false; if (btn) btn.disabled = false; });

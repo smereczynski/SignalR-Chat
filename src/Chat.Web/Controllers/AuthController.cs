@@ -145,7 +145,13 @@ namespace Chat.Web.Controllers
                 IsPersistent = true,
                 ExpiresUtc = DateTimeOffset.UtcNow.AddHours(12)
             });
-            return Ok();
+            // Let the server decide the safe next URL instead of trusting client input
+            var dest = "/chat";
+            if (!string.IsNullOrWhiteSpace(req.ReturnUrl) && Url.IsLocalUrl(req.ReturnUrl))
+            {
+                dest = req.ReturnUrl;
+            }
+            return Ok(new { nextUrl = dest });
         }
 
         private static bool FixedTimeEquals(string a, string b)
@@ -194,6 +200,6 @@ namespace Chat.Web.Controllers
         /// <summary>
         /// Request body for OTP verification.
         /// </summary>
-        public class VerifyRequest { public string UserName { get; set; } public string Code { get; set; } }
+        public class VerifyRequest { public string UserName { get; set; } public string Code { get; set; } public string ReturnUrl { get; set; } }
     }
 }

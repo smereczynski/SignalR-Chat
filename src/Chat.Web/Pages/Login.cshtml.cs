@@ -14,8 +14,10 @@ namespace Chat.Web.Pages
         {
             if (User?.Identity?.IsAuthenticated == true)
             {
-                // Already signed in: go to chat
-                return LocalRedirect(ReturnUrl ?? "/chat");
+                // Already signed in: safely redirect only to local URLs; fallback to /chat
+                var dest = string.IsNullOrEmpty(ReturnUrl) ? "/chat" : ReturnUrl;
+                if (!Url.IsLocalUrl(dest)) dest = "/chat";
+                return LocalRedirect(dest);
             }
             return Page();
         }

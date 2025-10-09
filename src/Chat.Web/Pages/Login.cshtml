@@ -57,5 +57,15 @@
 
 @section Scripts {
   <script src="~/lib/bootstrap/js/bootstrap.bundle.min.js"></script>
+  <script>
+    // Expose sanitized ReturnUrl to JS via server-rendering (server will still validate on verify)
+    window.__returnUrl = (function(){
+      try {
+        var p = new URLSearchParams(window.location.search).get('ReturnUrl');
+        if (typeof p === 'string' && p.startsWith('/') && !p.startsWith('//')) return p;
+      } catch(_){}
+      return '/chat';
+    })();
+  </script>
   <script src="~/js/login.js" asp-append-version="true"></script>
 }
