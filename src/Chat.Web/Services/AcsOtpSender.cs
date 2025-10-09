@@ -41,7 +41,9 @@ namespace Chat.Web.Services
 
                 var subject = "Your verification code";
                 var body = $"Your verification code is: {code}";
-                await _emailClient.SendAsync(Azure.WaitUntil.Completed, _options.EmailFrom, destination, subject, body);
+                // Do not block on provider end-to-end completion on the first request; start send and return
+                using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(10));
+                await _emailClient.SendAsync(Azure.WaitUntil.Started, _options.EmailFrom, destination, subject, body, cancellationToken: cts.Token);
             }
             else
             {
@@ -49,7 +51,8 @@ namespace Chat.Web.Services
                     throw new InvalidOperationException("AcsOptions.SmsFrom is required to send SMS OTP.");
 
                 var body = $"Code: {code}";
-                await _smsClient.SendAsync(from: _options.SmsFrom, to: destination, message: body);
+                using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(10));
+                await _smsClient.SendAsync(from: _options.SmsFrom, to: destination, message: body, cancellationToken: cts.Token);
             }
         }
 

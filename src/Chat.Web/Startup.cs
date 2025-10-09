@@ -169,6 +169,14 @@ namespace Chat.Web
             services.Configure<CosmosOptions>(Configuration.GetSection("Cosmos"));
             services.Configure<RedisOptions>(Configuration.GetSection("Redis"));
             services.Configure<AcsOptions>(Configuration.GetSection("Acs"));
+            services.Configure<OtpOptions>(Configuration.GetSection("Otp"));
+            services.PostConfigure<OtpOptions>(opts =>
+            {
+                // Allow env var override of pepper per guide: Otp__Pepper
+                var envPepper = Environment.GetEnvironmentVariable("Otp__Pepper");
+                if (!string.IsNullOrWhiteSpace(envPepper)) opts.Pepper = envPepper;
+            });
+            services.AddSingleton<IOtpHasher, Argon2OtpHasher>();
 
             var inMemory = Configuration["Testing:InMemory"];
             if (string.Equals(inMemory, "true", StringComparison.OrdinalIgnoreCase))

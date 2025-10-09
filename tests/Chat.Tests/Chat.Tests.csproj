@@ -16,8 +16,11 @@
     </PackageReference>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.10.0" />
   </ItemGroup>
-  <!-- Link only the file(s) under test to avoid heavy web/app dependencies during test execution -->
+  <!-- Keep lightweight by linking specific files where possible; also reference web project for Argon2 hasher tests -->
   <ItemGroup>
     <Compile Include="../../src/Chat.Web/Configuration/ConfigurationGuards.cs" Link="Configuration/ConfigurationGuards.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Chat.Web/Chat.Web.csproj" />
   </ItemGroup>
 </Project>

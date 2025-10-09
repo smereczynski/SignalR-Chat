@@ -403,3 +403,6 @@ FodyWeavers.xsd
 
 #notes
 docs/notes/*
+
+#macOS
+.DS_Store
