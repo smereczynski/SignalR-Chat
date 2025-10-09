@@ -1,5 +1,74 @@
 # Architecture
 
+This document describes the high-level architecture of SignalR-Chat with focus on the OTP hashing implementation.
+
+## Runtime overview
+- ASP.NET Core 9 (Razor Pages + Controllers + SignalR Hub)
+- Persistence: EF Core; Cosmos DB repositories in normal mode, in-memory repositories in Testing:InMemory mode
+- OTP store: Redis in normal mode, in-memory in Testing:InMemory
+- Auth: Cookie authentication after OTP verification
+- Observability: OpenTelemetry (traces, metrics, logs) with exporter auto-selection
+
+## OTP authentication and hashing
+
+### Goals
+- Avoid storing OTP codes in plaintext while preserving simple demo UX.
+- Support a migration path from legacy plaintext values without breaking existing sessions.
+- Keep implementation configurable and versioned for future upgrades.
+
+### Components
+- `IOtpHasher` (src/Chat.Web/Services/IOtpHasher.cs)
+  - Contract: `string Hash(string userName, string code)` and `VerificationResult Verify(string userName, string code, string stored)`
+  - `VerificationResult` has `IsMatch` and `NeedsRehash` flags.
+- `Argon2OtpHasher` (src/Chat.Web/Services/Argon2OtpHasher.cs)
+  - Uses Isopoh.Cryptography.Argon2 (managed .NET implementation)
+  - Algorithm: Argon2id (HybridAddressing in Isopoh enum)
+  - Per-code random 16-byte salt
+  - Preimage: `pepper || userName || ':' || salt || ':' || code`
+  - Stores a versioned record with explicit KDF parameters:
+    - Format: `OtpHash:v2:argon2id:m={KB},t={it},p={par}:{saltB64}:{encoded}`
+    - `encoded` is the library’s PHC-style encoded string for the computed hash
+  - Verification: recomputes the same preimage using the stored salt and calls `Argon2.Verify(encoded, preimage, threads)`
+  - `NeedsRehash` is true when configured parameters are stronger than those embedded in the stored record
+- `OtpOptions` (src/Chat.Web/Options/OtpOptions.cs)
+  - `Pepper` (Base64 string) – load from environment variable `Otp__Pepper`
+  - `HashingEnabled` (default true)
+  - Argon2 parameters: `MemoryKB`, `Iterations`, `Parallelism`, `OutputLength`
+
+### DI and configuration
+- Registered in `Startup.ConfigureServices`:
+  - `services.Configure<OtpOptions>(Configuration.GetSection("Otp"));`
+  - `services.PostConfigure<OtpOptions>(...)` reads `Otp__Pepper` from environment when present
+  - `services.AddSingleton<IOtpHasher, Argon2OtpHasher>();`
+- OTP store selection:
+  - Testing:InMemory=true → `InMemoryOtpStore`
+  - Otherwise → Redis via `IConnectionMultiplexer` and `RedisOtpStore`
+- Sender selection:
+  - If ACS configured → `AcsOtpSender`
+  - Else → `ConsoleOtpSender` (writes OTP to console for demo)
+
+### Controller behavior
+- `AuthController`:
+  - Start
+    - Reuses unexpired plaintext OTP only for legacy values (non-hashed); otherwise generates a new code
+    - Stores `OtpHash:...` when `HashingEnabled=true`, else plaintext (testing/legacy)
+    - Sends the OTP using primary channel (email or phone) with console fallback
+  - Verify
+    - Reads stored value; if begins with `OtpHash:` → use `IOtpHasher.Verify`
+    - Else (legacy plaintext) → constant-time comparison via `CryptographicOperations.FixedTimeEquals`
+    - On success: deletes the OTP entry and issues a cookie auth ticket
+
+### Security considerations
+- Pepper is required for meaningful hashing; use a high-entropy Base64 value (>= 32 bytes) per environment.
+- Keep `HashingEnabled=true` in all non-test environments.
+- Rate limiting is applied to OTP endpoints using a fixed window limiter. Configure limits per environment.
+- The stored format is versioned to allow future upgrades without breaking verification.
+
+## Observability
+- Domain counters (Meter `Chat.Web`): `chat.otp.requests`, `chat.otp.verifications`, plus chat-centric metrics.
+- OpenTelemetry exporters are chosen in priority order: Azure Monitor (Production) → OTLP → Console.
+# Architecture
+
 This document describes the high-level architecture of the SignalR-Chat application, its main components, and key runtime flows.
 
 ## Current Overview

@@ -180,7 +180,20 @@ document.addEventListener('DOMContentLoaded', () => {
         const sendBtn = document.getElementById('btn-send-otp');
         if (sendBtn && sendBtn.disabled && !isResend) return; // prevent duplicate primary sends
         const resendBtn = document.getElementById('btn-resend-otp');
-        if (isResend && resendBtn && resendBtn.disabled) return;
+        // Enforce resend delay window (default 5 min via data-otp-resend-delay-ms)
+        const resendDelayMs = parseInt(container?.getAttribute('data-otp-resend-delay-ms')||'300000',10);
+        flow.firstSendAt = flow.firstSendAt || 0;
+        const nowTs = Date.now();
+        if (!isResend) {
+            // mark the first send timestamp
+            flow.firstSendAt = nowTs;
+        } else {
+            const sinceFirst = nowTs - (flow.firstSendAt || 0);
+            if (sinceFirst < resendDelayMs) {
+                // ignore early resend attempts
+                return;
+            }
+        }
 
         // Config
         const container = document.getElementById('otpContainer');
@@ -197,8 +210,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const retryCountdown = document.getElementById('otpRetryCountdown');
 
         // Disable relevant buttons
-        if (!isResend && sendBtn) sendBtn.disabled = true;
-        if (isResend && resendBtn) resendBtn.disabled = true;
+    if (!isResend && sendBtn) sendBtn.disabled = true;
+    if (isResend && resendBtn) resendBtn.disabled = true;
 
         // Reset indicator to sending
         if (indicator) {
@@ -264,6 +277,25 @@ document.addEventListener('DOMContentLoaded', () => {
                     const step2 = $('#otp-step2');
                     if (step1 && step2) { step1.classList.add('d-none'); step2.classList.remove('d-none'); }
                     const codeEl = $('#otpCode'); if (codeEl) codeEl.focus();
+                    // Start 5-minute resend availability countdown on button
+                    const rb = document.getElementById('btn-resend-otp');
+                    if (rb) {
+                        rb.disabled = true;
+                        const endAt = (flow.firstSendAt || Date.now()) + resendDelayMs;
+                        if (flow.resendAvailInterval) clearInterval(flow.resendAvailInterval);
+                        const updateLabel = ()=>{
+                            const left = endAt - Date.now();
+                            if (left <= 0){
+                                clearInterval(flow.resendAvailInterval); flow.resendAvailInterval=null;
+                                rb.disabled = false; rb.textContent = 'Resend';
+                            } else {
+                                const s = Math.ceil(left/1000);
+                                rb.textContent = 'Resend in ' + s + 's';
+                            }
+                        };
+                        updateLabel();
+                        flow.resendAvailInterval = setInterval(updateLabel, 1000);
+                    }
                 }
             })
             .catch(e2 => {
