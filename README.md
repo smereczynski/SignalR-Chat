@@ -36,6 +36,31 @@ Rooms are static; there is no runtime CRUD. The seeding hosted service ensures t
 
 **Auth & Redirects**: Dedicated `/login` page issues a cookie after OTP verification. Redirect targets are validated on the server with `Url.IsLocalUrl`; the verify API returns a server-approved `nextUrl` used by the client.
 
+### Cosmos messages retention (TTL)
+If you run with Cosmos DB repositories enabled, the messages container can use a configurable TTL (time-to-live):
+
+- Key: `Cosmos:MessagesTtlSeconds`
+- Values:
+  - Positive integer (seconds): items auto-expire after the given duration (e.g., `604800` for 7 days)
+  - `-1`: TTL is enabled but items never expire by default (Cosmos semantics)
+  - `null` or unset/empty: TTL is disabled entirely (container DefaultTimeToLive is cleared)
+- Reconciliation: On startup, the app reconciles the container's `DefaultTimeToLive` to match the configured value, updating or clearing it as needed.
+
+Environment variable examples (zsh):
+
+```
+# Disable TTL entirely
+export Cosmos__MessagesTtlSeconds=
+# or explicitly set the literal string "null"
+export Cosmos__MessagesTtlSeconds=null
+
+# Keep messages for 7 days
+export Cosmos__MessagesTtlSeconds=604800
+
+# Enable TTL but never expire by default
+export Cosmos__MessagesTtlSeconds=-1
+```
+
 ## Local Development
 Prerequisites:
 * .NET 9 SDK

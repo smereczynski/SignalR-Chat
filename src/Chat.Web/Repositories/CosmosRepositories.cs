@@ -70,12 +70,25 @@ namespace Chat.Web.Repositories
                 props.DefaultTimeToLive = defaultTtlSeconds.Value;
             }
             var response = Database.CreateContainerIfNotExistsAsync(props, throughput).GetAwaiter().GetResult();
-            // If TTL was added after existing container creation, update it
-            if (defaultTtlSeconds.HasValue && response.Container.ReadContainerAsync().GetAwaiter().GetResult().Resource.DefaultTimeToLive != defaultTtlSeconds.Value)
+            // Reconcile TTL setting on existing container
+            var current = response.Container.ReadContainerAsync().GetAwaiter().GetResult().Resource;
+            if (defaultTtlSeconds.HasValue)
             {
-                var existing = response.Container.ReadContainerAsync().GetAwaiter().GetResult().Resource;
-                existing.DefaultTimeToLive = defaultTtlSeconds.Value;
-                response.Container.ReplaceContainerAsync(existing).GetAwaiter().GetResult();
+                // If TTL should be a specific value and differs, update it
+                if (current.DefaultTimeToLive != defaultTtlSeconds.Value)
+                {
+                    current.DefaultTimeToLive = defaultTtlSeconds.Value;
+                    response.Container.ReplaceContainerAsync(current).GetAwaiter().GetResult();
+                }
+            }
+            else
+            {
+                // TTL should be disabled entirely (null). If currently set, clear it.
+                if (current.DefaultTimeToLive != null)
+                {
+                    current.DefaultTimeToLive = null;
+                    response.Container.ReplaceContainerAsync(current).GetAwaiter().GetResult();
+                }
             }
             return response.Container;
         }
