@@ -73,6 +73,15 @@ This document describes the high-level architecture of SignalR-Chat with focus o
 ## Observability
 - Domain counters (Meter `Chat.Web`): `chat.otp.requests`, `chat.otp.verifications`, plus chat-centric metrics.
 - OpenTelemetry exporters are chosen in priority order: Azure Monitor (Production) → OTLP → Console.
+
+## Cosmos messages retention (TTL)
+When Cosmos DB repositories are used, the messages container's `DefaultTimeToLive` is managed at startup to match configuration:
+
+- Option: `Cosmos:MessagesTtlSeconds` (nullable integer)
+  - `null` or unset/empty → TTL disabled (container DefaultTimeToLive cleared)
+  - `-1` → TTL enabled but items never expire by default (Cosmos semantics)
+  - `> 0` seconds → items expire after the configured lifetime
+- Reconciliation: The application reads the current container properties and updates `DefaultTimeToLive` when it differs from the configured value, including clearing it when disabled. This ensures drift correction when config changes between deployments.
 # Architecture
 
 This document describes the high-level architecture of the SignalR-Chat application, its main components, and key runtime flows.
