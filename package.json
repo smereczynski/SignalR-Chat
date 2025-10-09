@@ -8,7 +8,7 @@
     "watch:css": "sass --watch src/Chat.Web/wwwroot/css/site.scss:src/Chat.Web/wwwroot/css/site.css",
     "build": "npm run build:css && npm run build:css:prod && npm run copy:libs",
     "copy:libs": "node scripts/copy-libs.cjs",
-    "bundle:js": "esbuild src/Chat.Web/wwwroot/js/site.js --bundle --outfile=src/Chat.Web/wwwroot/js/dist/site.js --minify && esbuild src/Chat.Web/wwwroot/js/chat.js --bundle --outfile=src/Chat.Web/wwwroot/js/dist/chat.js --minify",
+  "bundle:js": "esbuild src/Chat.Web/wwwroot/js/site.js --bundle --outfile=src/Chat.Web/wwwroot/js/dist/site.js --minify && esbuild src/Chat.Web/wwwroot/js/chat.js --bundle --outfile=src/Chat.Web/wwwroot/js/dist/chat.js --minify && esbuild src/Chat.Web/wwwroot/js/login.js --bundle --outfile=src/Chat.Web/wwwroot/js/dist/login.js --minify",
     "build:prod": "npm run build && npm run bundle:js"
   },
   "devDependencies": {
