@@ -94,8 +94,9 @@ namespace Chat.Web.Controllers
             {
                 _ = Task.Run(async () =>
                 {
-                    try { await op().ConfigureAwait(false); _logger.LogInformation("OTP dispatched to {Destination} for {User}", dest, req.UserName); }
-                    catch (Exception ex) { _logger.LogWarning(ex, "OTP dispatch failed to {Destination} for {User}", dest, req.UserName); }
+                    var sanitizedUserName = req.UserName.Replace("\r", "").Replace("\n", "");
+                    try { await op().ConfigureAwait(false); _logger.LogInformation("OTP dispatched to {Destination} for {User}", dest, sanitizedUserName); }
+                    catch (Exception ex) { _logger.LogWarning(ex, "OTP dispatch failed to {Destination} for {User}", dest, sanitizedUserName); }
                 });
             }
             foreach (var dest in destinations)
