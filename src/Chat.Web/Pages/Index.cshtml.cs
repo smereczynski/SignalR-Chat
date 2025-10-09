@@ -9,7 +9,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Chat.Web.Pages
 {
-    // Removed [Authorize] to prevent redirect loop; auth handled client-side & via hub/controllers.
+    // Landing page is anonymous; auth enforced on /chat via [Authorize] and cookie middleware.
     public class IndexModel : PageModel
     {
         private readonly ILogger<IndexModel> _logger;

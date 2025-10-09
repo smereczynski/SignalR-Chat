@@ -6,13 +6,13 @@ This document describes the high-level architecture of SignalR-Chat with focus o
 - ASP.NET Core 9 (Razor Pages + Controllers + SignalR Hub)
 - Persistence: EF Core; Cosmos DB repositories in normal mode, in-memory repositories in Testing:InMemory mode
 - OTP store: Redis in normal mode, in-memory in Testing:InMemory
-- Auth: Cookie authentication after OTP verification
+- Auth: Cookie authentication after OTP verification (dedicated `/login` page)
 - Observability: OpenTelemetry (traces, metrics, logs) with exporter auto-selection
 
 ## OTP authentication and hashing
 
 ### Goals
-- Avoid storing OTP codes in plaintext while preserving simple demo UX.
+- Avoid storing OTP codes in plaintext while preserving a simple UX.
 - Support a migration path from legacy plaintext values without breaking existing sessions.
 - Keep implementation configurable and versioned for future upgrades.
 
@@ -45,7 +45,7 @@ This document describes the high-level architecture of SignalR-Chat with focus o
   - Otherwise → Redis via `IConnectionMultiplexer` and `RedisOtpStore`
 - Sender selection:
   - If ACS configured → `AcsOtpSender`
-  - Else → `ConsoleOtpSender` (writes OTP to console for demo)
+  - Else → `ConsoleOtpSender` (writes OTP to console for local development)
 
 ### Controller behavior
 - `AuthController`:
@@ -57,12 +57,18 @@ This document describes the high-level architecture of SignalR-Chat with focus o
     - Reads stored value; if begins with `OtpHash:` → use `IOtpHasher.Verify`
     - Else (legacy plaintext) → constant-time comparison via `CryptographicOperations.FixedTimeEquals`
     - On success: deletes the OTP entry and issues a cookie auth ticket
+    - Redirects: Accepts an optional `ReturnUrl` but validates it server-side with `Url.IsLocalUrl`. The API responds with `{ nextUrl: "/chat" | <safe local path> }`. The client navigates to this `nextUrl`.
+
+### Login page behavior
+- `GET /login`: If already authenticated and a `ReturnUrl` query param is present, the server validates it with `Url.IsLocalUrl` and performs `LocalRedirect` to a safe path (default `/chat`).
+- Client script exposes a sanitized `window.__returnUrl` for UX purposes, but the server remains the source of truth.
 
 ### Security considerations
-- Pepper is required for meaningful hashing; use a high-entropy Base64 value (>= 32 bytes) per environment.
-- Keep `HashingEnabled=true` in all non-test environments.
-- Rate limiting is applied to OTP endpoints using a fixed window limiter. Configure limits per environment.
-- The stored format is versioned to allow future upgrades without breaking verification.
+- OTP hashing: Pepper is required for meaningful hashing; use a high-entropy Base64 value (>= 32 bytes) per environment. Keep `HashingEnabled=true` in all non-test environments. The stored format is versioned to allow future upgrades without breaking verification.
+- Redirect validation: All redirect targets are validated server-side using `Url.IsLocalUrl`. The client uses server-issued `nextUrl` values for navigation after verification.
+- DOM XSS hardening: UI rendering avoids `innerHTML` when dealing with user-derived content; code uses `textContent` and element creation.
+- Rate limiting: OTP endpoints are protected by a fixed-window rate limiter (configurable).
+- Log forging mitigation: `RequestTracingMiddleware` sanitizes request method and path before logging.
 
 ## Observability
 - Domain counters (Meter `Chat.Web`): `chat.otp.requests`, `chat.otp.verifications`, plus chat-centric metrics.
@@ -77,7 +83,7 @@ This document describes the high-level architecture of the SignalR-Chat applicat
 - **Persistence**: Entity Framework Core (ApplicationDbContext) with underlying relational store (migrations indicate relational usage).
 - **Authentication**: Passwordless one-time passcode (OTP) flow. Short-lived OTP codes stored in Redis; successful verification establishes cookie-auth session.
 - **Redis Usage**: Only for OTP storage (key prefix `otp:`) with TTL; no chat message caching or SignalR backplane configured yet.
-- **Front-End**: Vanilla JavaScript modules (`chat.js`, `site.js`) built & minified (esbuild) into `wwwroot/js/dist/` and only minified bundles are referenced by the Razor layout.
+- **Front-End**: Vanilla JavaScript modules (`chat.js`, `site.js`, `login.js`) referenced directly by Razor pages. Optional esbuild step can produce minified bundles in `wwwroot/js/dist/` for production testing.
 - **Messaging Model**: All chat messages are sent exclusively through the SignalR hub (`ChatHub`).
 - **Removed Feature**: Private/direct messaging (`/private(user)`) removed; only room-based broadcast remains.
 - **Client Reliability**: Outbox queue with sessionStorage persistence for messages typed while disconnected or during (re)join. Queue flushes automatically after join / reconnect.
@@ -136,9 +142,9 @@ Potential future roles: SignalR backplane, presence cache, rate limiting, hot me
 - On reconnection + join success, queued messages flush automatically
 
 ## Build & Front-End Delivery
-- Source JS compiled to `wwwroot/js/dist/` (minified) via esbuild tasks
-- Razor layout references only minified artifacts
-- Dist treated as generated output
+- Source JS under `wwwroot/js/` is used directly in development.
+- Optional: esbuild tasks can create minified bundles in `wwwroot/js/dist/`.
+- Dist is generated; avoid hand-editing.
 
 ## Observability & Telemetry
 - Server Activities wrap hub operations; `X-Trace-Id` header surfaces trace id to client
@@ -154,17 +160,16 @@ Potential future roles: SignalR backplane, presence cache, rate limiting, hot me
 | Presence tracking | Not implemented | Redis sets / ephemeral keys |
 
 ## Security Notes
-- OTP codes currently plaintext in Redis (hashing recommended later)
+- OTP codes are stored hashed by default (Argon2id + salt + pepper). Legacy plaintext verification remains for backward compatibility and uses constant-time comparison.
 - Correlation IDs are opaque UUIDs (avoid embedding user data)
-- Future: rate-limit OTP endpoints (Redis INCR with TTL)
+- OTP endpoints are rate-limited.
 
 ## Future Roadmap (Prioritized)
 1. Introduce backplane (Redis or Azure SignalR) for multi-instance scale
 2. Presence & typing indicators
-3. Hash OTP codes + rate limiting
-4. OTLP exporter integration
-5. CI guard for forbidden legacy patterns
-6. Enhanced pagination UX/accessibility
+3. OTLP exporter integration
+4. CI guard for forbidden legacy patterns
+5. Enhanced pagination UX/accessibility
 
 ## Glossary
 - **CorrelationId**: UUID bridging optimistic send and server broadcast

@@ -1,7 +1,7 @@
 # SignalR-Chat
-Real-time multi-room chat on .NET 9 using SignalR (in‑process hub), EF Core persistence, Redis for OTP codes (or in‑memory when testing), optional Azure SignalR (configured automatically when not in test mode), OpenTelemetry (traces + metrics + logs) and a small vanilla JavaScript client (bundled/minified). OTP codes are stored hashed by default using Argon2id with a per-code salt and an environment-supplied pepper.
+Real-time multi-room chat on .NET 9 using SignalR (in‑process hub), EF Core persistence, Redis for OTP codes (or in‑memory when testing), optional Azure SignalR (configured automatically when not in test mode), OpenTelemetry (traces + metrics + logs) and a small vanilla JavaScript client. OTP codes are stored hashed by default using Argon2id with a per-code salt and an environment-supplied pepper.
 
-The project intentionally keeps scope tight: fixed public rooms, text messages only, no editing/deleting, and OTP-based demo authentication.
+The project intentionally keeps scope tight: fixed public rooms, text messages only, no editing/deleting, and OTP-based authentication.
 
 ## Implemented Features (Current State)
 * Multi-room chat (fixed rooms: `general`, `ops`, `random`)
@@ -11,7 +11,7 @@ The project intentionally keeps scope tight: fixed public rooms, text messages o
 * Client-side send pacing (basic rate limiting logic in JS)
 * Avatar initials (derived client-side with cache bust/refresh protection)
 * OTP authentication (cookie session)
-  * Demo users: `alice`, `bob`, `charlie`
+  * Users: `alice`, `bob`, `charlie`
   * OTP code stored in Redis (or in-memory store under test flag)
   * Hashed storage by default (Argon2id + salt + pepper) with a versioned format
   * Console fallback delivery (ACS email/SMS supported only if configured)
@@ -23,7 +23,7 @@ The project intentionally keeps scope tight: fixed public rooms, text messages o
 * SessionStorage backed optimistic message reconciliation
 
 ## Fixed Room Topology
-Rooms are static; there is no runtime CRUD. The seeding hosted service ensures the three canonical rooms and demo users exist on startup.
+Rooms are static; there is no runtime CRUD. The seeding hosted service ensures the three canonical rooms and initial users exist on startup.
 
 ## Architecture Overview
 **Runtime**: ASP.NET Core 9 (Razor Pages + Controllers + SignalR Hub)  
@@ -32,7 +32,9 @@ Rooms are static; there is no runtime CRUD. The seeding hosted service ensures t
 **OTP / Cache**: Redis (or in-memory fallback) storing short-lived OTP codes (`otp:{user}`)  
 **Auth Flow**: Request code → store in OTP store → user enters code → cookie issued → hub connects  
 **Observability**: OpenTelemetry (trace + metric + log providers) with exporter priority (Azure Monitor > OTLP > Console) and domain counters  
-**Frontend**: Source JS in `wwwroot/js/` compiled to minified assets in `wwwroot/js/dist/` (pages reference only the dist versions)
+**Frontend**: Source JS in `wwwroot/js/` referenced directly by pages (`site.js`, `chat.js`, `login.js`). Minified bundles in `wwwroot/js/dist/` are optional and not required for development—pages no longer reference `dist`.
+
+**Auth & Redirects**: Dedicated `/login` page issues a cookie after OTP verification. Redirect targets are validated on the server with `Url.IsLocalUrl`; the verify API returns a server-approved `nextUrl` used by the client.
 
 ## Local Development
 Prerequisites:
@@ -48,12 +50,12 @@ dotnet run --project ./src/Chat.Web --urls=http://localhost:5099
 Navigate to: http://localhost:5099
 
 ### VS Code Tasks (Automation)
-The workspace includes curated tasks (see `.vscode/tasks.json`). Key tasks:
+The workspace includes curated tasks (see `.vscode/tasks.json`). These are optional; the app runs without bundling because pages reference source JS. Key tasks:
 
 | Task Label | Purpose |
 |------------|---------|
 | npm install | Install frontend dependencies (esbuild, sass). |
-| bundle js (prod) | Build/minify JS + compile Sass (depends on npm install). |
+| bundle js (prod) | Optional: Build/minify JS + compile Sass (depends on npm install). |
 | dotnet build | Compile the .NET solution. |
 | build all | Full pipeline: npm install → bundle js (prod) → dotnet build. |
 | test | Run solution tests (`dotnet test --no-build`). |
@@ -61,15 +63,14 @@ The workspace includes curated tasks (see `.vscode/tasks.json`). Key tasks:
 | PROD Run Chat (Azure local env) | Same as above but forces `ASPNETCORE_ENVIRONMENT=Production`. |
 
 Recommended editing cycle:
-1. Modify source JS (`wwwroot/js/chat.js` or `site.js`)
-2. Run task: `bundle js (prod)` (or include in `build all`)
-3. Run `Run Chat (Azure local env)` task
-4. Refresh browser
+1. Modify source JS (`wwwroot/js/*.js`) and/or Razor pages
+2. Run `Run Chat (Azure local env)` task (or `dotnet run` as below)
+3. Refresh browser
 
-Never edit files under `wwwroot/js/dist/` directly—changes will be overwritten by the bundling step.
+Note: If you choose to bundle for production testing, use the provided tasks. Dist files are generated but not referenced by default.
 
 ## OTP Authentication (Summary)
-1. User selects demo identity and requests code
+1. User selects identity and requests code
 2. Code persisted with TTL in configured OTP store; when hashing is enabled, the stored value has the format `OtpHash:v2:argon2id:...`
 3. User submits code; on success a cookie auth session is issued
 4. Client starts (or reuses) hub connection; queued optimistic messages (if any) flush
@@ -114,19 +115,22 @@ Custom counters (Meter `Chat.Web`):
 Client emits lightweight events for: reconnect attempts, duplicate start skips, message send outcomes, pagination fetches, queue flushes.
 
 ## Security Notes
-* OTP codes are stored hashed by default. To support legacy/testing scenarios, plaintext storage can be toggled with `Otp:HashingEnabled=false`.
+* OTP codes are stored hashed by default (Argon2id + salt + pepper). To support legacy/testing scenarios, plaintext storage can be toggled with `Otp:HashingEnabled=false`.
 * Provide a high-entropy Base64 pepper via `Otp__Pepper` in each environment. Keep this secret out of source control.
-* Rate limiting applied to auth/OTP endpoints via fixed window limiter (configurable limits)
-* Correlation IDs are random UUIDs (no sensitive data embedded)
+* Rate limiting applied to auth/OTP endpoints via fixed window limiter (configurable limits).
+* Redirect safety: server validates `ReturnUrl` with `Url.IsLocalUrl` and responds with a server-issued `nextUrl`; the client uses that value. Client also performs a basic path check as a secondary guard.
+* DOM XSS hardening: client code avoids `innerHTML` when rendering user-controlled content (uses `textContent` and element creation).
+* Log forging mitigation: request method and path are sanitized before logging in `RequestTracingMiddleware`.
+* Correlation IDs are random UUIDs (no sensitive data embedded).
 
 ## Health
 `/healthz` basic readiness (string "ok"). No additional JSON metrics endpoint is currently exposed.
 
 ## Development Workflow Tips
-* Edit only source JS/CSS; let tasks produce minified output
-* Use `build all` for a clean full pipeline before commits
-* Run `test` task before pushing changes
-* Consider adding a local `--watch` script if iterating frequently (not included by default)
+* Edit source JS/CSS directly; bundling is optional and not required by default.
+* Use `build all` only when you want to produce minified bundles alongside a .NET build.
+* Run the `test` task before pushing changes.
+* Consider adding a local `--watch` script if iterating frequently (not included by default).
 ## Future Enhancements (Not Implemented)
 * Presence / typing indicators
 * Backplane scale-out metrics & multi-instance benchmarks

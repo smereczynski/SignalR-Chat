@@ -361,14 +361,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const logoutBtn = e.target.closest('#btn-logout');
         if (logoutBtn) {
             postJson('/api/auth/logout', {})
-                .then(() => {
-                    appLogger.info('Logout success');
-                    if (window.chatApp?.logoutCleanup) window.chatApp.logoutCleanup();
-                })
-                .catch(() => {
-                    appLogger.warn('Logout request error');
-                    if (window.chatApp?.logoutCleanup) window.chatApp.logoutCleanup();
-                });
+                .then(() => { appLogger.info('Logout success'); })
+                .catch(() => { appLogger.warn('Logout request error'); })
+                .finally(() => { if (window.chatApp?.logoutCleanup) window.chatApp.logoutCleanup(); window.location.replace('/login?ReturnUrl=/chat'); });
             return;
         }
     });
