@@ -118,20 +118,13 @@
         .then(() => {
           const params = new URLSearchParams(window.location.search);
           const allowedPaths = ['/chat', '/profile', '/settings']; // add more valid paths as needed
-          let ret = params.get('ReturnUrl');
-          // Only allow exact matches to allowed paths, prohibiting query, fragments, encoding, schema, etc.
-          if (
-            !ret ||
-            typeof ret !== 'string' ||
-            !allowedPaths.includes(ret) ||
-            ret.includes('//') ||      // prohibit protocol-relative or absolute URLs
-            ret.includes(':')  ||      // prohibit any schema (e.g., http:)
-            ret.includes('?')  ||      // prohibit query string
-            ret.includes('#')          // prohibit fragment
-          ) {
-            ret = '/chat';
+          const returnUrl = params.get('ReturnUrl');
+          // Only redirect to one of the strictly predefined allowed paths, and never to a user-controlled value
+          let safePath = '/chat';
+          if (typeof returnUrl === 'string' && allowedPaths.includes(returnUrl)) {
+            safePath = returnUrl;
           }
-          window.location.href = ret;
+          window.location.href = safePath;
         })
         .catch(e2 => setOtpError(e2.message || 'Verification failed'))
         .finally(()=>{ flow.verifyInFlight = false; if (btn) btn.disabled = false; });
