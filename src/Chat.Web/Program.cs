@@ -28,14 +28,17 @@ namespace Chat.Web
             // Determine OTLP protocol from endpoint: default to gRPC unless port 4318 is used
             var useHttpProto = !string.IsNullOrWhiteSpace(otlpEndpoint) && otlpEndpoint.Contains(":4318", StringComparison.Ordinal);
 
-            Log.Logger = new LoggerConfiguration()
+            var loggerConfig = new LoggerConfiguration()
                 .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
                 .MinimumLevel.Information()
                 .Enrich.WithEnvironmentName()
                 .Enrich.WithMachineName()
                 .Enrich.WithThreadId()
-                .WriteTo.Console(outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {SourceContext} {Message:lj} {Properties:j}{NewLine}{Exception}")
-                .WriteTo.Conditional(_ => !string.IsNullOrWhiteSpace(otlpEndpoint), wt => wt.OpenTelemetry(options =>
+                .WriteTo.Console(outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {SourceContext} {Message:lj} {Properties:j}{NewLine}{Exception}");
+
+            if (!string.IsNullOrWhiteSpace(otlpEndpoint))
+            {
+                loggerConfig = loggerConfig.WriteTo.OpenTelemetry(options =>
                 {
                     options.Endpoint = otlpEndpoint!;
                     options.Protocol = useHttpProto ? Serilog.Sinks.OpenTelemetry.OtlpProtocol.HttpProtobuf : Serilog.Sinks.OpenTelemetry.OtlpProtocol.Grpc;
@@ -43,8 +46,10 @@ namespace Chat.Web
                     {
                         ["service.name"] = Tracing.ServiceName
                     };
-                }))
-                .CreateLogger();
+                });
+            }
+
+            Log.Logger = loggerConfig.CreateLogger();
 
             try
             {
