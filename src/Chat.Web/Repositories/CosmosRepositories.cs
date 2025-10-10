@@ -10,6 +10,8 @@ using System.Diagnostics;
 using Chat.Web.Observability;
 using Microsoft.Extensions.Logging;
 using System.Text;
+using System.Net.Sockets;
+using Chat.Web.Resilience;
 
 namespace Chat.Web.Repositories
 {
@@ -118,8 +120,14 @@ namespace Chat.Web.Repositories
             {
                 while (q.HasMoreResults)
                 {
-                    var page = q.ReadNextAsync().GetAwaiter().GetResult();
-                    activity?.AddEvent(new ActivityEvent("page", tags: new ActivityTagsCollection { {"db.page.count", page.Count} }));
+                    // retry each page fetch
+                    var page = Resilience.RetryHelper.ExecuteAsync(
+                        _ => q.ReadNextAsync(),
+                        Transient.IsCosmosTransient,
+                        _logger,
+                        "cosmos.users.getall.readnext"
+                    ).GetAwaiter().GetResult();
+                    activity?.AddEvent(new ActivityEvent("page", tags: new ActivityTagsCollection {{"db.page.count", page.Count}}));
                     list.AddRange(page.Select(d => new ApplicationUser { UserName = d.userName, FullName = d.fullName, Avatar = d.avatar, Email = d.email, MobileNumber = d.mobile, FixedRooms = d.fixedRooms != null ? new System.Collections.Generic.List<string>(d.fixedRooms) : new System.Collections.Generic.List<string>(), DefaultRoom = d.defaultRoom }));
                 }
                 activity?.SetTag("app.result.count", list.Count);
@@ -142,7 +150,11 @@ namespace Chat.Web.Repositories
             {
                 while (q.HasMoreResults)
                 {
-                    var page = q.ReadNextAsync().GetAwaiter().GetResult();
+                    var page = Resilience.RetryHelper.ExecuteAsync(
+                        _ => q.ReadNextAsync(),
+                        Transient.IsCosmosTransient,
+                        _logger,
+                        "cosmos.users.get.readnext").GetAwaiter().GetResult();
                     var d = page.FirstOrDefault();
                     if (d != null)
                     {
@@ -167,7 +179,11 @@ namespace Chat.Web.Repositories
             var doc = new UserDoc { id = user.UserName, userName = user.UserName, fullName = user.FullName, avatar = user.Avatar, email = user.Email, mobile = user.MobileNumber, fixedRooms = user.FixedRooms != null ? System.Linq.Enumerable.ToArray(user.FixedRooms) : null, defaultRoom = user.DefaultRoom };
             try
             {
-                var resp = _users.UpsertItemAsync(doc, new PartitionKey(doc.userName)).GetAwaiter().GetResult();
+                var resp = Resilience.RetryHelper.ExecuteAsync(
+                    _ => _users.UpsertItemAsync(doc, new PartitionKey(doc.userName)),
+                    Transient.IsCosmosTransient,
+                    _logger,
+                    "cosmos.users.upsert").GetAwaiter().GetResult();
                 activity?.SetTag("db.status_code", (int)resp.StatusCode);
             }
             catch (CosmosException ex)
@@ -183,13 +199,12 @@ namespace Chat.Web.Repositories
     {
         private readonly Container _rooms;
         private readonly ILogger<CosmosRoomsRepository> _logger;
+
         public CosmosRoomsRepository(CosmosClients clients, ILogger<CosmosRoomsRepository> logger)
         {
             _rooms = clients.Rooms;
             _logger = logger;
         }
-
-        // Create/Delete removed (static predefined rooms). Upsert happens via Update when seeding.
 
         public IEnumerable<Room> GetAll()
         {
@@ -200,7 +215,11 @@ namespace Chat.Web.Repositories
             {
                 while (q.HasMoreResults)
                 {
-                    var page = q.ReadNextAsync().GetAwaiter().GetResult();
+                    var page = Resilience.RetryHelper.ExecuteAsync(
+                        _ => q.ReadNextAsync(),
+                        Transient.IsCosmosTransient,
+                        _logger,
+                        "cosmos.rooms.getall.readnext").GetAwaiter().GetResult();
                     activity?.AddEvent(new ActivityEvent("page", tags: new ActivityTagsCollection {{"db.page.count", page.Count}}));
                     list.AddRange(page.Select(d => new Room { Id = int.Parse(d.id), Name = d.name, Admin = new ApplicationUser { UserName = d.admin } }));
                 }
@@ -225,7 +244,11 @@ namespace Chat.Web.Repositories
             {
                 while (q.HasMoreResults)
                 {
-                    var page = q.ReadNextAsync().GetAwaiter().GetResult();
+                    var page = Resilience.RetryHelper.ExecuteAsync(
+                        _ => q.ReadNextAsync(),
+                        Transient.IsCosmosTransient,
+                        _logger,
+                        "cosmos.rooms.getbyid.readnext").GetAwaiter().GetResult();
                     var d = page.FirstOrDefault();
                     if (d != null) return new Room { Id = int.Parse(d.id), Name = d.name, Admin = new ApplicationUser { UserName = d.admin } };
                 }
@@ -248,7 +271,11 @@ namespace Chat.Web.Repositories
             {
                 while (q.HasMoreResults)
                 {
-                    var page = q.ReadNextAsync().GetAwaiter().GetResult();
+                    var page = Resilience.RetryHelper.ExecuteAsync(
+                        _ => q.ReadNextAsync(),
+                        Transient.IsCosmosTransient,
+                        _logger,
+                        "cosmos.rooms.getbyname.readnext").GetAwaiter().GetResult();
                     var d = page.FirstOrDefault();
                     if (d != null) return new Room { Id = int.Parse(d.id), Name = d.name, Admin = new ApplicationUser { UserName = d.admin } };
                 }
@@ -288,7 +315,11 @@ namespace Chat.Web.Repositories
             var doc = new MessageDoc { id = message.Id.ToString(), roomName = pk, content = message.Content, fromUser = message.FromUser?.UserName, timestamp = message.Timestamp };
             try
             {
-                var resp = _messages.UpsertItemAsync(doc, new PartitionKey(pk)).GetAwaiter().GetResult();
+                var resp = Resilience.RetryHelper.ExecuteAsync(
+                    _ => _messages.UpsertItemAsync(doc, new PartitionKey(pk)),
+                    Transient.IsCosmosTransient,
+                    _logger,
+                    "cosmos.messages.create").GetAwaiter().GetResult();
                 activity?.SetTag("db.status_code", (int)resp.StatusCode);
             }
             catch (CosmosException ex)
@@ -310,7 +341,11 @@ namespace Chat.Web.Repositories
                 var pk = room?.Name ?? "global";
                 try
                 {
-                    var resp = _messages.DeleteItemAsync<MessageDoc>(id.ToString(), new PartitionKey(pk)).GetAwaiter().GetResult();
+                    var resp = Resilience.RetryHelper.ExecuteAsync(
+                        _ => _messages.DeleteItemAsync<MessageDoc>(id.ToString(), new PartitionKey(pk)),
+                        Transient.IsCosmosTransient,
+                        _logger,
+                        "cosmos.messages.delete").GetAwaiter().GetResult();
                     activity?.SetTag("db.status_code", (int)resp.StatusCode);
                 }
                 catch (CosmosException ex)
@@ -331,7 +366,11 @@ namespace Chat.Web.Repositories
             {
                 while (q.HasMoreResults)
                 {
-                    var page = q.ReadNextAsync().GetAwaiter().GetResult();
+                    var page = Resilience.RetryHelper.ExecuteAsync(
+                        _ => q.ReadNextAsync(),
+                        Transient.IsCosmosTransient,
+                        _logger,
+                        "cosmos.messages.getbyid.readnext").GetAwaiter().GetResult();
                     var d = page.FirstOrDefault();
                     if (d != null)
                     {
@@ -358,7 +397,11 @@ namespace Chat.Web.Repositories
             {
                 while (q.HasMoreResults)
                 {
-                    var page = q.ReadNextAsync().GetAwaiter().GetResult();
+                    var page = Resilience.RetryHelper.ExecuteAsync(
+                        _ => q.ReadNextAsync(),
+                        Transient.IsCosmosTransient,
+                        _logger,
+                        "cosmos.messages.recent.readnext").GetAwaiter().GetResult();
                     activity?.AddEvent(new ActivityEvent("page", tags: new ActivityTagsCollection {{"db.page.count", page.Count}}));
                     list.AddRange(page.Select(d => new Message { Id = int.Parse(d.id), Content = d.content, Timestamp = d.timestamp, ToRoom = new Room { Name = d.roomName }, FromUser = new ApplicationUser { UserName = d.fromUser } }));
                 }
@@ -391,7 +434,11 @@ namespace Chat.Web.Repositories
             {
                 while (q.HasMoreResults)
                 {
-                    var page = q.ReadNextAsync().GetAwaiter().GetResult();
+                    var page = Resilience.RetryHelper.ExecuteAsync(
+                        _ => q.ReadNextAsync(),
+                        Transient.IsCosmosTransient,
+                        _logger,
+                        "cosmos.messages.before.readnext").GetAwaiter().GetResult();
                     activity?.AddEvent(new ActivityEvent("page", tags: new ActivityTagsCollection {{"db.page.count", page.Count}}));
                     list.AddRange(page.Select(d => new Message { Id = int.Parse(d.id), Content = d.content, Timestamp = d.timestamp, ToRoom = new Room { Name = d.roomName }, FromUser = new ApplicationUser { UserName = d.fromUser } }));
                 }
