@@ -41,6 +41,7 @@ using OpenTelemetry.Logs;
 using System.Diagnostics.Metrics;
 using OpenTelemetry.Instrumentation.Runtime;
 using OpenTelemetry.Instrumentation.StackExchangeRedis;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 
 namespace Chat.Web
 {
@@ -185,6 +186,9 @@ namespace Chat.Web
             });
             services.AddSingleton<IOtpHasher, Argon2OtpHasher>();
 
+            // Baseline health checks so mapping exists even in Testing:InMemory mode
+            services.AddHealthChecks().AddCheck("self", () => HealthCheckResult.Healthy());
+
             var inMemory = Configuration["Testing:InMemory"];
             if (string.Equals(inMemory, "true", StringComparison.OrdinalIgnoreCase))
             {
@@ -225,6 +229,11 @@ namespace Chat.Web
                 var redisConn = ConfigurationGuards.Require(Configuration["Redis:ConnectionString"], "Redis:ConnectionString");
                 services.AddSingleton<IConnectionMultiplexer>(sp => ConnectionMultiplexer.Connect(redisConn));
                 services.AddSingleton<IOtpStore, RedisOtpStore>();
+
+                // Health checks for Redis and Cosmos
+                services.AddHealthChecks()
+                    .AddCheck<Chat.Web.Health.RedisHealthCheck>("redis", tags: new[] { "ready" })
+                    .AddCheck<Chat.Web.Health.CosmosHealthCheck>("cosmos", tags: new[] { "ready" });
             }
             // Prefer ACS sender if configured, otherwise console
             var acsConn = Configuration["Acs:ConnectionString"];            
@@ -236,7 +245,9 @@ namespace Chat.Web
                     EmailFrom = Configuration["Acs:EmailFrom"],
                     SmsFrom = Configuration["Acs:SmsFrom"]
                 };
-                services.AddSingleton<IOtpSender>(sp => new AcsOtpSender(acsOptions));
+                services.AddSingleton<IOtpSender>(sp => new AcsOtpSender(acsOptions, sp.GetRequiredService<ILogger<AcsOtpSender>>()));
+                // Include ACS in health checks if present (config check only)
+                services.AddHealthChecks().AddCheck("acs-config", () => HealthCheckResult.Healthy("configured"), tags: new[] { "ready" });
             }
             else
             {
@@ -377,7 +388,11 @@ namespace Chat.Web
                 endpoints.MapRazorPages();
                 endpoints.MapControllers();
                 endpoints.MapHub<ChatHub>("/chatHub");
-                endpoints.MapGet("/healthz", () => "ok");
+                endpoints.MapHealthChecks("/healthz");
+                endpoints.MapHealthChecks("/healthz/ready", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+                {
+                    Predicate = r => r.Tags.Contains("ready")
+                });
             });
         }
     }
