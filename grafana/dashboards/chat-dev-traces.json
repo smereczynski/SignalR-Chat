@@ -1,0 +1,38 @@
+{
+  "__inputs": [
+    { "name": "DS_TEMPO", "label": "Tempo", "type": "datasource", "pluginId": "tempo", "pluginName": "Tempo" }
+  ],
+  "title": "Chat Dev Traces (Recent)",
+  "timezone": "browser",
+  "tags": ["dev", "chat"],
+  "version": 1,
+  "refresh": "5s",
+  "time": { "from": "now-15m", "to": "now" },
+  "panels": [
+    {
+      "type": "table",
+      "title": "Recent Traces (last 15m)",
+      "gridPos": {"x": 0, "y": 0, "w": 24, "h": 18},
+      "datasource": {"type": "tempo", "uid": "${DS_TEMPO}"},
+      "targets": [
+        {
+          "datasource": {"type": "tempo", "uid": "${DS_TEMPO}"},
+          "queryType": "traceqlSearch",
+          "refId": "A",
+          "limit": 20,
+          "tableType": "traces",
+          "metricsQueryType": "range",
+          "filters": [
+            {"id": "serviceName", "operator": "=", "value": "Chat.Web"}
+          ]
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {"show": false, "reducer": ["sum"], "countRows": false, "fields": ""},
+        "sortBy": [{"desc": true, "displayName": "Start time"}]
+      }
+    }
+  ]
+}
