@@ -84,7 +84,10 @@ namespace Chat.Web
             }
             else if (!string.IsNullOrWhiteSpace(otlpEndpoint))
             {
-                builder.AddOtlpExporter(o => o.Endpoint = new Uri(otlpEndpoint));
+                // Use HTTP/Protobuf when targeting the collector on port 4318; otherwise default to gRPC
+                var endpointUri = new Uri(otlpEndpoint);
+                var protocol = otlpEndpoint.Contains(":4318") ? OtlpExportProtocol.HttpProtobuf : OtlpExportProtocol.Grpc;
+                builder.AddOtlpExporter(o => { o.Endpoint = endpointUri; o.Protocol = protocol; });
             }
             else
             {
@@ -105,7 +108,9 @@ namespace Chat.Web
             }
             else if (!string.IsNullOrWhiteSpace(otlpEndpoint))
             {
-                builder.AddOtlpExporter(o => o.Endpoint = new Uri(otlpEndpoint));
+                var endpointUri = new Uri(otlpEndpoint);
+                var protocol = otlpEndpoint.Contains(":4318") ? OtlpExportProtocol.HttpProtobuf : OtlpExportProtocol.Grpc;
+                builder.AddOtlpExporter(o => { o.Endpoint = endpointUri; o.Protocol = protocol; });
             }
             else
             {
@@ -126,7 +131,9 @@ namespace Chat.Web
             }
             else if (!string.IsNullOrWhiteSpace(otlpEndpoint))
             {
-                logging.AddOtlpExporter(o => o.Endpoint = new Uri(otlpEndpoint));
+                var endpointUri = new Uri(otlpEndpoint);
+                var protocol = otlpEndpoint.Contains(":4318") ? OtlpExportProtocol.HttpProtobuf : OtlpExportProtocol.Grpc;
+                logging.AddOtlpExporter(o => { o.Endpoint = endpointUri; o.Protocol = protocol; });
             }
             else
             {
