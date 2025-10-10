@@ -1,0 +1,23 @@
+{
+  "__inputs": [
+    { "name": "DS_LOKI", "label": "Loki", "type": "datasource", "pluginId": "loki", "pluginName": "Loki" }
+  ],
+  "title": "Chat Dev Logs",
+  "timezone": "browser",
+  "tags": ["dev", "chat"],
+  "version": 1,
+  "refresh": "5s",
+  "panels": [
+    {
+      "type": "logs",
+      "title": "Chat.Web Logs",
+      "gridPos": {"x": 0, "y": 0, "w": 24, "h": 14},
+  "datasource": {"type": "loki", "uid": "${DS_LOKI}"},
+      "targets": [
+        { "refId": "A", "expr": "{service=\"Chat.Web\"}", "queryType": "range" },
+        { "refId": "B", "expr": "{service_name=\"Chat.Web\"}", "queryType": "range" }
+      ],
+      "options": { "showLabels": true, "dedupStrategy": "none" }
+    }
+  ]
+}
