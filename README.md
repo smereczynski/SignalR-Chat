@@ -17,7 +17,12 @@ The project intentionally keeps scope tight: fixed public rooms, text messages o
   * Console fallback delivery (ACS email/SMS supported only if configured)
 * Connection & reconnect telemetry (duplicate start suppression + backoff attempts counter)
 * OpenTelemetry traces + metrics + logs; custom counters for chat domain events
-* Health endpoint: `/healthz` (readiness/basic liveness)
+* Background-stable hub connection
+  * Infinite reconnect policy with exponential backoff
+  * Extended timeouts to tolerate background tab throttling (serverTimeout ~ 240s; keepAlive ~ 20s)
+  * Proactive reconnect on tab visibility change and when the browser comes back online
+* Attention cue: browser title blinking when a new message arrives while the tab is hidden (stops when visible)
+* Health endpoints: `/healthz` (liveness), `/healthz/ready` (readiness), `/healthz/metrics` (lightweight snapshot)
 * Outbox queue: pending messages buffered while disconnected and flushed after reconnect & room join
 * Duplicate hub start guard (prevents false reconnect storms)
 * SessionStorage backed optimistic message reconciliation
@@ -32,7 +37,8 @@ Rooms are static; there is no runtime CRUD. The seeding hosted service ensures t
 **OTP / Cache**: Redis (or in-memory fallback) storing short-lived OTP codes (`otp:{user}`)  
 **Auth Flow**: Request code → store in OTP store → user enters code → cookie issued → hub connects  
 **Observability**: OpenTelemetry (trace + metric + log providers) with exporter priority (Azure Monitor > OTLP > Console) and domain counters  
-**Frontend**: Source JS in `wwwroot/js/` referenced directly by pages (`site.js`, `chat.js`, `login.js`). Minified bundles in `wwwroot/js/dist/` are optional and not required for development—pages no longer reference `dist`.
+Serilog OTLP sink is enabled only when `OTel__OtlpEndpoint` is set to avoid startup issues in environments without an OTLP endpoint.  
+**Frontend**: Source JS in `wwwroot/js/` referenced directly by pages (`site.js`, `chat.js`, `login.js`). Minified bundles in `wwwroot/js/dist/` are optional and not required for development—pages do not reference `dist` by default.
 
 **Auth & Redirects**: Dedicated `/login` page issues a cookie after OTP verification. Redirect targets are validated on the server with `Url.IsLocalUrl`; the verify API returns a server-approved `nextUrl` used by the client.
 
@@ -138,6 +144,7 @@ Custom counters (Meter `Chat.Web`):
 * `chat.reconnect.attempts`
 
 Client emits lightweight events for: reconnect attempts, duplicate start skips, message send outcomes, pagination fetches, queue flushes.
+Server logs use Serilog; OTLP export is conditionally enabled only when `OTel__OtlpEndpoint` is configured.
 
 ## Security Notes
 * OTP codes are stored hashed by default (Argon2id + salt + pepper). To support legacy/testing scenarios, plaintext storage can be toggled with `Otp:HashingEnabled=false`.
@@ -149,7 +156,10 @@ Client emits lightweight events for: reconnect attempts, duplicate start skips, 
 * Correlation IDs are random UUIDs (no sensitive data embedded).
 
 ## Health
-`/healthz` basic readiness (string "ok"). No additional JSON metrics endpoint is currently exposed.
+Endpoints:
+- `/healthz` — basic liveness (string "ok")
+- `/healthz/ready` — readiness including Redis/Cosmos and config checks
+- `/healthz/metrics` — lightweight in-process metrics snapshot (JSON)
 
 ## Development Workflow Tips
 * Edit source JS/CSS directly; bundling is optional and not required by default.
