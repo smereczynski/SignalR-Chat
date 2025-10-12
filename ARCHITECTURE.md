@@ -2,12 +2,120 @@
 
 This document describes the high-level architecture of SignalR-Chat with focus on the OTP hashing implementation.
 
+## Diagrams
+
+The following Mermaid diagrams visualize the system components and key runtime flows.
+
+### System architecture
+
+```mermaid
+flowchart LR
+  subgraph Client
+    B[Browser]
+  end
+  subgraph App[Chat.Web App]
+    W[ASP.NET Core + SignalR]
+  end
+  subgraph Azure[Azure Services]
+    AS[Azure SignalR Service]
+    R[(Redis OTP store)]
+    C[(Cosmos DB Users/Rooms/Messages)]
+    ACS[Azure Communication Services]
+  end
+  subgraph Observability
+    OTLP[OTLP endpoint Tempo/Loki/Prometheus]
+    AM[Azure Monitor Exporter]
+  end
+
+  B --> W
+  W --- AS
+  W --- R
+  W --- C
+  W --- ACS
+  W --- OTLP
+  W --- AM
+```
+
+Notes:
+- Azure SignalR is used in non-test modes; in Testing:InMemory the app uses in-process SignalR only.
+- Redis is used exclusively for OTP storage; messages/users/rooms are stored in Cosmos DB via repositories.
+- Observability exporters are selected by configuration: Azure Monitor > OTLP > Console.
+
+### OTP authentication flow
+
+```mermaid
+sequenceDiagram
+  autonumber
+  actor U as User
+  participant B as Browser
+  participant A as Chat.Web
+  participant R as Redis (OTP)
+  participant C as Azure Communication Services
+
+  U->>B: Initiate login
+  B->>A: POST /api/auth/start { user }
+  A->>R: SET otp:{user} = OtpHash(...), TTL
+  A-->>C: Send OTP (Email/SMS) [if configured]
+  A-->>B: 200 OK { status: "sent" }
+
+  U->>B: Enter OTP code
+  B->>A: POST /api/auth/verify { user, code }
+  A->>R: GET otp:{user}
+  alt Stored is OtpHash:*
+    A-->>A: Verify Argon2id (pepper+salt)
+  else Legacy plaintext
+    A-->>A: FixedTimeEquals
+  end
+  alt Valid
+    A-->>B: 200 OK + set-cookie (auth)
+    B->>A: GET /chat
+    A-->>B: Razor Page + scripts
+    B-->>A: SignalR negotiate/start
+    A-->>B: Connection established
+  else Invalid
+    A-->>B: 400/401 Invalid OTP
+  end
+```
+
+### Messaging, optimistic UI, and reconnect
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant B as Browser (chat.js)
+  participant H as ChatHub (server)
+  participant D as Cosmos DB
+
+  Note over B: User types message (allocate correlationId)
+  B-->>B: Optimistic render in UI
+  B->>H: hub.sendMessage({ text, correlationId })
+  H->>D: Persist message
+  H-->>B: Broadcast canonical message { correlationId }
+  B-->>B: Reconcile optimistic placeholder
+
+  rect rgba(33,66,99,0.06)
+  Note over B,H: Background tab or network drop
+  break Disconnected
+    B-->>B: Enqueue messages in outbox (sessionStorage)
+  end
+  par Reconnect triggers
+    B-->>B: visibilitychange (becomes visible)
+  and Online event
+    B-->>B: window.online
+  end
+  B->>H: ensureConnected() with infinite reconnect
+  H-->>B: Reconnected + rejoined room
+  B-->>B: Flush outbox FIFO
+  end
+```
+
 ## Runtime overview
 - ASP.NET Core 9 (Razor Pages + Controllers + SignalR Hub)
 - Persistence: EF Core; Cosmos DB repositories in normal mode, in-memory repositories in Testing:InMemory mode
 - OTP store: Redis in normal mode, in-memory in Testing:InMemory
 - Auth: Cookie authentication after OTP verification (dedicated `/login` page)
 - Observability: OpenTelemetry (traces, metrics, logs) with exporter auto-selection
+ - SignalR transport: In-process by default; Azure SignalR is automatically added when not in Testing:InMemory mode
 
 ## OTP authentication and hashing
 
@@ -72,7 +180,7 @@ This document describes the high-level architecture of SignalR-Chat with focus o
 
 ## Observability
 - Domain counters (Meter `Chat.Web`): `chat.otp.requests`, `chat.otp.verifications`, plus chat-centric metrics.
-- OpenTelemetry exporters are chosen in priority order: Azure Monitor (Production) → OTLP → Console.
+- OpenTelemetry exporters are chosen in priority order: Azure Monitor (Production) → OTLP → Console. Serilog OTLP sink is enabled only when `OTel__OtlpEndpoint` is present; otherwise logs remain on console.
 
 ## Cosmos messages retention (TTL)
 When Cosmos DB repositories are used, the messages container's `DefaultTimeToLive` is managed at startup to match configuration:
@@ -84,7 +192,7 @@ When Cosmos DB repositories are used, the messages container's `DefaultTimeToLiv
 - Reconciliation: The application reads the current container properties and updates `DefaultTimeToLive` when it differs from the configured value, including clearing it when disabled. This ensures drift correction when config changes between deployments.
 # Architecture
 
-This document describes the high-level architecture of the SignalR-Chat application, its main components, and key runtime flows.
+This section captures core components and runtime flows beyond OTP specifics.
 
 ## Current Overview
 - **Framework**: ASP.NET Core (Razor Pages + minimal MVC endpoints + SignalR Hub)
@@ -97,6 +205,8 @@ This document describes the high-level architecture of the SignalR-Chat applicat
 - **Removed Feature**: Private/direct messaging (`/private(user)`) removed; only room-based broadcast remains.
 - **Client Reliability**: Outbox queue with sessionStorage persistence for messages typed while disconnected or during (re)join. Queue flushes automatically after join / reconnect.
 - **Optimistic UI**: Messages render immediately with temporary local metadata and reconcile on authoritative broadcast via correlation ID.
+- **Background Connection Behavior**: Infinite reconnect policy with exponential backoff, extended server timeout (~240s) and keep-alives (~20s) to tolerate background tab throttling; proactive ensureConnected on `visibilitychange` and `online` events.
+- **Attention UX**: When a new message arrives and the tab is hidden, the document title blinks until the tab is visible again.
 - **Telemetry / Observability**: Activity/trace correlation through custom fetch wrapper capturing `X-Trace-Id`; client emits structured telemetry events (join attempts, sends, queue flush metrics); server leverages `ActivitySource` spans in hub operations.
 
 ## Key Components
@@ -118,20 +228,20 @@ SignalR provides the real-time bi-directional communication channel between brow
 - Connection lifecycle events used to trigger auto-join and queued message flush
 - Basic ordering within a single hub instance (optimistic reconciliation on client covers timing gaps)
 
-No Redis backplane is configured; multi-instance scale-out would require adding one (Redis or Azure SignalR Service) to unify group membership and broadcasts.
+Azure SignalR is used when not running in Testing:InMemory mode; otherwise in-process SignalR is used. No Redis backplane is configured; multi-instance scale-out could use Redis backplane as an alternative.
 
 ## Redis Role
 Redis is presently limited to OTP storage:
 - Key pattern: `otp:{userName}`
-- Value: plaintext OTP (improve later by hashing) with TTL `RedisOptions.OtpTtlSeconds` (default 300s)
-- Operations: set, get, remove invoked through `RedisOtpStore`
+- Value: versioned Argon2id hash by default (format `OtpHash:v2:argon2id:...`) with TTL `RedisOptions.OtpTtlSeconds` (default 300s); plaintext is supported only when `Otp:HashingEnabled=false` for testing/legacy
+- Operations: set, get, remove invoked through `RedisOtpStore` with retry + cooldown guards for transient errors
 
 Potential future roles: SignalR backplane, presence cache, rate limiting, hot message cache.
 
 ## Runtime Flows
 ### OTP Authentication
 1. Client POSTs `/api/auth/start` (generate + store OTP in Redis)
-2. User receives/displayed code out-of-band (currently minimal delivery)
+2. User receives/displayed code out-of-band via ACS (email/SMS) when configured; otherwise written to console for local development
 3. Client POSTs `/api/auth/verify` with code
 4. Server validates, issues auth cookie
 5. Client opens SignalR connection and auto-joins a room; outbox flush begins
@@ -149,11 +259,10 @@ Potential future roles: SignalR backplane, presence cache, rate limiting, hot me
 ### Reconnect Handling
 - Messages composed offline accumulate in queue
 - On reconnection + join success, queued messages flush automatically
+- Proactive reconnect is attempted on `visibilitychange` (when becoming visible) and `online` events
 
 ## Build & Front-End Delivery
-- Source JS under `wwwroot/js/` is used directly in development.
-- Optional: esbuild tasks can create minified bundles in `wwwroot/js/dist/`.
-- Dist is generated; avoid hand-editing.
+- Source JS under `wwwroot/js/` is used directly in development and referenced by pages. Optional build tasks can create minified bundles in `wwwroot/js/dist/` for production testing; pages do not reference `dist` by default.
 
 ## Observability & Telemetry
 - Server Activities wrap hub operations; `X-Trace-Id` header surfaces trace id to client
@@ -169,16 +278,15 @@ Potential future roles: SignalR backplane, presence cache, rate limiting, hot me
 | Presence tracking | Not implemented | Redis sets / ephemeral keys |
 
 ## Security Notes
-- OTP codes are stored hashed by default (Argon2id + salt + pepper). Legacy plaintext verification remains for backward compatibility and uses constant-time comparison.
+- OTP codes are stored hashed by default (Argon2id + salt + pepper). Legacy/plaintext verification is supported only when explicitly enabled for testing and uses constant-time comparison. Provide a high-entropy Base64 pepper per environment via `Otp__Pepper`.
 - Correlation IDs are opaque UUIDs (avoid embedding user data)
 - OTP endpoints are rate-limited.
 
 ## Future Roadmap (Prioritized)
-1. Introduce backplane (Redis or Azure SignalR) for multi-instance scale
-2. Presence & typing indicators
-3. OTLP exporter integration
-4. CI guard for forbidden legacy patterns
-5. Enhanced pagination UX/accessibility
+1. Presence & typing indicators
+2. Backplane scale-out metrics & multi-instance benchmarks
+3. Enhanced pagination UX/accessibility
+4. Additional OTP anti-abuse policies (per-user/IP counters in Redis)
 
 ## Glossary
 - **CorrelationId**: UUID bridging optimistic send and server broadcast
@@ -187,4 +295,4 @@ Potential future roles: SignalR backplane, presence cache, rate limiting, hot me
 - **Hub**: SignalR abstraction for connections, groups, messaging
 
 ---
-This document reflects the current hub-only messaging architecture with private messaging removed and minified JS bundle delivery.
+This document reflects the current architecture: Azure SignalR in non-test mode, background-stable client connection, hashed OTP storage, and OpenTelemetry-first observability.
