@@ -243,6 +243,18 @@ if(window.__chatAppBooted){
 
   // --------------- SignalR --------------
   let hub=null, reconnectAttempts=0; const maxBackoff=30000;
+  // Infinite reconnect policy for SignalR (keeps trying forever with capped backoff)
+  const InfiniteRetryPolicy = {
+    nextRetryDelayInMilliseconds(context){
+      // context has previousRetryCount, elapsedMilliseconds, retryReason
+      const attempt = (context && typeof context.previousRetryCount==='number') ? context.previousRetryCount + 1 : 1;
+      // Start at 0, 2s, 5s, 10s then cap at 30s
+      const schedule = [0, 2000, 5000, 10000];
+      const base = attempt <= schedule.length ? schedule[attempt-1] : 30000;
+      const delay = Math.min(base, 30000);
+      return delay;
+    }
+  };
   // Secure random utilities -------------------------------------------------
   function secureRandomBytes(len){
     const arr = new Uint8Array(len);
@@ -311,7 +323,23 @@ if(window.__chatAppBooted){
     return {cat:'other', msg};
   }
   let lastReconnectError=null;
-  function ensureHub(){ if(hub) return hub; hub=new signalR.HubConnectionBuilder().withUrl('/chatHub').withAutomaticReconnect().build(); wireHub(hub); return hub; }
+  function ensureHub(){
+    if(hub) return hub;
+    hub=new signalR.HubConnectionBuilder()
+      .withUrl('/chatHub')
+      .withAutomaticReconnect(InfiniteRetryPolicy)
+      .build();
+    // Extend timeouts to tolerate background tab timer throttling and long sleeps
+    try {
+      // If the server doesn't send a message within this interval, the client considers the connection lost
+      // Default is 30s; increase to 4 minutes to tolerate background throttling and sporadic network hiccups
+      hub.serverTimeoutInMilliseconds = 240000; // 4 minutes
+      // Client send keep-alive pings; default ~15s. Keep at 15s or 20s; browsers may throttle in background, which is okay.
+      hub.keepAliveIntervalInMilliseconds = 20000; // 20 seconds
+    } catch(_) { /* some transports may not expose setters; ignore */ }
+    wireHub(hub);
+    return hub;
+  }
   function startHub(){
     ensureHub();
     // Prevent duplicate start attempts while hub is already in a non-Disconnected state.
@@ -347,6 +375,15 @@ if(window.__chatAppBooted){
       postTelemetry('hub.connect.fail',{message: msg}); 
       scheduleReconnect(err); 
     });
+  }
+  // Proactively ensure a connection is in progress/established when conditions allow (e.g., tab becomes visible or network back online)
+  function ensureConnected(){
+    ensureHub();
+    const s = hub.state && hub.state.toLowerCase ? hub.state.toLowerCase() : '';
+    if(s==='disconnected'){
+      // Kick off a start cycle; automatic reconnect handles mid-connection losses
+      startHub();
+    }
   }
   /**
    * Applies exponential backoff and records telemetry for each reconnect attempt.
@@ -395,6 +432,13 @@ if(window.__chatAppBooted){
         }
       }
       addOrRenderMessage({ ...m, correlationId: m.correlationId });
+      // If the tab is hidden and the message is not from the current user, start title blinking
+      try {
+        const isMine = !!(state.profile && state.profile.userName === m.fromUserName);
+        if(document.hidden && !isMine){
+          startTitleBlink(m.room || state.joinedRoom && state.joinedRoom.name || '');
+        }
+      } catch(_) { /* ignore */ }
     });
     c.on('notify', n=> handleNotify(n));
     // Automatic reconnect handlers (withAutomaticReconnect is enabled on builder)
@@ -954,6 +998,7 @@ if(window.__chatAppBooted){
   }, 1500);
   // Flush when tab becomes visible again (covers background tab timing misses)
   document.addEventListener('visibilitychange', ()=>{ if(!document.hidden){ flushOutbox('visibility'); } });
+  document.addEventListener('visibilitychange', ()=>{ if(!document.hidden){ stopTitleBlink(); ensureConnected(); } });
   document.addEventListener('DOMContentLoaded',()=>{ 
     cacheDom(); 
     // Inject (or capture) offline banner element
@@ -974,6 +1019,8 @@ if(window.__chatAppBooted){
     wireUi(); 
     startConnectionStateLoop(); 
     installOfflineHandlers();
+    // Capture initial title for blinking restoration
+    initTitleBlink();
   });
   
   // ---------------- Offline Handling ----------------
@@ -986,7 +1033,7 @@ if(window.__chatAppBooted){
       } else {
         postTelemetry('net.online',{});
         // After coming online try to flush any queued messages (slight delay so hub reconnect can settle)
-        setTimeout(()=>{ if(state.outbox.length) flushOutbox('online'); }, 150);
+        setTimeout(()=>{ ensureConnected(); if(state.outbox.length) flushOutbox('online'); }, 150);
       }
       applyConnectionVisual(computeConnectionState());
     }
@@ -995,6 +1042,35 @@ if(window.__chatAppBooted){
     }
     window.addEventListener('offline', ()=> updateOffline(true));
     window.addEventListener('online', ()=> updateOffline(false));
+  }
+  
+  // ---------------- Title Blinking ----------------
+  let _titleBlink = { base:null, timer:null, active:false, counter:0, lastLabel:'' };
+  function initTitleBlink(){
+    try { _titleBlink.base = document.title || 'Chat'; } catch(_) { _titleBlink.base = 'Chat'; }
+  }
+  function startTitleBlink(roomLabel){
+    if(!_titleBlink.base) initTitleBlink();
+    _titleBlink.counter = (_titleBlink.counter||0) + 1;
+    const label = '('+ _titleBlink.counter +') New message' + (roomLabel? ' • '+roomLabel : '');
+    _titleBlink.lastLabel = label;
+    if(_titleBlink.active){
+      // If already blinking, update label; next tick will pick it up
+      return;
+    }
+    _titleBlink.active = true;
+    let showAlt = true;
+    _titleBlink.timer = setInterval(()=>{
+      // In heavily throttled tabs this may run infrequently, which is acceptable
+      try { document.title = showAlt ? _titleBlink.lastLabel : _titleBlink.base; } catch(_) {}
+      showAlt = !showAlt;
+    }, 1000);
+  }
+  function stopTitleBlink(){
+    if(_titleBlink.timer){ try { clearInterval(_titleBlink.timer); } catch(_) {} _titleBlink.timer=null; }
+    _titleBlink.active=false;
+    _titleBlink.counter=0;
+    try { if(_titleBlink.base) document.title = _titleBlink.base; } catch(_) {}
   }
   // Fail-safe: if something throws during early init, show the app with a generic error.
   window.addEventListener('error', function(){
