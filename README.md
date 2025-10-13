@@ -10,9 +10,9 @@ This branch contains a separate ASP.NET Core Razor Pages application for adminis
 
 ## Features
 - Users
-  - List all users (email, mobile, admin, enabled, rooms)
+  - List all users (email, mobile, enabled, rooms)
   - Create user
-  - Toggle Admin / Enabled flags
+  - Toggle Enabled flag
   - Assign rooms
 - Rooms
   - List rooms
@@ -51,14 +51,21 @@ export Cosmos__ConnectionString="AccountEndpoint=...;AccountKey=...;"
 ```
 
 ## Run locally
+Preferred: use VS Code task “Run Admin (Dev)” which trusts the dev cert and serves on HTTPS.
+
+Manual:
 ```
-dotnet build ./src/Chat.sln
-dotnet run --project ./src/Admin.Web --urls=http://localhost:5199
+dotnet dev-certs https --trust
+ASPNETCORE_URLS=https://localhost:5199 dotnet run --project ./src/Admin.Web
 ```
-Open http://localhost:5199 — you’ll be redirected to Entra ID to sign in.
+Open https://localhost:5199 — you’ll be redirected to Entra ID to sign in.
 
 ## Notes
 - All pages require authentication by default; sign-out is available at `/MicrosoftIdentity/Account/SignOut`.
+- Ensure Entra ID app registration includes:
+  - Redirect URI: `https://localhost:5199/signin-oidc`
+  - Front-channel logout URL: `https://localhost:5199/signout-oidc`
+- Health endpoint: `/healthz` returns `ok`.
 - Repositories are minimal and assume existing Cosmos database and containers.
 - Styles are lightweight and primarily server-rendered Razor Pages; no SignalR/JS chat code is included in Admin.Web.
 

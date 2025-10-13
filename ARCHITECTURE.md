@@ -34,14 +34,14 @@ flowchart LR
 1. Unauthenticated request → redirected to Entra ID (OIDC sign-in)
 2. After sign-in, Entra issues tokens; middleware signs in the user
 3. Authorized user accesses Razor Pages:
-   - Users: list, create, toggle admin/enabled, assign rooms
+  - Users: list, create, toggle enabled, assign rooms
    - Rooms: list, create
 4. Repositories read/write documents in Cosmos containers
 
 ### Data model (simplified)
 - User document
   - id/userName, email, mobile
-  - isAdmin (bool), enabled (bool)
+  - enabled (bool)
   - rooms: string[]
 - Room document
   - id (guid), name
@@ -49,8 +49,14 @@ flowchart LR
 ### Security
 - All pages require authentication (fallback policy = default policy)
 - Sign-out via `/MicrosoftIdentity/Account/SignOut`
+- Entra ID settings:
+  - Redirect URI: `https://localhost:5199/signin-oidc`
+  - Front-channel logout URL: `https://localhost:5199/signout-oidc`
 - No chat endpoints or SignalR in this app
 
 ### Deployment
 - Deploy Admin.Web to Azure App Service with appropriate Entra ID registration and Cosmos configuration
+
+### Health
+- Anonymous health probe at `/healthz` returns `ok`
 

@@ -21,6 +21,12 @@ builder.Services.AddRazorPages(options =>
     options.Conventions.AuthorizeFolder("/");
 }).AddMicrosoftIdentityUI();
 
+// Also add MVC controllers with Microsoft Identity UI to ensure
+// /MicrosoftIdentity/Account/* endpoints are available
+builder.Services
+    .AddControllersWithViews()
+    .AddMicrosoftIdentityUI();
+
 // Options for Cosmos
 builder.Services.Configure<CosmosOptions>(builder.Configuration.GetSection("Cosmos"));
 builder.Services.AddSingleton<CosmosClients>(sp =>
@@ -37,8 +43,24 @@ builder.Services.AddSingleton<IRoomsRepository, CosmosRoomsRepository>();
 // Ensure auth-related cookies are always marked Secure to satisfy SameSite=None requirements
 builder.Services.Configure<OpenIdConnectOptions>(OpenIdConnectDefaults.AuthenticationScheme, options =>
 {
+    options.CallbackPath = "/signin-oidc"; // explicit for clarity
     options.NonceCookie.SecurePolicy = CookieSecurePolicy.Always;
     options.CorrelationCookie.SecurePolicy = CookieSecurePolicy.Always;
+    options.SkipUnrecognizedRequests = true; // ignore unsolicited GETs to callback (no state)
+    // Make sign-out work reliably locally: set callback and default redirect
+    options.SignedOutCallbackPath = "/signout-oidc"; // add this as Front-channel logout URL in Entra ID
+    options.SignedOutRedirectUri = "/"; // where to land after sign-out completes
+
+    // Gracefully handle failed remote responses instead of throwing
+    options.Events = new OpenIdConnectEvents
+    {
+        OnRemoteFailure = context =>
+        {
+            context.HandleResponse();
+            context.Response.Redirect("/");
+            return Task.CompletedTask;
+        }
+    };
 });
 builder.Services.Configure<CookiePolicyOptions>(options =>
 {
@@ -66,6 +88,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapRazorPages();
+app.MapControllers();
 
 // Minimal health endpoint (anonymous)
 app.MapGet("/healthz", () => Results.Text("ok", "text/plain"))
