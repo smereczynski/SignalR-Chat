@@ -422,11 +422,13 @@ if(window.__chatAppBooted){
       renderUsers(); });
     c.on('newMessage', m=> {
       const mineUser = state.profile && state.profile.userName;
-      if(mineUser && m.correlationId && state.pendingMessages[m.correlationId]){
+      // Reconcile by correlationId for own messages regardless of pending ack state
+      if(mineUser && m.correlationId){
         const idx = state.messages.findIndex(x=> x.isMine && x.correlationId===m.correlationId);
         if(idx>=0){
           state.messages[idx] = {id:m.id,content:m.content,timestamp:m.timestamp,fromUserName:m.fromUserName,fromFullName:m.fromFullName,avatar:m.avatar,isMine:true, correlationId:m.correlationId};
-          delete state.pendingMessages[m.correlationId];
+          // pendingMessages entry may have been removed on invoke ack; ensure cleanup if present
+          if(state.pendingMessages[m.correlationId]) delete state.pendingMessages[m.correlationId];
           if(!updateMessageDom(state.messages[idx])){ renderMessages(); } else { finalizeMessageRender(); }
           return;
         }
