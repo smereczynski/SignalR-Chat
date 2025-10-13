@@ -19,8 +19,13 @@ namespace Chat.Web.Pages
             _logger = logger;
         }
 
-        public void OnGet()
+        public IActionResult OnGet()
         {
+            if (User?.Identity?.IsAuthenticated == true)
+            {
+                return LocalRedirect("/chat");
+            }
+            return Page();
         }
     }
 }
