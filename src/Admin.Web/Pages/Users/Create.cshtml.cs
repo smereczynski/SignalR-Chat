@@ -15,7 +15,6 @@ public class UsersCreateModel : PageModel
         public string Email { get; set; } = string.Empty;
         [Required]
         public string MobileNumber { get; set; } = string.Empty;
-        public bool IsAdmin { get; set; }
         public bool Enabled { get; set; } = true;
     }
 
@@ -32,7 +31,6 @@ public class UsersCreateModel : PageModel
             UserName = Input.UserName,
             Email = Input.Email,
             MobileNumber = Input.MobileNumber,
-            IsAdmin = Input.IsAdmin,
             Enabled = Input.Enabled,
             Rooms = new List<string>()
         };

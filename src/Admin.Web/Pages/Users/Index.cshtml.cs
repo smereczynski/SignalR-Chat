@@ -12,15 +12,6 @@ public class UsersIndexModel : PageModel
         Users = await _users.GetAllAsync();
     }
 
-    public async Task<IActionResult> OnPostToggleAdminAsync(string userName)
-    {
-        var u = await _users.GetAsync(userName);
-        if (u == null) return RedirectToPage();
-        u = u with { IsAdmin = !u.IsAdmin };
-        await _users.UpsertAsync(u);
-        return RedirectToPage();
-    }
-
     public async Task<IActionResult> OnPostToggleEnabledAsync(string userName)
     {
         var u = await _users.GetAsync(userName);

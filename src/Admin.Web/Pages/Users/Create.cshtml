@@ -19,8 +19,7 @@
     <input asp-for="Input.MobileNumber" />
   </div>
   <div>
-    <label>Admin?</label>
-    <input type="checkbox" asp-for="Input.IsAdmin" />
+    <!-- Admin flag removed -->
   </div>
   <div>
     <label>Enabled?</label>
@@ -28,6 +27,6 @@
   </div>
   <button type="submit">Create</button>
   <a asp-page="Index">Cancel</a>
-  <div class="muted">Only admins will see all rooms and users.</div>
+  
   <span asp-validation-summary="All"></span>
  </form>

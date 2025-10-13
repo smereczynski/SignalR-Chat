@@ -39,7 +39,7 @@
 			"command": "bash",
 			"args": [
 				"-lc",
-				"set -a; [ -f .env.local ] && source .env.local; export ASPNETCORE_ENVIRONMENT=Development; dotnet run --project ./src/Admin.Web --urls=http://localhost:5199"
+				"set -a; [ -f .env.local ] && source .env.local; export ASPNETCORE_ENVIRONMENT=Development; dotnet dev-certs https --trust >/dev/null 2>&1 || true; export ASPNETCORE_URLS=https://localhost:5199; dotnet run --project ./src/Admin.Web"
 			],
 			"options": { "cwd": "${workspaceFolder}" },
 			"problemMatcher": ["$msCompile"],
@@ -51,7 +51,7 @@
 			"command": "bash",
 			"args": [
 				"-lc",
-				"set -a; [ -f .env.local ] && source .env.local; export ASPNETCORE_ENVIRONMENT=Production; dotnet run --project ./src/Admin.Web --urls=http://localhost:5199"
+				"set -a; [ -f .env.local ] && source .env.local; export ASPNETCORE_ENVIRONMENT=Production; export ASPNETCORE_URLS=https://localhost:5199; dotnet run --project ./src/Admin.Web"
 			],
 			"options": { "cwd": "${workspaceFolder}" },
 			"problemMatcher": ["$msCompile"],

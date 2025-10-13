@@ -104,7 +104,6 @@ public record AdminUser
     public string UserName { get; init; } = default!;
     public string Email { get; init; } = default!;
     public string MobileNumber { get; init; } = default!;
-    public bool IsAdmin { get; init; }
     public bool Enabled { get; init; } = true;
     public List<string> Rooms { get; init; } = new();
 }
@@ -132,7 +131,6 @@ public class CosmosUsersRepository : IUsersRepository
         public string userName { get; set; } = default!;
         public string email { get; set; } = default!;
         public string mobile { get; set; } = default!;
-        public bool isAdmin { get; set; }
         public bool enabled { get; set; } = true;
         public string[] rooms { get; set; } = Array.Empty<string>();
     }
@@ -143,7 +141,7 @@ public class CosmosUsersRepository : IUsersRepository
         while (q.HasMoreResults)
         {
             var page = await q.ReadNextAsync();
-            list.AddRange(page.Select(d => new AdminUser { UserName = d.userName, Email = d.email, MobileNumber = d.mobile, IsAdmin = d.isAdmin, Enabled = d.enabled, Rooms = d.rooms?.ToList() ?? new List<string>() }));
+            list.AddRange(page.Select(d => new AdminUser { UserName = d.userName, Email = d.email, MobileNumber = d.mobile, Enabled = d.enabled, Rooms = d.rooms?.ToList() ?? new List<string>() }));
         }
         return list;
     }
@@ -154,13 +152,13 @@ public class CosmosUsersRepository : IUsersRepository
         {
             var page = await q.ReadNextAsync();
             var d = page.FirstOrDefault();
-            if (d != null) return new AdminUser { UserName = d.userName, Email = d.email, MobileNumber = d.mobile, IsAdmin = d.isAdmin, Enabled = d.enabled, Rooms = d.rooms?.ToList() ?? new List<string>() };
+            if (d != null) return new AdminUser { UserName = d.userName, Email = d.email, MobileNumber = d.mobile, Enabled = d.enabled, Rooms = d.rooms?.ToList() ?? new List<string>() };
         }
         return null;
     }
     public async Task UpsertAsync(AdminUser user)
     {
-        var doc = new UserDoc { id = user.UserName, userName = user.UserName, email = user.Email, mobile = user.MobileNumber, isAdmin = user.IsAdmin, enabled = user.Enabled, rooms = user.Rooms?.ToArray() ?? Array.Empty<string>() };
+        var doc = new UserDoc { id = user.UserName, userName = user.UserName, email = user.Email, mobile = user.MobileNumber, enabled = user.Enabled, rooms = user.Rooms?.ToArray() ?? Array.Empty<string>() };
         await _users.UpsertItemAsync(doc, new Microsoft.Azure.Cosmos.PartitionKey(doc.userName));
     }
 }
