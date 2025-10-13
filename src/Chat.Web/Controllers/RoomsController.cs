@@ -41,7 +41,7 @@ namespace Chat.Web.Controllers
 
             var rooms = _rooms.GetAll()
                 .Where(r => allowed.Contains(r.Name))
-                .Select(r => new RoomViewModel { Id = r.Id, Name = r.Name, Admin = r.Admin?.UserName })
+                .Select(r => new RoomViewModel { Id = r.Id, Name = r.Name })
                 .ToList();
 
             var json = JsonSerializer.Serialize(rooms, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
@@ -62,7 +62,7 @@ namespace Chat.Web.Controllers
             if (room == null || !allowed.Contains(room.Name))
                 return NotFound();
 
-            var vm = new RoomViewModel { Id = room.Id, Name = room.Name, Admin = room.Admin?.UserName };
+            var vm = new RoomViewModel { Id = room.Id, Name = room.Name };
             return Ok(vm);
         }
     }

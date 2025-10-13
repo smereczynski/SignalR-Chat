@@ -12,7 +12,7 @@ namespace Chat.Web.Repositories
     {
         private readonly ConcurrentDictionary<string, ApplicationUser> _users = new();
         public IEnumerable<ApplicationUser> GetAll() => _users.Values;
-        public ApplicationUser GetByUserName(string userName) => _users.GetOrAdd(userName, u => new ApplicationUser { UserName = u, FullName = u });
+    public ApplicationUser GetByUserName(string userName) => _users.GetOrAdd(userName, u => new ApplicationUser { UserName = u, FullName = u, Enabled = true });
         public void Upsert(ApplicationUser user) => _users[user.UserName] = user;
     }
 
