@@ -1,0 +1,33 @@
+@page
+@model UsersCreateModel
+@{
+    ViewData["Title"] = "Create User";
+    Layout = "/Pages/Shared/_Layout.cshtml";
+}
+<h2>Create User</h2>
+<form method="post">
+  <div>
+    <label>UserName</label>
+    <input asp-for="Input.UserName" />
+  </div>
+  <div>
+    <label>Email</label>
+    <input asp-for="Input.Email" />
+  </div>
+  <div>
+    <label>GSM</label>
+    <input asp-for="Input.MobileNumber" />
+  </div>
+  <div>
+    <label>Admin?</label>
+    <input type="checkbox" asp-for="Input.IsAdmin" />
+  </div>
+  <div>
+    <label>Enabled?</label>
+    <input type="checkbox" asp-for="Input.Enabled" checked />
+  </div>
+  <button type="submit">Create</button>
+  <a asp-page="Index">Cancel</a>
+  <div class="muted">Only admins will see all rooms and users.</div>
+  <span asp-validation-summary="All"></span>
+ </form>

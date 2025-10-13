@@ -1,0 +1,41 @@
+@page
+@model UsersIndexModel
+@{
+    ViewData["Title"] = "Users";
+    Layout = "/Pages/Shared/_Layout.cshtml";
+}
+<h2>Users</h2>
+<p>
+  <a asp-page="Create">Create new user</a>
+</p>
+<table>
+  <thead>
+    <tr>
+      <th>UserName</th><th>Email</th><th>Mobile</th><th>Admin</th><th>Enabled</th><th>Rooms</th><th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+  @foreach (var u in Model.Users)
+  {
+    <tr>
+      <td>@u.UserName</td>
+      <td>@u.Email</td>
+      <td>@u.MobileNumber</td>
+      <td>@(u.IsAdmin ? "Yes" : "No")</td>
+      <td>@(u.Enabled ? "Yes" : "No")</td>
+      <td class="muted">@string.Join(", ", u.Rooms)</td>
+      <td>
+        <form method="post" asp-page-handler="ToggleAdmin" class="inline">
+          <input type="hidden" name="userName" value="@u.UserName" />
+          <button type="submit">@(u.IsAdmin ? "Revoke Admin" : "Make Admin")</button>
+        </form>
+        <form method="post" asp-page-handler="ToggleEnabled" class="inline">
+          <input type="hidden" name="userName" value="@u.UserName" />
+          <button type="submit">@(u.Enabled ? "Disable" : "Enable")</button>
+        </form>
+        <a asp-page="AssignRooms" asp-route-userName="@u.UserName">Assign rooms</a>
+      </td>
+    </tr>
+  }
+  </tbody>
+  </table>

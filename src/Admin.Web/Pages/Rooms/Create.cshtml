@@ -1,0 +1,15 @@
+@page
+@model RoomsCreateModel
+@{
+    ViewData["Title"] = "Create Room";
+    Layout = "/Pages/Shared/_Layout.cshtml";
+}
+<h2>Create Room</h2>
+<form method="post">
+  <div>
+    <label>Name</label>
+    <input asp-for="Name" />
+  </div>
+  <button type="submit">Create</button>
+  <a asp-page="Index">Cancel</a>
+</form>
