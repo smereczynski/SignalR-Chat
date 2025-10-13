@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.Identity.Web;
 using Microsoft.Identity.Web.UI;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -32,6 +34,17 @@ builder.Services.AddSingleton<CosmosClients>(sp =>
 builder.Services.AddSingleton<IUsersRepository, CosmosUsersRepository>();
 builder.Services.AddSingleton<IRoomsRepository, CosmosRoomsRepository>();
 
+// Ensure auth-related cookies are always marked Secure to satisfy SameSite=None requirements
+builder.Services.Configure<OpenIdConnectOptions>(OpenIdConnectDefaults.AuthenticationScheme, options =>
+{
+    options.NonceCookie.SecurePolicy = CookieSecurePolicy.Always;
+    options.CorrelationCookie.SecurePolicy = CookieSecurePolicy.Always;
+});
+builder.Services.Configure<CookiePolicyOptions>(options =>
+{
+    options.Secure = CookieSecurePolicy.Always;
+});
+
 var app = builder.Build();
 
 if (!app.Environment.IsDevelopment())
@@ -40,18 +53,28 @@ if (!app.Environment.IsDevelopment())
     app.UseHsts();
 }
 
-app.UseHttpsRedirection();
+// Skip HTTPS redirection when running under integration tests
+if (!app.Environment.IsEnvironment("Testing"))
+{
+    app.UseHttpsRedirection();
+}
 app.UseStaticFiles();
 
 app.UseRouting();
+app.UseCookiePolicy();
 app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapRazorPages();
 
+// Minimal health endpoint (anonymous)
+app.MapGet("/healthz", () => Results.Text("ok", "text/plain"))
+    .AllowAnonymous();
+
 app.Run();
 
 // Minimal option models and repos (reused simplified versions)
+public partial class Program { }
 public record CosmosOptions
 {
     public string? ConnectionString { get; init; }

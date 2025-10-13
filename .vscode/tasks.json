@@ -2,54 +2,9 @@
 	"version": "2.0.0",
 	"tasks": [
 		{
-			"label": "test",
-			"type": "shell",
-			"command": "dotnet test --no-build --nologo",
-			"group": "test",
-			"problemMatcher": [
-				"$msCompile"
-			],
-			"presentation": {
-				"reveal": "always",
-				"panel": "shared"
-			}
-		},
-		{
-			"label": "npm install",
-			"type": "shell",
-			"command": "npm install",
-			"options": {
-				"cwd": "${workspaceFolder}"
-			},
-			"problemMatcher": [],
-			"presentation": {
-				"reveal": "silent",
-				"panel": "shared"
-			},
-			"detail": "Install frontend dependencies (esbuild, sass, etc)."
-		},
-		{
-			"label": "bundle js (prod)",
-			"type": "shell",
-			"command": "npm run build:prod",
-			"dependsOn": [
-				"npm install"
-			],
-			"options": {
-				"cwd": "${workspaceFolder}"
-			},
-			"problemMatcher": [],
-			"group": "build",
-			"presentation": {
-				"reveal": "silent",
-				"panel": "shared"
-			},
-			"detail": "Build CSS + minified JS bundles via esbuild (production)."
-		},
-		{
 			"label": "dotnet build",
 			"type": "shell",
-			"command": "dotnet build ./src/Chat.sln --nologo",
+			"command": "dotnet build ./src/Admin.sln --nologo",
 			"group": "build",
 			"problemMatcher": [
 				"$msCompile"
@@ -61,102 +16,46 @@
 			"detail": "Compile the .NET solution."
 		},
 		{
-			"label": "build all",
-			"dependsOn": [
-				"npm install",
-				"bundle js (prod)",
-				"dotnet build"
-			],
-			"group": "build",
-			"presentation": {
-				"reveal": "silent",
-				"panel": "shared"
-			},
-			"detail": "Full frontend + backend build (npm deps, bundle, then dotnet build)."
-		},
-		{
-			"label": "Run Chat (Azure local env)",
-			"type": "shell",
-			"command": "bash",
-			"args": [
-				"-lc",
-				"set -a; [ -f .env.local ] && source .env.local; export ASPNETCORE_ENVIRONMENT=Development; dotnet run --project ./src/Chat.Web --urls=http://localhost:5099"
-			],
-			"options": {
-				"cwd": "${workspaceFolder}"
-			},
-			"problemMatcher": [
-				"$msCompile"
-			],
-			"detail": "Loads secrets from .env.local and runs Chat.Web with Development environment."
-		},
-		{
-			"label": "PROD Run Chat (Azure local env)",
-			"type": "shell",
-			"command": "bash",
-			"args": [
-				"-lc",
-				"set -a; [ -f .env.local ] && source .env.local; export ASPNETCORE_ENVIRONMENT=Production; dotnet run --project ./src/Chat.Web --urls=http://localhost:5099"
-			],
-			"options": {
-				"cwd": "${workspaceFolder}"
-			},
-			"problemMatcher": [
-				"$msCompile"
-			],
-			"detail": "Loads secrets from .env.local and runs Chat.Web with Production environment."
-		},
-		{
 			"label": "build-solution",
 			"type": "shell",
-			"command": "dotnet build src/Chat.sln --nologo",
+			"command": "dotnet build src/Admin.sln --nologo",
 			"problemMatcher": [
 				"$msCompile"
 			],
 			"group": "build"
-		},
-		{
-			"label": "test-solution",
-			"type": "shell",
-			"command": "dotnet test src/Chat.sln --nologo",
-			"problemMatcher": [
-				"$msCompile"
-			],
-			"group": "test"
-		},
-		{
-			"label": "retest-solution",
-			"type": "shell",
-			"command": "dotnet test src/Chat.sln --nologo",
-			"problemMatcher": [
-				"$msCompile"
-			],
-			"group": "test"
 		},
 		{
 			"label": "build",
 			"type": "shell",
-			"command": "dotnet build src/Chat.sln --nologo",
+			"command": "dotnet build src/Admin.sln --nologo",
 			"problemMatcher": [
 				"$msCompile"
 			],
 			"group": "build"
 		},
 		{
-			"label": "build web with new pages",
+			"label": "Run Admin (Dev)",
 			"type": "shell",
-			"command": "npm run build:prod && dotnet build ./src/Chat.sln --nologo",
-			"isBackground": false,
-			"problemMatcher": [],
-			"group": "build"
+			"command": "bash",
+			"args": [
+				"-lc",
+				"set -a; [ -f .env.local ] && source .env.local; export ASPNETCORE_ENVIRONMENT=Development; dotnet run --project ./src/Admin.Web --urls=http://localhost:5199"
+			],
+			"options": { "cwd": "${workspaceFolder}" },
+			"problemMatcher": ["$msCompile"],
+			"detail": "Loads secrets from .env.local and runs Admin.Web in Development."
 		},
 		{
-			"label": "re-bundle login.js",
+			"label": "Run Admin (Prod)",
 			"type": "shell",
-			"command": "npm run bundle:js",
-			"isBackground": false,
-			"problemMatcher": [],
-			"group": "build"
+			"command": "bash",
+			"args": [
+				"-lc",
+				"set -a; [ -f .env.local ] && source .env.local; export ASPNETCORE_ENVIRONMENT=Production; dotnet run --project ./src/Admin.Web --urls=http://localhost:5199"
+			],
+			"options": { "cwd": "${workspaceFolder}" },
+			"problemMatcher": ["$msCompile"],
+			"detail": "Loads secrets from .env.local and runs Admin.Web in Production."
 		}
 	]
 }
