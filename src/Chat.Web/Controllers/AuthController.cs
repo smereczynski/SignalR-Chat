@@ -51,7 +51,8 @@ namespace Chat.Web.Controllers
         public IActionResult Users()
         {
             var users = _users.GetAll();
-            var list = System.Linq.Enumerable.Select(users, u => new { userName = u.UserName, fullName = u.FullName });
+            // Only expose enabled users to the login dropdown
+            var list = System.Linq.Enumerable.Select(System.Linq.Enumerable.Where(users, u => (u?.Enabled) != false), u => new { userName = u.UserName, fullName = u.FullName });
             // Manual serialization to avoid test harness PipeWriter issue.
             var json = JsonSerializer.Serialize(list);
             return new ContentResult { Content = json, ContentType = "application/json", StatusCode = 200 };
@@ -66,7 +67,7 @@ namespace Chat.Web.Controllers
         public async Task<IActionResult> Start([FromBody] StartRequest req)
         {
             var user = _users.GetByUserName(req.UserName);
-            if (user == null) return Unauthorized();
+            if (user == null || user.Enabled == false) return Unauthorized();
 
             // If a non-expired code already exists, do NOT send again within TTL to avoid duplicate emails.
             var existing = await _otpStore.GetAsync(req.UserName);
@@ -116,6 +117,8 @@ namespace Chat.Web.Controllers
         [EnableRateLimiting("AuthEndpoints")]
         public async Task<IActionResult> Verify([FromBody] VerifyRequest req)
         {
+            var user = _users.GetByUserName(req.UserName);
+            if (user == null || user.Enabled == false) return Unauthorized();
             var expected = await _otpStore.GetAsync(req.UserName);
             if (string.IsNullOrEmpty(expected)) return Unauthorized();
             bool ok;

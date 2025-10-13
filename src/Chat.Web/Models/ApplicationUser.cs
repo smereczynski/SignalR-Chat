@@ -13,6 +13,10 @@ namespace Chat.Web.Models
         public string FullName { get; set; }
         public string Avatar { get; set; }
         /// <summary>
+        /// Whether this user is allowed to sign in. Defaults to true.
+        /// </summary>
+        public bool Enabled { get; set; } = true;
+        /// <summary>
         /// Email address for notification / identity enrichment.
         /// </summary>
         public string Email { get; set; }
