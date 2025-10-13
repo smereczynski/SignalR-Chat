@@ -294,5 +294,106 @@ Potential future roles: SignalR backplane, presence cache, rate limiting, hot me
 - **OTP**: Short-lived passcode enabling passwordless login
 - **Hub**: SignalR abstraction for connections, groups, messaging
 
+## Data schemas
+
+This section documents the canonical shapes for the three core entities used by the application: user, room, and message.
+
+Notes on storage:
+- The domain models are defined via EF Core entities, but the app can also use Cosmos-backed repositories. Shapes below capture the semantic contract across both.
+- Admin tooling may emit slightly different field names; compatibility rules are noted per entity.
+
+### User
+
+Purpose: Identity for OTP login, room authorization, and message attribution.
+
+Canonical fields:
+- id: string (stable user key; example: "alice")
+- userName: string (login/display identity; often same as id)
+- fullName: string | null
+- avatar: string | null (URL or slug; optional)
+- enabled: boolean (default true) — determines if the user is allowed to sign in
+- email: string | null
+- mobileNumber: string | null (E.164 recommended)
+- fixedRooms: string[] (room names the user may join; enforced server-side)
+- defaultRoom: string | null (preferred room to auto-join; derived when not provided)
+
+Relationships (relational model):
+- Messages (one-to-many via Message.FromUser)
+- Rooms (navigation-only convenience; joining is governed by FixedRooms, not a join table)
+
+Cosmos compatibility:
+- Some documents may store `rooms` instead of `fixedRooms`. The repository accepts either; when both present, `fixedRooms` wins.
+- If `defaultRoom` is missing, the app derives it: if there is exactly one allowed room → that one; otherwise the first name in alphabetical order.
+
+Example (logical JSON shape):
+```
+{
+  "id": "alice",
+  "userName": "alice",
+  "fullName": "Alice A.",
+  "avatar": null,
+  "enabled": true,
+  "email": "alice@example.com",
+  "mobileNumber": "+12065551234",
+  "fixedRooms": ["general", "ops"],
+  "defaultRoom": "general"
+}
+```
+
+### Room
+
+Purpose: Public channel for posting messages.
+
+Canonical fields:
+- id: integer (stable numeric id)
+- name: string (room key and display name; examples: "general", "ops", "random")
+
+Relationships:
+- Messages (one-to-many via Message.ToRoomId)
+
+Cosmos compatibility:
+- Some documents may have a non-numeric `id` (string). The repository computes a stable numeric id for in-app use (deterministic hash) when needed.
+- Legacy/admin-authored docs might include an `admin` field; the app ignores it.
+
+Example (logical JSON shape):
+```
+{
+  "id": 1,
+  "name": "general"
+}
+```
+
+### Message
+
+Purpose: Immutable text payload attributed to a user and room, with a server timestamp.
+
+Canonical fields:
+- id: integer (surrogate key, monotonic per store)
+- content: string (text body)
+- timestamp: string (ISO 8601 UTC)
+- fromUser: object (minimal attribution; in relational form this is a foreign key; in Cosmos a denormalized projection may appear)
+  - id: string
+  - userName: string
+- toRoomId: integer (foreign key to Room.id)
+
+Relationships:
+- FromUser (many-to-one)
+- ToRoom (many-to-one)
+
+Cosmos compatibility:
+- The repository persists and reads messages from a container that may include additional system fields (`_ts`, `_etag`, etc.); these are ignored by the domain model.
+- TTL can be enabled on the container; deletion is managed by Cosmos based on `DefaultTimeToLive` (see the TTL section above).
+
+Example (logical JSON shape):
+```
+{
+  "id": 1042,
+  "content": "Hello, world",
+  "timestamp": "2025-10-13T12:34:56.789Z",
+  "fromUser": { "id": "alice", "userName": "alice" },
+  "toRoomId": 1
+}
+```
+
 ---
 This document reflects the current architecture: Azure SignalR in non-test mode, background-stable client connection, hashed OTP storage, and OpenTelemetry-first observability.
