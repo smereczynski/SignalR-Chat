@@ -13,9 +13,12 @@ A minimal, secure admin panel (Razor Pages) deployed separately on Azure App Ser
 Configuration
 - AzureAd: configure Instance, TenantId, ClientId
 - Cosmos: ConnectionString, Database, UsersContainer, RoomsContainer
+- Authorization: ChatAdmin group object ID (see below)
 
 Security
-- All pages require authentication
+- All pages require authentication and membership in the ChatAdmin Entra ID group
+- Configuration key: `Authorization:ChatAdminGroupObjectId`
+- Ensure the app registration emits group claims in ID tokens (Token configuration → Group claims). If group overage occurs, consider limiting to “Groups assigned to the application” or using App Roles instead.
 - No client-side JS frameworks; simple server-rendered forms
 
 Sign-in/out URLs (local/dev)
@@ -35,6 +38,18 @@ Run locally
 Tests
 - Minimal integration tests exist under `tests/Admin.Web.Tests`.
 - Run: `dotnet test ./src/Admin.sln`
+
+Authorization config example (appsettings.json)
+```
+"Authorization": {
+  "ChatAdminGroupObjectId": "62dc8cc5-fd83-45ba-b40f-64449d26e0de"
+}
+```
+
+Environment variables (zsh)
+```
+export Authorization__ChatAdminGroupObjectId=62dc8cc5-fd83-45ba-b40f-64449d26e0de
+```
 
 Deploy
 - Build and deploy as a separate Azure App Service

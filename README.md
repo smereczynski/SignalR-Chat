@@ -5,6 +5,7 @@ This branch contains a separate ASP.NET Core Razor Pages application for adminis
 ## What’s here
 - Project: `src/Admin.Web` (TargetFramework: net9.0)
 - Auth: Microsoft.Identity.Web (OpenID Connect) — sign-in/out via Entra ID
+- Authorization: default policy requires membership in a specific Entra ID security group (ChatAdmin)
 - Data: Cosmos DB (users, rooms) via lightweight repository pattern
 - UI: Razor Pages, minimal CSS reusing styles consistent with Chat.Web
 
@@ -48,6 +49,7 @@ export AzureAd__TenantId=00000000-0000-0000-0000-000000000000
 export AzureAd__ClientId=11111111-1111-1111-1111-111111111111
 export AzureAd__Domain=contoso.onmicrosoft.com
 export Cosmos__ConnectionString="AccountEndpoint=...;AccountKey=...;"
+export Authorization__ChatAdminGroupObjectId=62dc8cc5-fd83-45ba-b40f-64449d26e0de
 ```
 
 ## Run locally
@@ -65,6 +67,7 @@ Open https://localhost:5199 — you’ll be redirected to Entra ID to sign in.
 - Ensure Entra ID app registration includes:
   - Redirect URI: `https://localhost:5199/signin-oidc`
   - Front-channel logout URL: `https://localhost:5199/signout-oidc`
+- To authorize via groups, ensure Token configuration adds group claims to ID tokens. If tokens become too large (group overage), prefer limiting to “Groups assigned to the application” or switch to App Roles.
 - Health endpoint: `/healthz` returns `ok`.
 - Repositories are minimal and assume existing Cosmos database and containers.
 - Styles are lightweight and primarily server-rendered Razor Pages; no SignalR/JS chat code is included in Admin.Web.

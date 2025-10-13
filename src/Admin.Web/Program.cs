@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.Identity.Web;
 using Microsoft.Identity.Web.UI;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -11,9 +12,22 @@ builder.Services
     .AddAuthentication(OpenIdConnectDefaults.AuthenticationScheme)
     .AddMicrosoftIdentityWebApp(builder.Configuration.GetSection("AzureAd"));
 
+// Authorization: require membership in ChatAdmin group for all pages by default
+var chatAdminGroupId = builder.Configuration["Authorization:ChatAdminGroupObjectId"];
+if (string.IsNullOrWhiteSpace(chatAdminGroupId))
+{
+    throw new InvalidOperationException("Authorization:ChatAdminGroupObjectId is required");
+}
+
 builder.Services.AddAuthorization(options =>
 {
-    options.FallbackPolicy = options.DefaultPolicy; // require auth by default
+    var requireChatAdmin = new AuthorizationPolicyBuilder()
+        .RequireAuthenticatedUser()
+        .RequireClaim("groups", chatAdminGroupId)
+        .Build();
+
+    options.DefaultPolicy = requireChatAdmin;
+    options.FallbackPolicy = options.DefaultPolicy; // enforce everywhere unless explicitly allowed
 });
 
 builder.Services.AddRazorPages(options =>
@@ -75,6 +89,7 @@ if (!app.Environment.IsDevelopment())
     app.UseHsts();
 }
 
+// (Authorization is configured above, before app.Build())
 // Skip HTTPS redirection when running under integration tests
 if (!app.Environment.IsEnvironment("Testing"))
 {

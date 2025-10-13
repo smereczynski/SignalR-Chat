@@ -47,12 +47,19 @@ flowchart LR
   - id (guid), name
 
 ### Security
-- All pages require authentication (fallback policy = default policy)
+- All pages require authentication and ChatAdmin group membership (fallback policy = default policy)
 - Sign-out via `/MicrosoftIdentity/Account/SignOut`
 - Entra ID settings:
   - Redirect URI: `https://localhost:5199/signin-oidc`
   - Front-channel logout URL: `https://localhost:5199/signout-oidc`
 - No chat endpoints or SignalR in this app
+
+Authorization strategy
+- Default policy requires a `groups` claim containing the configured ChatAdmin group object ID.
+- Token configuration in Entra ID should include Group claims. For tenants with many group memberships, consider:
+  - Limiting to “Groups assigned to the application” to keep tokens small, or
+  - Using App Roles (preferred for app-specific permissions), or
+  - Performing a Microsoft Graph lookup on sign-in and issuing a custom claim (heavier runtime coupling).
 
 ### Deployment
 - Deploy Admin.Web to Azure App Service with appropriate Entra ID registration and Cosmos configuration
