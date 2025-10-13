@@ -15,6 +15,6 @@ namespace Chat.Web.ViewModels
         [RegularExpression(@"^\w+( \w+)*$", ErrorMessage = "Characters allowed: letters, numbers, and one space between words.")]
         public string Name { get; set; }
 
-        public string Admin { get; set; }
+    // Admin field removed
     }
 }
