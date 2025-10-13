@@ -19,9 +19,10 @@
             <nav>
                 <a asp-page="/Users/Index">Users</a>
                 <a asp-page="/Rooms/Index">Rooms</a>
-                <a href="/MicrosoftIdentity/Account/SignOut">Sign out</a>
+                <a class="sign-out" href="/MicrosoftIdentity/Account/SignOut">Sign out</a>
             </nav>
         </header>
+        <hr />
         <main>
             @RenderBody()
         </main>

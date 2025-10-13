@@ -5,10 +5,21 @@
     Layout = "/Pages/Shared/_Layout.cshtml";
 }
 <h2>Rooms</h2>
-<p><a asp-page="Create">Create room</a></p>
-<ul>
-@foreach (var r in Model.Rooms)
-{
-  <li>@r</li>
-}
-</ul>
+<p>
+  <a asp-page="Create">Create room</a>
+  </p>
+<table>
+  <thead>
+    <tr>
+      <th>Name</th>
+    </tr>
+  </thead>
+  <tbody>
+  @foreach (var r in Model.Rooms)
+  {
+    <tr>
+      <td>@r</td>
+    </tr>
+  }
+  </tbody>
+  </table>

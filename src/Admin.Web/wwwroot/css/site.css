@@ -328,6 +328,25 @@ a {
 	text-decoration: none;
 }
 
+/* Make Sign out obvious and separate it visually */
+nav {
+	display: flex;
+	gap: 12px;
+	align-items: center;
+}
+nav .sign-out {
+	margin-left: auto;
+	padding: 4px 10px;
+	border: 1px solid #c62828;
+	border-radius: 4px;
+	color: #c62828;
+	font-weight: 600;
+}
+nav .sign-out:hover {
+	background: #c62828;
+	color: #fff;
+}
+
 .alert-dismissible {
 	position: fixed;
 	width: 500px;
