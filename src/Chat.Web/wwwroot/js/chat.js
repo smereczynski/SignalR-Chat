@@ -30,7 +30,7 @@ if(window.__chatAppBooted){
 
   // ---------------- State ----------------
   const AuthStatus = { UNKNOWN:'UNKNOWN', PROBING:'PROBING', AUTHENTICATED:'AUTHENTICATED', UNAUTHENTICATED:'UNAUTHENTICATED' };
-  const state = { loading:true, profile:null, rooms:[], users:[], messages:[], joinedRoom:null, filter:'', oldestLoaded:null, canLoadMore:true, pageSize:20, loadingMore:false, lastSendAt:0, minSendIntervalMs:800, joinInProgress:false, pendingJoin:null, outbox:[], pendingAck:{}, authStatus: AuthStatus.UNKNOWN, pendingMessages:{}, isOffline:false, unreadCount:0, unsentByRoom:{} };
+  const state = { loading:true, profile:null, rooms:[], users:[], messages:[], joinedRoom:null, filter:'', oldestLoaded:null, canLoadMore:true, pageSize:20, loadingMore:false, lastSendAt:0, minSendIntervalMs:800, joinInProgress:false, pendingJoin:null, outbox:[], pendingAck:{}, authStatus: AuthStatus.UNKNOWN, pendingMessages:{}, isOffline:false, unreadCount:0, unsentByRoom:{}, ackTimers:{} };
   // Extended auth / hub timing metadata
   state._hubStartedEarly = false;       // whether hub started before auth probe resolved
   state._graceStartedAt = null;         // timestamp when grace window started
@@ -801,6 +801,7 @@ if(window.__chatAppBooted){
         const record = state.messages.find(m=> m.correlationId===correlationId);
         if(record){ record.failed=true; record.pending=false; }
         delete state.pendingMessages[correlationId];
+        clearAckTimeout(correlationId);
         postTelemetry('send.invoke.fail',{cid:correlationId, msg:msg});
         if(record){ if(!updateMessageDom(record)) renderMessages(); else finalizeMessageRender(); }
         throw err;
@@ -810,9 +811,18 @@ if(window.__chatAppBooted){
     scheduleAckTimeout(correlationId);
     return p;
   }
+  function clearAckTimeout(correlationId){
+    const t = state.ackTimers && state.ackTimers[correlationId];
+    if(t){ try { clearTimeout(t); } catch(_) {} delete state.ackTimers[correlationId]; }
+  }
   function scheduleAckTimeout(correlationId){
     const TIMEOUT_MS = 30000;
-    setTimeout(()=>{
+    if(!state.ackTimers) state.ackTimers = {};
+    // If a timer already exists for this correlationId, do nothing
+    if(state.ackTimers[correlationId]) return;
+    state.ackTimers[correlationId] = setTimeout(()=>{
+      // Drop the handle — this invocation owns the slot
+      delete state.ackTimers[correlationId];
       const entry = state.pendingMessages[correlationId];
       if(!entry) return; // already acked
       if(entry.attempts >= 3){
@@ -827,7 +837,8 @@ if(window.__chatAppBooted){
       postTelemetry('send.timeout.resend',{cid:correlationId, attempts: entry.attempts});
       postTelemetry('send.reconcile',{cid:correlationId, mode:'timeout-resend', attempts: entry.attempts, latencyMs: Date.now()-entry.createdAt});
       internalSendMessage(entry.text, /*bypassRateLimit*/ true, /*fromFlush*/ true, correlationId);
-      scheduleAckTimeout(correlationId); // schedule next timeout window
+      // Reschedule a new timeout if still pending — guarded by state.ackTimers
+      scheduleAckTimeout(correlationId);
     }, TIMEOUT_MS);
   }
   function markMessageDelivered(correlationId){
@@ -838,6 +849,7 @@ if(window.__chatAppBooted){
       postTelemetry('send.reconcile',{cid:correlationId, mode:'ack', attempts: entry.attempts, latencyMs: Date.now()-entry.createdAt});
     }
     delete state.pendingMessages[correlationId];
+    clearAckTimeout(correlationId);
   }
   function retrySend(correlationId){
     const record = state.messages.find(m=> m.correlationId===correlationId);
