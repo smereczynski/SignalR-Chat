@@ -83,6 +83,7 @@ namespace Chat.Web.Services
                     });
                     _logger.LogInformation("Seeded initial users with fixed room assignments.");
                 }
+
             }
             catch (Exception ex)
             {

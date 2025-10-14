@@ -19,7 +19,7 @@ namespace Chat.Web.Services
         void DecActiveConnections();
         void IncRoomPresence(string roomName);
         void DecRoomPresence(string roomName);
-        void UserAvailable(string userName, string device);
+    void UserAvailable(string userName);
         void UserUnavailable(string userName);
         MetricsSnapshot Snapshot();
         DateTimeOffset StartTime { get; }
@@ -63,7 +63,7 @@ namespace Chat.Web.Services
         public void DecActiveConnections(){ Interlocked.Decrement(ref _activeConnections); ActiveConnectionsGauge.Add(-1); }
         public void IncRoomPresence(string roomName){ RoomPresenceGauge.Add(1, new System.Collections.Generic.KeyValuePair<string, object>("room", roomName)); }
         public void DecRoomPresence(string roomName){ RoomPresenceGauge.Add(-1, new System.Collections.Generic.KeyValuePair<string, object>("room", roomName)); }
-        public void UserAvailable(string userName, string device){ AvailabilityEventsCounter.Add(1, new ("user", userName), new ("state", "online"), new ("device", device)); }
+    public void UserAvailable(string userName){ AvailabilityEventsCounter.Add(1, new ("user", userName), new ("state", "online")); }
         public void UserUnavailable(string userName){ AvailabilityEventsCounter.Add(1, new ("user", userName), new ("state", "offline")); }
 
         public MetricsSnapshot Snapshot() => new(
