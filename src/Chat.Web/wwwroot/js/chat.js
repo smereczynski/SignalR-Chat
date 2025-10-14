@@ -1218,7 +1218,7 @@ if(window.__chatAppBooted){
   function stopTitleBlink(){
     if(_titleBlink.timer){ try { clearInterval(_titleBlink.timer); } catch(_) {} _titleBlink.timer=null; }
     _titleBlink.active=false;
-    _titleBlink.counter=0;
+    // Removed obsolete _titleBlink.counter reset; unread count is managed by state.unreadCount
     try { if(_titleBlink.base) document.title = _titleBlink.base; } catch(_) {}
   }
   function isAtBottom(){
