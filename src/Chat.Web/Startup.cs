@@ -287,6 +287,8 @@ namespace Chat.Web
                         options.LoginPath = "/login";
                         options.AccessDeniedPath = "/login";
                         options.SlidingExpiration = true;
+                        // Keep session active for at least 12 hours to match chat expectations
+                        options.ExpireTimeSpan = TimeSpan.FromHours(12);
                         // Preserve ReturnUrl to bounce back to the originally requested page (/chat by default)
                         options.ReturnUrlParameter = "ReturnUrl";
                     });
@@ -294,11 +296,22 @@ namespace Chat.Web
             // SignalR transport: use Azure in normal mode, in-memory during tests
             if (string.Equals(Configuration["Testing:InMemory"], "true", StringComparison.OrdinalIgnoreCase))
             {
-                services.AddSignalR();
+                services.AddSignalR(o =>
+                {
+                    // Prevent idle disconnects when the tab is backgrounded for long periods
+                    o.ClientTimeoutInterval = TimeSpan.FromHours(12);
+                    // Server pings clients periodically; keep it relatively frequent
+                    o.KeepAliveInterval = TimeSpan.FromSeconds(10);
+                });
             }
             else
             {
-                services.AddSignalR().AddAzureSignalR();
+                services.AddSignalR(o =>
+                {
+                    o.ClientTimeoutInterval = TimeSpan.FromHours(12);
+                    o.KeepAliveInterval = TimeSpan.FromSeconds(10);
+                })
+                .AddAzureSignalR();
             }
             
             // Seeding service (runs once at startup)

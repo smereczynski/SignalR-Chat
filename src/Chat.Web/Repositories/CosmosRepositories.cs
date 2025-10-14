@@ -98,7 +98,7 @@ namespace Chat.Web.Repositories
 
     // Simple DTOs for Cosmos storage
     internal class UserDoc { public string id { get; set; } public string userName { get; set; } public string fullName { get; set; } public string avatar { get; set; } public string email { get; set; } public string mobile { get; set; } public bool? enabled { get; set; } public string[] fixedRooms { get; set; } public string[] rooms { get; set; } public string defaultRoom { get; set; } }
-    internal class RoomDoc { public string id { get; set; } public string name { get; set; } public string admin { get; set; } }
+    internal class RoomDoc { public string id { get; set; } public string name { get; set; } public string admin { get; set; } public string[] users { get; set; } }
     internal class MessageDoc { public string id { get; set; } public string roomName { get; set; } public string content { get; set; } public string fromUser { get; set; } public DateTime timestamp { get; set; } }
 
     public class CosmosUsersRepository : IUsersRepository
@@ -241,7 +241,7 @@ namespace Chat.Web.Repositories
                         _logger,
                         "cosmos.rooms.getall.readnext").GetAwaiter().GetResult();
                     activity?.AddEvent(new ActivityEvent("page", tags: new ActivityTagsCollection {{"db.page.count", page.Count}}));
-                    list.AddRange(page.Select(d => new Room { Id = DocIdUtil.TryParseRoomId(d.id), Name = d.name }));
+                    list.AddRange(page.Select(d => new Room { Id = DocIdUtil.TryParseRoomId(d.id), Name = d.name, Users = d.users != null ? new List<string>(d.users) : new List<string>() }));
                 }
                 list = list.OrderBy(r => r.Name).ToList();
                 activity?.SetTag("app.result.count", list.Count);
@@ -270,7 +270,7 @@ namespace Chat.Web.Repositories
                         _logger,
                         "cosmos.rooms.getbyid.readnext").GetAwaiter().GetResult();
                     var d = page.FirstOrDefault();
-                    if (d != null) return new Room { Id = DocIdUtil.TryParseRoomId(d.id), Name = d.name };
+                    if (d != null) return new Room { Id = DocIdUtil.TryParseRoomId(d.id), Name = d.name, Users = d.users != null ? new List<string>(d.users) : new List<string>() };
                 }
                 return null;
             }
@@ -297,7 +297,7 @@ namespace Chat.Web.Repositories
                         _logger,
                         "cosmos.rooms.getbyname.readnext").GetAwaiter().GetResult();
                     var d = page.FirstOrDefault();
-                    if (d != null) return new Room { Id = DocIdUtil.TryParseRoomId(d.id), Name = d.name };
+                    if (d != null) return new Room { Id = DocIdUtil.TryParseRoomId(d.id), Name = d.name, Users = d.users != null ? new List<string>(d.users) : new List<string>() };
                 }
                 return null;
             }
@@ -310,7 +310,37 @@ namespace Chat.Web.Repositories
             }
         }
 
-        // Update removed (static rooms seeded externally if needed)
+        public void AddUserToRoom(string roomName, string userName)
+        {
+            UpsertRoomUser(roomName, userName, add: true);
+        }
+
+        public void RemoveUserFromRoom(string roomName, string userName)
+        {
+            UpsertRoomUser(roomName, userName, add: false);
+        }
+
+        private void UpsertRoomUser(string roomName, string userName, bool add)
+        {
+            var q = _rooms.GetItemQueryIterator<RoomDoc>(new QueryDefinition("SELECT * FROM c WHERE c.name = @n").WithParameter("@n", roomName));
+            RoomDoc room = null;
+            while (q.HasMoreResults && room == null)
+            {
+                var page = Resilience.RetryHelper.ExecuteAsync(
+                    _ => q.ReadNextAsync(),
+                    Transient.IsCosmosTransient,
+                    _logger,
+                    "cosmos.rooms.byname.forRoomRepo").GetAwaiter().GetResult();
+                room = page.FirstOrDefault();
+            }
+            if (room == null) return;
+            var users = new HashSet<string>(room.users ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
+            if (add ? users.Add(userName) : users.Remove(userName))
+            {
+                room.users = users.ToArray();
+                _rooms.UpsertItemAsync(room, new PartitionKey(roomName)).GetAwaiter().GetResult();
+            }
+        }
     }
 
     internal static class DocIdUtil
