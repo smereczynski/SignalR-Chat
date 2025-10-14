@@ -1025,16 +1025,30 @@ if(window.__chatAppBooted){
       if(raw){
         const arr = JSON.parse(raw);
         if(Array.isArray(arr)) {
-          // Upgrade legacy string-based outbox to object form with cid and inject optimistic entries
+          // Upgrade legacy string-based outbox to object form with stable cid and inject optimistic entries
           state.outbox = arr.slice(0,50).map(it=>{
-            if(typeof it === 'string') return { text: it, cid: secureRandomId('c_', 12) };
+            if(typeof it === 'string') return { text: it, cid: stableCidForText(it) };
             if(it && typeof it === 'object' && it.text){ return it; }
-            return { text: String(it||''), cid: secureRandomId('c_', 12) };
+            return { text: String(it||''), cid: stableCidForText(String(it||'')) };
           });
         }
       }
     } catch(_) {}
     renderQueueBadge();
+  }
+
+  // Deterministic correlation ID for legacy string-based outbox entries
+  function stableCidForText(text) {
+    // Use a simple hash (FNV-1a) for short strings, base64-encode, prefix with 'c_'
+    // This is synchronous and sufficient for deduplication
+    let hash = 2166136261;
+    for (let i = 0; i < text.length; i++) {
+      hash ^= text.charCodeAt(i);
+      hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
+    }
+    // Convert hash to base36 and pad/truncate to 12 chars
+    let hstr = Math.abs(hash).toString(36).padStart(12, '0').slice(0,12);
+    return 'c_' + hstr;
   }
   function persistOutbox(){
     try { sessionStorage.setItem('chat.outbox', JSON.stringify(state.outbox)); } catch(_) {}
