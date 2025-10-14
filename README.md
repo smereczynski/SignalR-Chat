@@ -155,6 +155,20 @@ Server logs use Serilog; OTLP export is conditionally enabled only when `OTel__O
 * Log forging mitigation: request method and path are sanitized before logging in `RequestTracingMiddleware`.
 * Correlation IDs are random UUIDs (no sensitive data embedded).
 
+## SignalR Authentication Model
+- The chat hub (`Hubs/ChatHub.cs`) is decorated with `[Authorize]`; anonymous clients cannot connect.
+- In normal (non-testing) mode the app uses cookie authentication:
+  - Configured in `Startup.cs` via `AddAuthentication().AddCookie(...)` with Sliding Expiration and a 12h `ExpireTimeSpan`.
+  - The browser automatically sends the auth cookie during SignalR negotiate and WebSocket upgrade requests.
+- In testing (`Testing:InMemory=true`) a simple test auth scheme is used, but the hub still requires an authenticated principal.
+- The client connects with:
+  - `new signalR.HubConnectionBuilder().withUrl('/chatHub').withAutomaticReconnect(...).build()` (see `wwwroot/js/chat.js`).
+  - No explicit access token is passed; same-origin cookie auth is used.
+- Authorization inside the hub:
+  - `Join(roomName)` enforces membership in the user's `FixedRooms`. Being authenticated is required but not sufficient to join any room.
+- Anonymous access
+  - Not supported by default. To allow it, you'd remove `[Authorize]` (not recommended for this app) or switch to a JWT bearer model if cross-origin access without cookies is desired.
+
 ## Health
 Endpoints:
 - `/healthz` — basic liveness (string "ok")

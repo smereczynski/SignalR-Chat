@@ -15,7 +15,7 @@ namespace Chat.Web.Controllers
         {
             var snapshot = ChatHub.Snapshot();
             var rooms = snapshot.GroupBy(u => u.CurrentRoom)
-                .Select(g => new { room = string.IsNullOrEmpty(g.Key) ? "" : g.Key, users = g.Select(x => new { x.UserName, x.Device }).ToList(), count = g.Count() })
+                .Select(g => new { room = string.IsNullOrEmpty(g.Key) ? "" : g.Key, users = g.Select(x => new { x.UserName }).ToList(), count = g.Count() })
                 .OrderBy(r => r.room)
                 .ToList();
             return Ok(new { total = snapshot.Count, rooms });
