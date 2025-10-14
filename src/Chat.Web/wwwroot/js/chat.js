@@ -25,12 +25,12 @@ if(window.__chatAppBooted){
  * 2. On hub echo, first match by correlationId; if absent, fallback to matching pending negative id by content.
  * 3. Replace pending entry to preserve ordering & local timestamp until server timestamp merges.
  */
-(function(){
+ (function(){
   const log = (lvl,msg,obj)=> (window.appLogger && window.appLogger[lvl]) ? window.appLogger[lvl](msg,obj) : console.log(`[${lvl}] ${msg}`, obj||'');
 
   // ---------------- State ----------------
   const AuthStatus = { UNKNOWN:'UNKNOWN', PROBING:'PROBING', AUTHENTICATED:'AUTHENTICATED', UNAUTHENTICATED:'UNAUTHENTICATED' };
-  const state = { loading:true, profile:null, rooms:[], users:[], messages:[], joinedRoom:null, filter:'', oldestLoaded:null, canLoadMore:true, pageSize:20, loadingMore:false, lastSendAt:0, minSendIntervalMs:800, joinInProgress:false, pendingJoin:null, outbox:[], pendingAck:{}, authStatus: AuthStatus.UNKNOWN, pendingMessages:{}, isOffline:false, unreadCount:0 };
+  const state = { loading:true, profile:null, rooms:[], users:[], messages:[], joinedRoom:null, filter:'', oldestLoaded:null, canLoadMore:true, pageSize:20, loadingMore:false, lastSendAt:0, minSendIntervalMs:800, joinInProgress:false, pendingJoin:null, outbox:[], pendingAck:{}, authStatus: AuthStatus.UNKNOWN, pendingMessages:{}, isOffline:false, unreadCount:0, unsentByRoom:{} };
   // Extended auth / hub timing metadata
   state._hubStartedEarly = false;       // whether hub started before auth probe resolved
   state._graceStartedAt = null;         // timestamp when grace window started
@@ -235,6 +235,61 @@ if(window.__chatAppBooted){
   function renderAll(){ renderProfile(); renderRoomContext(); renderUsers(); renderMessages(); }
   function renderQueueBadge(){ if(!els.queueBadge) return; const qLen = state.outbox.length; els.queueBadge.textContent = qLen; els.queueBadge.classList.toggle('d-none', qLen===0); }
 
+  // Ensure there is a single optimistic message in UI for a given correlationId; if missing, create it.
+  function ensureOptimisticMessage(text, correlationId){
+    if(!correlationId) return;
+    const existing = state.messages.find(m=> m.correlationId === correlationId);
+    if(existing) return;
+    const nowIso = new Date().toISOString();
+    const rec={id: pendingIdCounter--, content:text, timestamp:nowIso, fromUserName:state.profile?.userName, fromFullName:state.profile?.fullName, avatar:state.profile?.avatar, isMine: !!state.profile, correlationId, pending:true};
+    state.messages.push(rec);
+    if(els.messagesList && state.messages.length>1){ renderSingleMessage(rec, true); finalizeMessageRender(); } else { renderMessages(); }
+  }
+
+  // Preserve unsent (pending/failed) messages across forced room reloads (e.g., reconnect)
+  function snapshotUnsentForRoom(roomName, reason){
+    try {
+      if(!roomName || !Array.isArray(state.messages) || !state.messages.length) return;
+      const keep = state.messages.filter(m=> m && m.isMine && (m.pending || m.failed));
+      if(!keep.length) return;
+      state.unsentByRoom = state.unsentByRoom || {};
+      state.unsentByRoom[roomName] = keep.map(m=> ({
+        content: m.content,
+        timestamp: m.timestamp,
+        fromUserName: m.fromUserName,
+        fromFullName: m.fromFullName,
+        avatar: m.avatar,
+        isMine: true,
+        correlationId: m.correlationId || null,
+        pending: !!m.pending,
+        failed: !!m.failed,
+        id: m.id
+      }));
+      postTelemetry('unsent.snapshot',{room: roomName, count: keep.length, reason});
+    } catch(_) { /* ignore */ }
+  }
+  function restoreUnsentForRoom(roomName){
+    try {
+      if(!roomName || !state.unsentByRoom || !state.unsentByRoom[roomName]) return;
+      const items = state.unsentByRoom[roomName];
+      delete state.unsentByRoom[roomName];
+      // Filter out any duplicates by correlationId/content already present after load
+      const existingCids = new Set(state.messages.map(m=> m.correlationId).filter(Boolean));
+      const existingPairs = new Set(state.messages.map(m=> (m.isMine? (m.content+'|'+m.timestamp): null)).filter(Boolean));
+      const toAppend = [];
+      for(const m of items){
+        if(m.correlationId && existingCids.has(m.correlationId)) continue;
+        if(existingPairs.has(m.content+'|'+m.timestamp)) continue;
+        toAppend.push(m);
+      }
+      if(!toAppend.length) return;
+      // Ensure pending flags preserved; if they were pending at snapshot, keep pending; failed stays failed
+      toAppend.forEach(m=>{ if(m.pending && !m.failed) m.pending = true; });
+      state.messages = state.messages.concat(toAppend);
+      postTelemetry('unsent.restore',{room: roomName, count: toAppend.length});
+    } catch(_) { /* ignore */ }
+  }
+
   // --------------- API ----------------
   const apiGet = url => fetch(url,{credentials:'include'}).then(r=> r.ok? r.json(): Promise.reject(r));
   const apiPost = (u,o)=> fetch(u,{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify(o)});
@@ -429,7 +484,25 @@ if(window.__chatAppBooted){
           state.messages[idx] = {id:m.id,content:m.content,timestamp:m.timestamp,fromUserName:m.fromUserName,fromFullName:m.fromFullName,avatar:m.avatar,isMine:true, correlationId:m.correlationId};
           // pendingMessages entry may have been removed on invoke ack; ensure cleanup if present
           if(state.pendingMessages[m.correlationId]) delete state.pendingMessages[m.correlationId];
-          if(!updateMessageDom(state.messages[idx])){ renderMessages(); } else { finalizeMessageRender(); }
+          // Remove any duplicate server entry with the same id that might have been loaded via history
+          for(let j=state.messages.length-1;j>=0;j--){
+            if(j!==idx && state.messages[j] && state.messages[j].id===m.id){
+              state.messages.splice(j,1);
+            }
+          }
+          renderMessages();
+          finalizeMessageRender();
+          return;
+        }
+      }
+      // If we didn't find the optimistic by correlationId, but a message with the same server id already exists (e.g., from history), update it in place and avoid adding a duplicate
+      if(m && m.id!==undefined){
+        const byIdIdx = state.messages.findIndex(x=> x && x.id===m.id);
+        if(byIdIdx>=0){
+          const isMine = !!(state.profile && state.profile.userName === m.fromUserName);
+          state.messages[byIdIdx] = {id:m.id,content:m.content,timestamp:m.timestamp,fromUserName:m.fromUserName,fromFullName:m.fromFullName,avatar:m.avatar,isMine, correlationId: m.correlationId||state.messages[byIdIdx].correlationId};
+          renderMessages();
+          finalizeMessageRender();
           return;
         }
       }
@@ -456,6 +529,8 @@ if(window.__chatAppBooted){
     c.onreconnected(connectionId => {
       try {
         if(state.joinedRoom){
+          // Snapshot unsent local messages for this room before the forced reload wipes the list
+          snapshotUnsentForRoom(state.joinedRoom.name, 'reconnected');
           // Force re-join to ensure group membership and refresh presence/messages
           joinRoom(state.joinedRoom.name, /*force*/ true);
         } else {
@@ -500,7 +575,21 @@ if(window.__chatAppBooted){
    * Appends a message to local state and re-renders.
    * @param {object} m MessageViewModel-like payload
    */
-  function addOrRenderMessage(m){ const isMine=state.profile && state.profile.userName===m.fromUserName; const rec={id:m.id,content:m.content,timestamp:m.timestamp,fromUserName:m.fromUserName,fromFullName:m.fromFullName,avatar:m.avatar,isMine, correlationId:m.correlationId}; state.messages.push(rec); if(els.messagesList && state.messages.length>1){ renderSingleMessage(rec, true); finalizeMessageRender(); } else { renderMessages(); } }
+  function addOrRenderMessage(m){
+    const isMine=state.profile && state.profile.userName===m.fromUserName;
+    // Deduplicate: prefer correlationId for own optimistic merges; fallback to server id if present
+    let existingIdx = -1;
+    if(m && m.correlationId){ existingIdx = state.messages.findIndex(x=> x && x.correlationId===m.correlationId); }
+    if(existingIdx<0 && m && m.id!==undefined){ existingIdx = state.messages.findIndex(x=> x && x.id===m.id); }
+    const rec={id:m.id,content:m.content,timestamp:m.timestamp,fromUserName:m.fromUserName,fromFullName:m.fromFullName,avatar:m.avatar,isMine, correlationId:m.correlationId};
+    if(existingIdx>=0){
+      state.messages[existingIdx] = rec;
+      renderMessages();
+    } else {
+      state.messages.push(rec);
+      if(els.messagesList && state.messages.length>1){ renderSingleMessage(rec, true); finalizeMessageRender(); } else { renderMessages(); }
+    }
+  }
 
   /**
    * Handles a direct notification (non-room message). We surface it as a system message in the current transcript.
@@ -519,6 +608,10 @@ if(window.__chatAppBooted){
     if(state.joinInProgress && state.pendingJoin===roomName) return; // already joining this room
     // When force=true (e.g., after reconnect), bypass the early return to re-establish SignalR group membership
     if(!force && state.joinedRoom && state.joinedRoom.name===roomName && !state.joinInProgress) return; // already in room
+    if(force && state.joinedRoom && state.joinedRoom.name===roomName){
+      // Before reloading messages on a forced re-join, snapshot unsent content
+      snapshotUnsentForRoom(roomName, 'forceJoin');
+    }
     const attemptToken = secureRandomId('j_',8);
     state._joinToken = attemptToken;
     state.joinInProgress = true;
@@ -599,6 +692,8 @@ if(window.__chatAppBooted){
       .then(list=>{
         // Server returns ascending order (repository sorts ascending)
         state.messages = list.map(m=>({id:m.id,content:m.content,timestamp:m.timestamp,fromUserName:m.fromUserName,fromFullName:m.fromFullName,avatar:m.avatar,isMine: state.profile && state.profile.userName===m.fromUserName}));
+        // After baseline load, reattach any locally unsent (pending/failed) messages captured for this room
+        restoreUnsentForRoom(state.joinedRoom.name);
         if(state.messages.length>0){
           state.oldestLoaded = state.messages[0].timestamp;
           // If fewer than requested, no more pages
@@ -711,9 +806,8 @@ if(window.__chatAppBooted){
         throw err;
       });
     // Schedule optimistic acknowledgement timeout (30s)
-    if(!resendCorrelationId){
-      scheduleAckTimeout(correlationId);
-    }
+    // Always ensure an ack timeout exists for this correlation id; if one is already pending the timer path will no-op on ack
+    scheduleAckTimeout(correlationId);
     return p;
   }
   function scheduleAckTimeout(correlationId){
@@ -763,7 +857,11 @@ if(window.__chatAppBooted){
       // Drop oldest to make space
       state.outbox.shift();
     }
-    state.outbox.push(text);
+    const cid = secureRandomId('c_', 12);
+    const item = { text, cid };
+    state.outbox.push(item);
+    // Present a single optimistic UI entry tied to this correlation id
+    ensureOptimisticMessage(text, cid);
     renderQueueBadge();
     persistOutbox();
   }
@@ -781,7 +879,7 @@ if(window.__chatAppBooted){
       const now = Date.now();
   const withinGrace = isWithinAuthGrace();
   if(state.authStatus===AuthStatus.UNKNOWN || state.authStatus===AuthStatus.PROBING || withinGrace){
-        queueOutbound(text);
+  queueOutbound(text);
         let reason = 'awaitingProfile';
         if(withinGrace) reason='authGrace';
         else if(state.loading) reason='loadingUI';
@@ -813,8 +911,20 @@ if(window.__chatAppBooted){
       if(els.messageInput) els.messageInput.value='';
       return;
     }
-    // Normal path
-    internalSendMessage(text, false, false);
+    // If hub is not in a connected state (connecting/reconnecting/disconnected), queue for later
+    try {
+      const s = computeConnectionState();
+      if(s !== 'connected'){
+        queueOutbound(text);
+        postTelemetry('send.queue',{reason:'hubNotConnected:'+s, size: state.outbox.length});
+        if(els.messageInput) els.messageInput.value='';
+        return;
+      }
+    } catch(_) { /* ignore and attempt normal path */ }
+    // Normal path: create (or reuse) a single optimistic message and pass its cid down
+    const cid = secureRandomId('c_', 12);
+    ensureOptimisticMessage(text, cid);
+    internalSendMessage(text, false, false, cid);
     if(els.messageInput) els.messageInput.value='';
   }
   // deleteMessage removed
@@ -912,7 +1022,17 @@ if(window.__chatAppBooted){
   function loadOutbox(){
     try {
       const raw = sessionStorage.getItem('chat.outbox');
-      if(raw){ const arr = JSON.parse(raw); if(Array.isArray(arr)) { state.outbox = arr.slice(0,50); } }
+      if(raw){
+        const arr = JSON.parse(raw);
+        if(Array.isArray(arr)) {
+          // Upgrade legacy string-based outbox to object form with cid and inject optimistic entries
+          state.outbox = arr.slice(0,50).map(it=>{
+            if(typeof it === 'string') return { text: it, cid: secureRandomId('c_', 12) };
+            if(it && typeof it === 'object' && it.text){ return it; }
+            return { text: String(it||''), cid: secureRandomId('c_', 12) };
+          });
+        }
+      }
     } catch(_) {}
     renderQueueBadge();
   }
@@ -962,16 +1082,17 @@ if(window.__chatAppBooted){
       if(!toSend.length) return Promise.resolve();
       const slice = toSend.splice(0,batchSize);
       const results = [];
-      return Promise.all(slice.map(text=>{
-        return internalSendMessage(text, /*bypassRateLimit*/ true, /*fromFlush*/ true)
+      return Promise.all(slice.map(item=>{
+        const {text, cid} = (typeof item === 'string') ? {text: item, cid: null} : item;
+        if(cid) ensureOptimisticMessage(text, cid);
+        return internalSendMessage(text, /*bypassRateLimit*/ true, /*fromFlush*/ true, cid || undefined)
           .then(()=>{ success++; results.push({ok:true}); })
-          .catch(()=>{ failed++; results.push({ok:false, text}); });
+          .catch(()=>{ failed++; results.push({ok:false, item}); });
       })).then(()=>{
         // Requeue failed from this batch immediately to preserve order locality (FIFO semantics with retry tail)
-        const failedItems = results.filter(r=>!r.ok).map(r=> r.text);
+        const failedItems = results.filter(r=>!r.ok).map(r=> r.item);
         if(failedItems.length){
-          // Prepend? We choose push to tail so successful sends are not re-ordered; failed go to end for backoff.
-          failedItems.forEach(t=> state.outbox.push(t));
+          failedItems.forEach(it=> state.outbox.push(it));
           persistOutbox();
           postTelemetry('send.flush.batchFail',{failed: failedItems.length, phase});
         }
