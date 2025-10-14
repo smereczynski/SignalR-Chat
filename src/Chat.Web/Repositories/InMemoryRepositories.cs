@@ -11,9 +11,20 @@ namespace Chat.Web.Repositories
     public class InMemoryUsersRepository : IUsersRepository
     {
         private readonly ConcurrentDictionary<string, ApplicationUser> _users = new();
+        private readonly IRoomsRepository _rooms;
+        public InMemoryUsersRepository() { }
+        public InMemoryUsersRepository(IRoomsRepository rooms)
+        {
+            _rooms = rooms;
+        }
         public IEnumerable<ApplicationUser> GetAll() => _users.Values;
     public ApplicationUser GetByUserName(string userName) => _users.GetOrAdd(userName, u => new ApplicationUser { UserName = u, FullName = u, Enabled = true });
-        public void Upsert(ApplicationUser user) => _users[user.UserName] = user;
+        public void Upsert(ApplicationUser user)
+        {
+            if (user == null || string.IsNullOrWhiteSpace(user.UserName)) return;
+            // Do not attempt to sync room membership here; Chat.Web treats room users list as externally managed.
+            _users[user.UserName] = user;
+        }
     }
 
     public class InMemoryRoomsRepository : IRoomsRepository
@@ -24,11 +35,27 @@ namespace Chat.Web.Repositories
         {
             // Pre-seed static rooms with deterministic IDs (1..n)
             var rooms = new[]{"general","ops","random"};
-            int id=1; foreach(var r in rooms){ var room=new Room{Id=id++, Name=r}; _roomsById[room.Id]=room; _roomsByName[room.Name]=room; }
+            int id=1; foreach(var r in rooms){ var room=new Room{Id=id++, Name=r, Users = new List<string>()}; _roomsById[room.Id]=room; _roomsByName[room.Name]=room; }
         }
         public IEnumerable<Room> GetAll() => _roomsById.Values;
         public Room GetById(int id) => _roomsById.TryGetValue(id, out var r) ? r : null;
         public Room GetByName(string name) => _roomsByName.TryGetValue(name, out var r) ? r : null;
+        public void AddUserToRoom(string roomName, string userName)
+        {
+            if (_roomsByName.TryGetValue(roomName, out var room))
+            {
+                var set = new HashSet<string>(room.Users ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
+                if (set.Add(userName)) room.Users = set.ToList();
+            }
+        }
+        public void RemoveUserFromRoom(string roomName, string userName)
+        {
+            if (_roomsByName.TryGetValue(roomName, out var room) && room.Users != null)
+            {
+                var set = new HashSet<string>(room.Users, StringComparer.OrdinalIgnoreCase);
+                if (set.Remove(userName)) room.Users = set.ToList();
+            }
+        }
     }
 
     public class InMemoryMessagesRepository : IMessagesRepository

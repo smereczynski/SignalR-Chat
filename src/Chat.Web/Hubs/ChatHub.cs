@@ -26,6 +26,8 @@ namespace Chat.Web.Hubs
         /// </summary>
     public static readonly List<UserViewModel> _Connections = new List<UserViewModel>();
     internal static readonly object _ConnectionsLock = new object();
+        // Track active connection counts per user to avoid removing presence when alternate connections remain
+        private static readonly Dictionary<string, int> _UserConnectionCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
         /// <summary>
         /// Map userName -> current SignalR connection id (latest). Allows targeted messaging.
@@ -102,7 +104,6 @@ namespace Chat.Web.Hubs
                         UserName = profile?.UserName ?? IdentityName,
                         FullName = profile?.FullName ?? IdentityName,
                         Avatar = profile?.Avatar,
-                        Device = GetDevice(),
                         CurrentRoom = string.Empty
                     };
                     lock (_ConnectionsLock)
@@ -136,7 +137,7 @@ namespace Chat.Web.Hubs
                 await Clients.Group(roomName).SendAsync("addUser", user);
                 // After broadcasting the new user, send a full presence snapshot to the caller to ensure
                 // they have every existing user even if some addUser events were missed before subscription.
-                var presenceSnapshot = Snapshot().Where(u => u.CurrentRoom == roomName).Select(u => new { u.UserName, u.FullName, u.Avatar, u.Device, u.CurrentRoom }).ToList();
+                var presenceSnapshot = Snapshot().Where(u => u.CurrentRoom == roomName).Select(u => new { u.UserName, u.FullName, u.Avatar, u.CurrentRoom }).ToList();
                 await Clients.Caller.SendAsync("presenceSnapshot", presenceSnapshot);
                 _logger.LogInformation("User {User} joined room {Room}", IdentityName, roomName);
                 _metrics.IncRoomsJoined();
@@ -196,8 +197,16 @@ namespace Chat.Web.Hubs
                 lock (_ConnectionsLock)
                 {
                     existing = _Connections.FirstOrDefault(u => u.UserName == IdentityName);
+                    // Increment (or initialize) active connection count for this user
+                    if (_UserConnectionCounts.TryGetValue(IdentityName, out var cnt))
+                    {
+                        _UserConnectionCounts[IdentityName] = cnt + 1;
+                    }
+                    else
+                    {
+                        _UserConnectionCounts[IdentityName] = 1;
+                    }
                 }
-                var device = GetDevice();
                 if (existing != null)
                 {
                     _ConnectionsMap[IdentityName] = Context.ConnectionId;
@@ -212,7 +221,6 @@ namespace Chat.Web.Hubs
                         UserName = user?.UserName ?? IdentityName,
                         FullName = user?.FullName ?? IdentityName,
                         Avatar = user?.Avatar,
-                        Device = device,
                         CurrentRoom = string.Empty
                     };
                     lock (_ConnectionsLock)
@@ -222,7 +230,7 @@ namespace Chat.Web.Hubs
                     _ConnectionsMap[IdentityName] = Context.ConnectionId;
                     _logger.LogInformation("User connected {User}", IdentityName);
                     _metrics.IncActiveConnections();
-                    _metrics.UserAvailable(IdentityName, device);
+                    _metrics.UserAvailable(IdentityName);
                     await Clients.Caller.SendAsync("getProfileInfo", userViewModel);
 
                     // Auto-join default room logic
@@ -280,9 +288,23 @@ namespace Chat.Web.Hubs
             try
             {
                 UserViewModel user;
+                int remainingConnections = 0;
                 lock (_ConnectionsLock)
                 {
                     user = _Connections.FirstOrDefault(u => u.UserName == IdentityName);
+                    if (_UserConnectionCounts.TryGetValue(IdentityName, out var cnt))
+                    {
+                        cnt = Math.Max(0, cnt - 1);
+                        if (cnt == 0)
+                        {
+                            _UserConnectionCounts.Remove(IdentityName);
+                        }
+                        else
+                        {
+                            _UserConnectionCounts[IdentityName] = cnt;
+                        }
+                        remainingConnections = cnt;
+                    }
                 }
                 if (user == null)
                 {
@@ -290,19 +312,37 @@ namespace Chat.Web.Hubs
                     await base.OnDisconnectedAsync(exception);
                     return;
                 }
-                lock (_ConnectionsLock)
+                // Only remove presence when the last connection closes
+                if (remainingConnections <= 0)
                 {
-                    _Connections.Remove(user);
+                    lock (_ConnectionsLock)
+                    {
+                        _Connections.Remove(user);
+                    }
+                    if (!string.IsNullOrWhiteSpace(user.CurrentRoom))
+                    {
+                        await Clients.OthersInGroup(user.CurrentRoom).SendAsync("removeUser", user);
+                        _metrics.DecRoomPresence(user.CurrentRoom);
+                    }
+                    // Remove mapping only if it points at this connection id
+                    if (_ConnectionsMap.TryGetValue(user.UserName, out var mapped) && string.Equals(mapped, Context.ConnectionId, StringComparison.Ordinal))
+                    {
+                        _ConnectionsMap.Remove(user.UserName);
+                    }
+                    _logger.LogInformation("User disconnected {User}", IdentityName);
+                    _metrics.DecActiveConnections();
+                    _metrics.UserUnavailable(IdentityName);
                 }
-                if (!string.IsNullOrWhiteSpace(user.CurrentRoom))
+                else
                 {
-                    await Clients.OthersInGroup(user.CurrentRoom).SendAsync("removeUser", user);
-                    _metrics.DecRoomPresence(user.CurrentRoom);
+                    // Multiple active connections remain; do not remove presence or mapping if a newer connection exists.
+                    // Only clear stale mapping if it matches this connection id.
+                    if (_ConnectionsMap.TryGetValue(user.UserName, out var mapped) && string.Equals(mapped, Context.ConnectionId, StringComparison.Ordinal))
+                    {
+                        _ConnectionsMap.Remove(user.UserName);
+                    }
+                    _logger.LogDebug("User {User} has {Count} remaining connections; presence retained", IdentityName, remainingConnections);
                 }
-                _ConnectionsMap.Remove(user.UserName);
-                _logger.LogInformation("User disconnected {User}", IdentityName);
-                _metrics.DecActiveConnections();
-                _metrics.UserUnavailable(IdentityName);
             }
             catch (Exception ex)
             {
@@ -329,13 +369,7 @@ namespace Chat.Web.Hubs
 
         private string IdentityName => Context.User.Identity.Name;
 
-        private string GetDevice()
-        {
-            var device = Context.GetHttpContext().Request.Headers["Device"].ToString();
-            if (!string.IsNullOrEmpty(device) && (device.Equals("Desktop") || device.Equals("Mobile")))
-                return device;
-            return "Web";
-        }
+        // Device indicator removed as unused.
 
         /// <summary>
         /// Returns a thread-safe deep snapshot of current connections (used externally for presence API).
@@ -349,8 +383,7 @@ namespace Chat.Web.Hubs
                     UserName = c.UserName,
                     FullName = c.FullName,
                     Avatar = c.Avatar,
-                    CurrentRoom = c.CurrentRoom,
-                    Device = c.Device
+                    CurrentRoom = c.CurrentRoom
                 }).ToList();
             }
         }

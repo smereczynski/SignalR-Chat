@@ -347,6 +347,7 @@ Purpose: Public channel for posting messages.
 Canonical fields:
 - id: integer (stable numeric id)
 - name: string (room key and display name; examples: "general", "ops", "random")
+ - users: string[] (optional helper; list of user names present in the room document)
 
 Relationships:
 - Messages (one-to-many via Message.ToRoomId)
@@ -354,12 +355,14 @@ Relationships:
 Cosmos compatibility:
 - Some documents may have a non-numeric `id` (string). The repository computes a stable numeric id for in-app use (deterministic hash) when needed.
 - Legacy/admin-authored docs might include an `admin` field; the app ignores it.
+ - Some documents may include a `users` array. This is a denormalized helper maintained by external admin tooling. Chat.Web treats it as read-only and does not reconcile or mutate it at runtime. The authoritative source of room membership remains `user.fixedRooms`.
 
 Example (logical JSON shape):
 ```
 {
   "id": 1,
-  "name": "general"
+  "name": "general",
+  "users": ["alice", "bob"]
 }
 ```
 

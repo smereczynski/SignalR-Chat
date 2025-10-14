@@ -30,7 +30,7 @@ if(window.__chatAppBooted){
 
   // ---------------- State ----------------
   const AuthStatus = { UNKNOWN:'UNKNOWN', PROBING:'PROBING', AUTHENTICATED:'AUTHENTICATED', UNAUTHENTICATED:'UNAUTHENTICATED' };
-  const state = { loading:true, profile:null, rooms:[], users:[], messages:[], joinedRoom:null, filter:'', oldestLoaded:null, canLoadMore:true, pageSize:20, loadingMore:false, lastSendAt:0, minSendIntervalMs:800, joinInProgress:false, pendingJoin:null, outbox:[], pendingAck:{}, authStatus: AuthStatus.UNKNOWN, pendingMessages:{}, isOffline:false };
+  const state = { loading:true, profile:null, rooms:[], users:[], messages:[], joinedRoom:null, filter:'', oldestLoaded:null, canLoadMore:true, pageSize:20, loadingMore:false, lastSendAt:0, minSendIntervalMs:800, joinInProgress:false, pendingJoin:null, outbox:[], pendingAck:{}, authStatus: AuthStatus.UNKNOWN, pendingMessages:{}, isOffline:false, unreadCount:0 };
   // Extended auth / hub timing metadata
   state._hubStartedEarly = false;       // whether hub started before auth probe resolved
   state._graceStartedAt = null;         // timestamp when grace window started
@@ -136,7 +136,7 @@ if(window.__chatAppBooted){
     if(state.pendingJoin === r.name && (!state.joinedRoom || state.joinedRoom.name!==r.name)) a.classList.add('joining');
     if(state.joinedRoom && state.joinedRoom.name===r.name) a.classList.add('active');
     a.addEventListener('click',e=>{ e.preventDefault(); joinRoom(r.name); }); li.appendChild(a); els.roomsList.appendChild(li); }); }
-  function renderUsers(){ if(!els.usersList) return; const term=state.filter.toLowerCase(); els.usersList.innerHTML=''; const filtered=state.users.filter(u=>!term|| (u.fullName||u.userName||'').toLowerCase().includes(term)); filtered.forEach(u=>{ const li=document.createElement('li'); li.dataset.username=u.userName; const wrap=document.createElement('div'); wrap.className='user'; if(!u.avatar){ const span=document.createElement('span'); span.className='avatar me-2 text-uppercase'; span.textContent=initialFrom(u.fullName, u.userName); wrap.appendChild(span);} else { const img=document.createElement('img'); img.className='avatar me-2'; img.src='/avatars/'+u.avatar; wrap.appendChild(img);} const info=document.createElement('div'); info.className='user-info'; const nameSpan=document.createElement('span'); nameSpan.className='name'; nameSpan.textContent=u.fullName || u.userName; info.appendChild(nameSpan); const devSpan=document.createElement('span'); devSpan.className='device'; devSpan.textContent=u.device; info.appendChild(devSpan); wrap.appendChild(info); li.appendChild(wrap); els.usersList.appendChild(li); }); if(els.usersCount) els.usersCount.textContent=filtered.length; }
+  function renderUsers(){ if(!els.usersList) return; const term=state.filter.toLowerCase(); els.usersList.innerHTML=''; const filtered=state.users.filter(u=>!term|| (u.fullName||u.userName||'').toLowerCase().includes(term)); filtered.forEach(u=>{ const li=document.createElement('li'); li.dataset.username=u.userName; const wrap=document.createElement('div'); wrap.className='user'; if(!u.avatar){ const span=document.createElement('span'); span.className='avatar me-2 text-uppercase'; span.textContent=initialFrom(u.fullName, u.userName); wrap.appendChild(span);} else { const img=document.createElement('img'); img.className='avatar me-2'; img.src='/avatars/'+u.avatar; wrap.appendChild(img);} const info=document.createElement('div'); info.className='user-info'; const nameSpan=document.createElement('span'); nameSpan.className='name'; nameSpan.textContent=u.fullName || u.userName; info.appendChild(nameSpan); wrap.appendChild(info); li.appendChild(wrap); els.usersList.appendChild(li); }); if(els.usersCount) els.usersCount.textContent=filtered.length; }
   function formatDateParts(ts){ const date=new Date(ts); const now=new Date(); const diffDays=Math.round((date-now)/(1000*3600*24)); const day=date.getDate(); const month=date.getMonth()+1; const year=date.getFullYear(); let hours=date.getHours(); const minutes=('0'+date.getMinutes()).slice(-2); const ampm=hours>=12?'PM':'AM'; if(hours>12) hours=hours%12; const dateOnly=`${day}/${month}/${year}`; const timeOnly=`${hours}:${minutes} ${ampm}`; const full=`${dateOnly} ${timeOnly}`; let relative=dateOnly; if(diffDays===0) relative=`Today, ${timeOnly}`; else if(diffDays===-1) relative=`Yesterday, ${timeOnly}`; return {relative, full}; }
   function renderMessages(){
     if(!els.messagesList) return;
@@ -331,10 +331,10 @@ if(window.__chatAppBooted){
       .build();
     // Extend timeouts to tolerate background tab timer throttling and long sleeps
     try {
-      // If the server doesn't send a message within this interval, the client considers the connection lost
-      // Default is 30s; increase to 4 minutes to tolerate background throttling and sporadic network hiccups
-      hub.serverTimeoutInMilliseconds = 240000; // 4 minutes
-      // Client send keep-alive pings; default ~15s. Keep at 15s or 20s; browsers may throttle in background, which is okay.
+      // If the server doesn't send a message within this interval, the client considers the connection lost.
+      // Set to 12h to tolerate long background/minimized periods without forcing a disconnect.
+      hub.serverTimeoutInMilliseconds = 12 * 60 * 60 * 1000; // 12 hours
+      // Client keep-alive pings. Browsers may throttle timers in background; a 20s interval is fine.
       hub.keepAliveIntervalInMilliseconds = 20000; // 20 seconds
     } catch(_) { /* some transports may not expose setters; ignore */ }
     wireHub(hub);
@@ -434,11 +434,18 @@ if(window.__chatAppBooted){
         }
       }
       addOrRenderMessage({ ...m, correlationId: m.correlationId });
-      // If the tab is hidden and the message is not from the current user, start title blinking
+      // Increment unread and start/continue title blinking until the message is read
       try {
         const isMine = !!(state.profile && state.profile.userName === m.fromUserName);
-        if(document.hidden && !isMine){
-          startTitleBlink(m.room || state.joinedRoom && state.joinedRoom.name || '');
+        if(!isMine){
+          if(!isReadingView()){
+            state.unreadCount = (state.unreadCount||0) + 1;
+            updateTitleBlinkLabel(m.room || (state.joinedRoom && state.joinedRoom.name) || '');
+            startTitleBlink();
+          } else {
+            // Immediately mark as read when user is actively reading and view is at bottom
+            maybeMarkRead();
+          }
         }
       } catch(_) { /* ignore */ }
     });
@@ -449,18 +456,14 @@ if(window.__chatAppBooted){
     c.onreconnected(connectionId => {
       try {
         if(state.joinedRoom){
-          hub.invoke('GetUsers', state.joinedRoom.name).then(users=>{ 
-            const normalized = (users||[]).map(u=>({
-              userName: u.userName || u.UserName || u.username || '',
-              fullName: u.fullName || u.FullName || u.name || '',
-              avatar: u.avatar || u.Avatar || '',
-              currentRoom: u.currentRoom || u.CurrentRoom || u.room || null,
-              ...u
-            }));
-            state.users = normalized; renderUsers(); });
+          // Force re-join to ensure group membership and refresh presence/messages
+          joinRoom(state.joinedRoom.name, /*force*/ true);
+        } else {
+          // No prior room, refresh rooms list
+          loadRooms();
         }
       } catch(_){ }
-  applyConnectionVisual('connected');
+      applyConnectionVisual('connected');
     });
   c.onreconnecting(err => { log('warn','hub.reconnecting', {message: err && err.message}); applyConnectionVisual('reconnecting'); });
   c.onclose(()=> { 
@@ -511,10 +514,11 @@ if(window.__chatAppBooted){
   }
 
   // --------------- Actions --------------
-  function joinRoom(roomName){
+  function joinRoom(roomName, force){
     if(!hub||!roomName) return;
     if(state.joinInProgress && state.pendingJoin===roomName) return; // already joining this room
-    if(state.joinedRoom && state.joinedRoom.name===roomName && !state.joinInProgress) return; // already in room
+    // When force=true (e.g., after reconnect), bypass the early return to re-establish SignalR group membership
+    if(!force && state.joinedRoom && state.joinedRoom.name===roomName && !state.joinInProgress) return; // already in room
     const attemptToken = secureRandomId('j_',8);
     state._joinToken = attemptToken;
     state.joinInProgress = true;
@@ -663,6 +667,8 @@ if(window.__chatAppBooted){
           }
         }
       }
+      // Also check read status when user scrolls
+      maybeMarkRead();
     });
   }
   let pendingIdCounter=-1;
@@ -1000,7 +1006,8 @@ if(window.__chatAppBooted){
   }, 1500);
   // Flush when tab becomes visible again (covers background tab timing misses)
   document.addEventListener('visibilitychange', ()=>{ if(!document.hidden){ flushOutbox('visibility'); } });
-  document.addEventListener('visibilitychange', ()=>{ if(!document.hidden){ stopTitleBlink(); ensureConnected(); } });
+  document.addEventListener('visibilitychange', ()=>{ if(!document.hidden){ maybeMarkRead(); ensureConnected(); } });
+  window.addEventListener('focus', ()=>{ maybeMarkRead(); ensureConnected(); });
   document.addEventListener('DOMContentLoaded',()=>{ 
     cacheDom(); 
     // Inject (or capture) offline banner element
@@ -1051,11 +1058,9 @@ if(window.__chatAppBooted){
   function initTitleBlink(){
     try { _titleBlink.base = document.title || 'Chat'; } catch(_) { _titleBlink.base = 'Chat'; }
   }
-  function startTitleBlink(roomLabel){
+  function startTitleBlink(){
     if(!_titleBlink.base) initTitleBlink();
-    _titleBlink.counter = (_titleBlink.counter||0) + 1;
-    const label = '('+ _titleBlink.counter +') New message' + (roomLabel? ' • '+roomLabel : '');
-    _titleBlink.lastLabel = label;
+    // Do not mutate counter here; label is derived from state.unreadCount via updateTitleBlinkLabel
     if(_titleBlink.active){
       // If already blinking, update label; next tick will pick it up
       return;
@@ -1068,12 +1073,48 @@ if(window.__chatAppBooted){
       showAlt = !showAlt;
     }, 1000);
   }
+  function updateTitleBlinkLabel(roomLabel){
+    const count = state.unreadCount || 0;
+    const label = (count > 0 ? '('+count+') ' : '') + 'New message' + (roomLabel? ' • '+roomLabel : '');
+    _titleBlink.lastLabel = label;
+    // If not currently blinking but there are unread messages, ensure blinking starts
+    if(count > 0 && !_titleBlink.active){ startTitleBlink(); }
+  }
   function stopTitleBlink(){
     if(_titleBlink.timer){ try { clearInterval(_titleBlink.timer); } catch(_) {} _titleBlink.timer=null; }
     _titleBlink.active=false;
     _titleBlink.counter=0;
     try { if(_titleBlink.base) document.title = _titleBlink.base; } catch(_) {}
   }
+  function isAtBottom(){
+    const mc = document.querySelector('.messages-container');
+    if(!mc) return false;
+    const tolerance = 8; // px
+    return (mc.scrollHeight - mc.scrollTop - mc.clientHeight) <= tolerance;
+  }
+  function isReadingView(){
+    // Consider the message read if: tab visible, window focused, in a joined room, and scrolled to bottom
+    try { return !document.hidden && !!state.joinedRoom && window.document.hasFocus() && isAtBottom(); } catch(_) { return false; }
+  }
+  function maybeMarkRead(){
+    if(state.unreadCount > 0 && isReadingView()){
+      state.unreadCount = 0;
+      stopTitleBlink();
+    } else if(state.unreadCount > 0){
+      // Keep label up-to-date (e.g., switched rooms)
+      updateTitleBlinkLabel(state.joinedRoom && state.joinedRoom.name || '');
+    }
+  }
+
+  // Connectivity watchdog: ensure we attempt reconnection periodically if fully disconnected
+  setInterval(()=>{
+    try {
+      if(hub){
+        const s = hub.state && hub.state.toLowerCase ? hub.state.toLowerCase() : '';
+        if(s==='disconnected') ensureConnected();
+      }
+    } catch(_) { /* ignore */ }
+  }, 10000);
   // Fail-safe: if something throws during early init, show the app with a generic error.
   window.addEventListener('error', function(){
     if(state.loading){ setLoading(false); }

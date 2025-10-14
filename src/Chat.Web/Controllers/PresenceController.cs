@@ -22,7 +22,7 @@ namespace Chat.Web.Controllers
                 .Select(g => new {
                     room = g.Key,
                     count = g.Count(),
-                    users = g.Select(x => new { x.UserName, x.FullName, x.Device })
+                    users = g.Select(x => new { x.UserName, x.FullName })
                 })
                 .OrderBy(x => x.room)
                 .ToList();
