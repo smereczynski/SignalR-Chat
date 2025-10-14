@@ -29,8 +29,22 @@ public class UsersAssignRoomsModel : PageModel
     {
         var user = await _users.GetAsync(UserName);
         if (user == null) return RedirectToPage("Index");
-        user = user with { Rooms = SelectedRooms ?? new List<string>() };
+        var nextRooms = new HashSet<string>(SelectedRooms ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
+        var prevRooms = new HashSet<string>(user.Rooms ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
+
+        // Persist user first
+        user = user with { Rooms = nextRooms.ToList() };
         await _users.UpsertAsync(user);
+
+        // Update denormalized helper list in room docs
+        foreach (var add in nextRooms.Except(prevRooms))
+        {
+            await _rooms.AddUserToRoomAsync(add, user.UserName);
+        }
+        foreach (var rem in prevRooms.Except(nextRooms))
+        {
+            await _rooms.RemoveUserFromRoomAsync(rem, user.UserName);
+        }
         return RedirectToPage("Index");
     }
 }

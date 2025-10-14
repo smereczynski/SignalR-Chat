@@ -6,8 +6,6 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 
 var builder = WebApplication.CreateBuilder(args);
-
-// Auth: Entra ID only (no in-app auth)
 builder.Services
     .AddAuthentication(OpenIdConnectDefaults.AuthenticationScheme)
     .AddMicrosoftIdentityWebApp(builder.Configuration.GetSection("AzureAd"));
@@ -157,6 +155,8 @@ public interface IRoomsRepository
 {
     Task<IEnumerable<string>> GetAllNamesAsync();
     Task CreateAsync(string name);
+    Task AddUserToRoomAsync(string roomName, string userName);
+    Task RemoveUserFromRoomAsync(string roomName, string userName);
 }
 
 public class CosmosUsersRepository : IUsersRepository
@@ -205,7 +205,7 @@ public class CosmosRoomsRepository : IRoomsRepository
 {
     private readonly Microsoft.Azure.Cosmos.Container _rooms;
     public CosmosRoomsRepository(CosmosClients clients) => _rooms = clients.Rooms;
-    private class RoomDoc { public string id { get; set; } = default!; public string name { get; set; } = default!; }
+    private class RoomDoc { public string id { get; set; } = default!; public string name { get; set; } = default!; public string[] users { get; set; } = Array.Empty<string>(); }
     public async Task<IEnumerable<string>> GetAllNamesAsync()
     {
         var q = _rooms.GetItemQueryIterator<RoomDoc>(new Microsoft.Azure.Cosmos.QueryDefinition("SELECT c.name FROM c"));
@@ -219,7 +219,45 @@ public class CosmosRoomsRepository : IRoomsRepository
     }
     public async Task CreateAsync(string name)
     {
-        var doc = new RoomDoc { id = Guid.NewGuid().ToString("N"), name = name };
+        // Bootstrap helper field users: [] at creation time
+        var doc = new RoomDoc { id = Guid.NewGuid().ToString("N"), name = name, users = Array.Empty<string>() };
         await _rooms.CreateItemAsync(doc, new Microsoft.Azure.Cosmos.PartitionKey(name));
     }
+
+    public async Task AddUserToRoomAsync(string roomName, string userName)
+    {
+        var q = _rooms.GetItemQueryIterator<RoomDoc>(new Microsoft.Azure.Cosmos.QueryDefinition("SELECT * FROM c WHERE c.name = @n").WithParameter("@n", roomName));
+        RoomDoc? room = null;
+        while (q.HasMoreResults && room == null)
+        {
+            var page = await q.ReadNextAsync();
+            room = page.FirstOrDefault();
+        }
+        if (room == null) return; // room not found
+        var set = new HashSet<string>(room.users ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
+        if (set.Add(userName))
+        {
+            room.users = set.ToArray();
+            await _rooms.UpsertItemAsync(room, new Microsoft.Azure.Cosmos.PartitionKey(roomName));
+        }
+    }
+
+    public async Task RemoveUserFromRoomAsync(string roomName, string userName)
+    {
+        var q = _rooms.GetItemQueryIterator<RoomDoc>(new Microsoft.Azure.Cosmos.QueryDefinition("SELECT * FROM c WHERE c.name = @n").WithParameter("@n", roomName));
+        RoomDoc? room = null;
+        while (q.HasMoreResults && room == null)
+        {
+            var page = await q.ReadNextAsync();
+            room = page.FirstOrDefault();
+        }
+        if (room == null) return;
+        var set = new HashSet<string>(room.users ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
+        if (set.Remove(userName))
+        {
+            room.users = set.ToArray();
+            await _rooms.UpsertItemAsync(room, new Microsoft.Azure.Cosmos.PartitionKey(roomName));
+        }
+    }
+
 }
