@@ -30,7 +30,7 @@ if(window.__chatAppBooted){
 
   // ---------------- State ----------------
   const AuthStatus = { UNKNOWN:'UNKNOWN', PROBING:'PROBING', AUTHENTICATED:'AUTHENTICATED', UNAUTHENTICATED:'UNAUTHENTICATED' };
-  const state = { loading:true, profile:null, rooms:[], users:[], messages:[], joinedRoom:null, filter:'', oldestLoaded:null, canLoadMore:true, pageSize:20, loadingMore:false, lastSendAt:0, minSendIntervalMs:800, joinInProgress:false, pendingJoin:null, outbox:[], pendingAck:{}, authStatus: AuthStatus.UNKNOWN, pendingMessages:{}, isOffline:false, unreadCount:0, unsentByRoom:{}, ackTimers:{} };
+  const state = { loading:true, profile:null, rooms:[], users:[], messages:[], joinedRoom:null, filter:'', oldestLoaded:null, canLoadMore:true, pageSize:20, loadingMore:false, lastSendAt:0, minSendIntervalMs:800, joinInProgress:false, pendingJoin:null, outbox:[], pendingAck:{}, authStatus: AuthStatus.UNKNOWN, pendingMessages:{}, isOffline:false, unreadCount:0, unsentByRoom:{}, ackTimers:{}, autoScroll:true, _firstRender:true, _autoFillPass:0 };
   // Extended auth / hub timing metadata
   state._hubStartedEarly = false;       // whether hub started before auth probe resolved
   state._graceStartedAt = null;         // timestamp when grace window started
@@ -149,7 +149,7 @@ if(window.__chatAppBooted){
     const li=document.createElement('li');
     li.dataset.cid = m.correlationId || '';
     if(m.failed) li.classList.add('failed');
-    const wrap=document.createElement('div'); wrap.className='message-item'; if(m.isMine) wrap.classList.add('ismine');
+  const wrap=document.createElement('div'); wrap.className='message-item'; if(m.isMine) wrap.classList.add('ismine');
     if(!m.avatar){ const span=document.createElement('span'); span.className='avatar avatar-lg mx-2 text-uppercase'; span.textContent=initialFrom(m.fromFullName, m.fromUserName); wrap.appendChild(span);} else { const img=document.createElement('img'); img.className='avatar avatar-lg mx-2'; img.src='/avatars/'+m.avatar; wrap.appendChild(img);} 
     const content=document.createElement('div'); content.className='message-content';
     const info=document.createElement('div'); info.className='message-info d-flex flex-wrap align-items-center';
@@ -162,16 +162,23 @@ if(window.__chatAppBooted){
       const status=document.createElement('span'); status.className='send-status ms-2 text-muted'; status.textContent='…'; info.appendChild(status);
     }
     content.appendChild(info);
-    const body=document.createElement('div'); body.className='content'; body.textContent=m.content; content.appendChild(body);
+  const body=document.createElement('div'); body.className='content'; body.textContent=m.content; content.appendChild(body);
+  // Read receipt indicator (compact)
+  const rr = document.createElement('div'); rr.className='read-receipt small text-muted';
+  updateReadReceiptDom(rr, m);
+  content.appendChild(rr);
     wrap.appendChild(content); li.appendChild(wrap); els.messagesList.appendChild(li);
-    if(scrollIntoView){ const mc=document.querySelector('.messages-container'); if(mc) mc.scrollTop=mc.scrollHeight; }
+    if(scrollIntoView){
+      const mc=document.querySelector('.messages-container');
+      if(mc && (state.autoScroll || state._firstRender)) mc.scrollTop=mc.scrollHeight;
+    }
     return li;
   }
   function updateMessageDom(m){
     if(!els.messagesList || !m.correlationId) return false;
     const node = els.messagesList.querySelector('li[data-cid="'+m.correlationId+'"]');
     if(!node) return false;
-    const timeEl = node.querySelector('.timestamp');
+  const timeEl = node.querySelector('.timestamp');
     if(timeEl){ const fp=formatDateParts(m.timestamp); timeEl.textContent=fp.relative; timeEl.dataset.bsTitle=fp.full; }
     const bodyEl = node.querySelector('.content'); if(bodyEl) bodyEl.textContent = m.content;
     // Update status indicators
@@ -195,12 +202,46 @@ if(window.__chatAppBooted){
       }
     } else if(retryBtn){ retryBtn.remove(); }
     node.dataset.cid = m.correlationId || '';
+    // Update read receipt
+    let rr = node.querySelector('.read-receipt');
+    if(!rr){ rr = document.createElement('div'); rr.className='read-receipt small text-muted'; const content = node.querySelector('.message-content'); if(content) content.appendChild(rr); }
+    updateReadReceiptDom(rr, m);
     return true;
+  }
+  function updateReadReceiptDom(rrEl, m){
+    if(!rrEl) return;
+    const readers = Array.isArray(m.readBy) ? m.readBy : [];
+    const mine = !!m.isMine;
+    if(!mine){ rrEl.textContent=''; rrEl.classList.add('d-none'); return; }
+    rrEl.classList.remove('d-none');
+    // Show label for sender: 'Delivered' when nobody else read; otherwise list readers (excluding self)
+    const selfName = (state.profile && state.profile.userName || '').toLowerCase();
+    const others = readers.filter(u => u && u.toLowerCase() !== selfName);
+    if(others.length === 0){ rrEl.textContent = 'Delivered'; return; }
+    rrEl.textContent = 'Read by ' + others.join(', ');
   }
   function finalizeMessageRender(){
     const noInfo=document.querySelector('.no-messages-info'); if(noInfo) noInfo.classList.toggle('d-none', state.messages.length>0);
-    const mc=document.querySelector('.messages-container'); if(mc && !state.loadingMore) mc.scrollTop=mc.scrollHeight;
+    const mc=document.querySelector('.messages-container');
+    if(mc && !state.loadingMore && (state.autoScroll || state._firstRender)) mc.scrollTop=mc.scrollHeight;
+    state._firstRender = false;
     if(window.bootstrap){ const ttEls = [].slice.call(els.messagesList.querySelectorAll('[data-bs-toggle="tooltip"]')); ttEls.forEach(el=>{ try{ new window.bootstrap.Tooltip(el); }catch(_){} }); }
+    // If container cannot scroll yet but more pages are available, auto-load a few pages to enable scrolling
+    maybeAutoFillHistory();
+  }
+  function maybeAutoFillHistory(){
+    try {
+      const mc = document.querySelector('.messages-container');
+      if(!mc) return;
+      if(state.loadingMore || !state.canLoadMore || !state.joinedRoom || !state.oldestLoaded) return;
+      // If content height is not enough to scroll, fetch older until scroll becomes possible (cap passes)
+      const canScroll = mc.scrollHeight > (mc.clientHeight + 4);
+      if(!canScroll && state._autoFillPass < 3){
+        state._autoFillPass++;
+        // small delay to allow DOM to settle before next page request
+        setTimeout(()=> loadOlderMessages(), 0);
+      }
+    } catch(_) { /* ignore */ }
   }
   function renderProfile(){ const p=state.profile; if(!els.profileName) return; if(!p){ els.profileName.textContent='Not signed in'; if(els.profileAvatarImg) els.profileAvatarImg.classList.add('d-none'); if(els.profileAvatarInitial){ els.profileAvatarInitial.classList.remove('d-none'); els.profileAvatarInitial.textContent='?'; } if(els.btnLogin) els.btnLogin.classList.remove('d-none'); if(els.btnLogout) els.btnLogout.classList.add('d-none'); } else { els.profileName.textContent=p.fullName||p.userName; if(p.avatar){ if(els.profileAvatarImg){ els.profileAvatarImg.src='/avatars/'+p.avatar; els.profileAvatarImg.classList.remove('d-none'); } if(els.profileAvatarInitial) els.profileAvatarInitial.classList.add('d-none'); } else { if(els.profileAvatarInitial){ els.profileAvatarInitial.textContent=initialFrom(p.fullName, p.userName); els.profileAvatarInitial.classList.remove('d-none'); } if(els.profileAvatarImg) els.profileAvatarImg.classList.add('d-none'); } if(els.btnLogin) els.btnLogin.classList.add('d-none'); if(els.btnLogout) els.btnLogout.classList.remove('d-none'); } }
   // Enhanced profile renderer: show transitional 'Signing in…' during auth probe / grace
@@ -481,7 +522,7 @@ if(window.__chatAppBooted){
       if(mineUser && m.correlationId){
         const idx = state.messages.findIndex(x=> x.isMine && x.correlationId===m.correlationId);
         if(idx>=0){
-          state.messages[idx] = {id:m.id,content:m.content,timestamp:m.timestamp,fromUserName:m.fromUserName,fromFullName:m.fromFullName,avatar:m.avatar,isMine:true, correlationId:m.correlationId};
+          state.messages[idx] = {id:m.id,content:m.content,timestamp:m.timestamp,fromUserName:m.fromUserName,fromFullName:m.fromFullName,avatar:m.avatar,isMine:true, correlationId:m.correlationId, readBy: m.readBy||[]};
           // pendingMessages entry may have been removed on invoke ack; ensure cleanup if present
           if(state.pendingMessages[m.correlationId]) delete state.pendingMessages[m.correlationId];
           // Remove any duplicate server entry with the same id that might have been loaded via history
@@ -500,13 +541,13 @@ if(window.__chatAppBooted){
         const byIdIdx = state.messages.findIndex(x=> x && x.id===m.id);
         if(byIdIdx>=0){
           const isMine = !!(state.profile && state.profile.userName === m.fromUserName);
-          state.messages[byIdIdx] = {id:m.id,content:m.content,timestamp:m.timestamp,fromUserName:m.fromUserName,fromFullName:m.fromFullName,avatar:m.avatar,isMine, correlationId: m.correlationId||state.messages[byIdIdx].correlationId};
+          state.messages[byIdIdx] = {id:m.id,content:m.content,timestamp:m.timestamp,fromUserName:m.fromUserName,fromFullName:m.fromFullName,avatar:m.avatar,isMine, correlationId: m.correlationId||state.messages[byIdIdx].correlationId, readBy: m.readBy||state.messages[byIdIdx].readBy||[]};
           renderMessages();
           finalizeMessageRender();
           return;
         }
       }
-      addOrRenderMessage({ ...m, correlationId: m.correlationId });
+  addOrRenderMessage({ ...m, correlationId: m.correlationId });
       // Increment unread and start/continue title blinking until the message is read
       try {
         const isMine = !!(state.profile && state.profile.userName === m.fromUserName);
@@ -523,6 +564,18 @@ if(window.__chatAppBooted){
       } catch(_) { /* ignore */ }
     });
     c.on('notify', n=> handleNotify(n));
+    c.on('messageRead', payload => {
+      try {
+        const id = payload && (payload.id||payload.Id);
+        const readers = (payload && (payload.readers||payload.Readers)) || [];
+        const idx = state.messages.findIndex(x=> x && x.id===id);
+        if(idx>=0){
+          const msg = state.messages[idx];
+          msg.readBy = readers;
+          updateMessageDom(msg) || renderMessages();
+        }
+      } catch(_) { /* ignore */ }
+    });
     // Automatic reconnect handlers (withAutomaticReconnect is enabled on builder)
     // On successful re-connect, request a fresh user list for the current room.
     // This compensates for any missed join/leave events during the disconnected interval.
@@ -581,7 +634,7 @@ if(window.__chatAppBooted){
     let existingIdx = -1;
     if(m && m.correlationId){ existingIdx = state.messages.findIndex(x=> x && x.correlationId===m.correlationId); }
     if(existingIdx<0 && m && m.id!==undefined){ existingIdx = state.messages.findIndex(x=> x && x.id===m.id); }
-    const rec={id:m.id,content:m.content,timestamp:m.timestamp,fromUserName:m.fromUserName,fromFullName:m.fromFullName,avatar:m.avatar,isMine, correlationId:m.correlationId};
+  const rec={id:m.id,content:m.content,timestamp:m.timestamp,fromUserName:m.fromUserName,fromFullName:m.fromFullName,avatar:m.avatar,isMine, correlationId:m.correlationId, readBy: m.readBy||[]};
     if(existingIdx>=0){
       state.messages[existingIdx] = rec;
       renderMessages();
@@ -687,11 +740,11 @@ if(window.__chatAppBooted){
    */
   function loadMessages(){
     if(!state.joinedRoom) return;
-    state.oldestLoaded=null; state.canLoadMore=true;
+    state.oldestLoaded=null; state.canLoadMore=true; state._autoFillPass = 0;
     apiGet('/api/Messages/Room/'+encodeURIComponent(state.joinedRoom.name)+'?take='+state.pageSize)
       .then(list=>{
         // Server returns ascending order (repository sorts ascending)
-        state.messages = list.map(m=>({id:m.id,content:m.content,timestamp:m.timestamp,fromUserName:m.fromUserName,fromFullName:m.fromFullName,avatar:m.avatar,isMine: state.profile && state.profile.userName===m.fromUserName}));
+  state.messages = list.map(m=>({id:m.id,content:m.content,timestamp:m.timestamp,fromUserName:m.fromUserName,fromFullName:m.fromFullName,avatar:m.avatar,isMine: state.profile && state.profile.userName===m.fromUserName, readBy: m.readBy||[]}));
         // After baseline load, reattach any locally unsent (pending/failed) messages captured for this room
         restoreUnsentForRoom(state.joinedRoom.name);
         if(state.messages.length>0){
@@ -724,7 +777,7 @@ if(window.__chatAppBooted){
           return;
         }
         if(!Array.isArray(list) || list.length===0){ state.canLoadMore=false; postTelemetry('messages.page.empty',{token:reqToken}); return; }
-        const mapped=list.map(m=>({id:m.id,content:m.content,timestamp:m.timestamp,fromUserName:m.fromUserName,fromFullName:m.fromFullName,avatar:m.avatar,isMine: state.profile && state.profile.userName===m.fromUserName}));
+  const mapped=list.map(m=>({id:m.id,content:m.content,timestamp:m.timestamp,fromUserName:m.fromUserName,fromFullName:m.fromFullName,avatar:m.avatar,isMine: state.profile && state.profile.userName===m.fromUserName, readBy: m.readBy||[]}));
         const mc=document.querySelector('.messages-container'); let prevScrollHeight = mc? mc.scrollHeight:0;
         // Prepend and adjust oldest timestamp verifying monotonicity
         const prevOldest = state.oldestLoaded;
@@ -752,6 +805,8 @@ if(window.__chatAppBooted){
     mc.dataset.paginated='true';
     let lastReq=0;
     mc.addEventListener('scroll',()=>{
+      // Update auto-scroll preference: stick to bottom only when the user is at bottom
+      state.autoScroll = isAtBottom();
       if(mc.scrollTop < 40){ // slightly larger threshold for slower devices
         const now=Date.now();
         if(now-lastReq>500){ // widen throttle window to reduce rapid duplicates
@@ -1247,6 +1302,16 @@ if(window.__chatAppBooted){
     if(state.unreadCount > 0 && isReadingView()){
       state.unreadCount = 0;
       stopTitleBlink();
+      // Inform server that the most recent window of messages are read by this user
+      try {
+        const recent = state.messages.slice(-10); // last up to 10 messages
+        const ids = recent.filter(m=> !m.isMine).map(m=> m.id).filter(id=> typeof id==='number');
+        // Debounce to avoid spamming on frequent scroll events
+        if(!maybeMarkRead._last || Date.now() - maybeMarkRead._last > 750){
+          maybeMarkRead._last = Date.now();
+          ids.forEach(id=>{ try { if(hub) hub.invoke('MarkRead', id); } catch(_){} });
+        }
+      } catch(_){}
     } else if(state.unreadCount > 0){
       // Keep label up-to-date (e.g., switched rooms)
       updateTitleBlinkLabel(state.joinedRoom && state.joinedRoom.name || '');

@@ -16,5 +16,7 @@ namespace Chat.Web.Models
         public ApplicationUser FromUser { get; set; }
         public int ToRoomId { get; set; }
         public Room ToRoom { get; set; }
+        // Users who have read this message (usernames)
+        public ICollection<string> ReadBy { get; set; } = new List<string>();
     }
 }

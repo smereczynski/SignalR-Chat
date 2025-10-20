@@ -13,5 +13,9 @@ namespace Chat.Web.Repositories
         IEnumerable<Message> GetBeforeByRoom(string roomName, System.DateTime before, int take = 20);
         Message Create(Message message);
         void Delete(int id, string byUserName);
+        /// <summary>
+        /// Marks a message as read by the specified user. Returns the updated message or null if not found.
+        /// </summary>
+        Message MarkRead(int id, string userName);
     }
 }
