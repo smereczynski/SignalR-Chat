@@ -7,6 +7,7 @@ The project intentionally keeps scope tight: fixed public rooms, text messages o
 * Multi-room chat (fixed rooms: `general`, `ops`, `random`)
 * Text messages only (immutable after send)
 * Optimistic send with client correlation IDs and reconciliation
+* Single ack-timeout per message (deduped by correlationId to avoid duplicate retries)
 * Incremental pagination (newest batch first; fetch older on upward scroll)
 * Client-side send pacing (basic rate limiting logic in JS)
 * Avatar initials (derived client-side with cache bust/refresh protection)
@@ -26,6 +27,8 @@ The project intentionally keeps scope tight: fixed public rooms, text messages o
 * Outbox queue: pending messages buffered while disconnected and flushed after reconnect & room join
 * Duplicate hub start guard (prevents false reconnect storms)
 * SessionStorage backed optimistic message reconciliation
+* Read receipts: message ReadBy is persisted and broadcast so clients can show who has read each message
+* Delayed unread notifications: if a message remains unread after a configurable delay, send notification via email/SMS
 
 ## Fixed Room Topology
 Rooms are static; there is no runtime CRUD. The seeding hosted service ensures the three canonical rooms and initial users exist on startup.
@@ -127,6 +130,11 @@ Testing notes:
 3. Client reconciles optimistic entry (replaces temp rendering)
 4. If offline/disconnected: message stored in sessionStorage outbox until reconnect & room join
 
+### Read receipts
+- Clients mark messages as read when they reach the bottom of the timeline or when messages come into view, debounced to reduce chatter.
+- Server persists the reader in each message's `ReadBy` set and broadcasts `messageRead` events for real-time UI updates.
+- REST fallback: `POST /api/messages/{id}/read` marks a message as read for the current user.
+
 ### REST Fallback (Feature-Flagged)
 A narrow REST POST endpoint (`POST /api/Messages`) exists solely to satisfy the
 "immediate post after authentication" integration scenario and is **disabled by default**.
@@ -145,6 +153,22 @@ Custom counters (Meter `Chat.Web`):
 
 Client emits lightweight events for: reconnect attempts, duplicate start skips, message send outcomes, pagination fetches, queue flushes.
 Server logs use Serilog; OTLP export is conditionally enabled only when `OTel__OtlpEndpoint` is configured.
+
+## Notifications (Unread messages)
+When a message remains unread after a configurable delay, the app sends a lightweight notification to room members (excluding the sender and anyone who has already read it).
+
+- Delay: `Notifications:UnreadDelaySeconds` (default 60). After this delay, unread messages trigger notifications.
+- Recipient selection: primarily from `room.users`; when that list is missing, a fallback infers recipients from users' `fixedRooms`.
+- Channels: Email and SMS via Azure Communication Services when configured; otherwise a console fallback is used in development.
+- Formatting (required contract):
+  - Email subject: `New message`
+  - Email body: `New message in #<room>`
+  - SMS body: `New message in #<room>`
+  - No message content is included in notifications.
+
+Implementation details:
+- `UnreadNotificationScheduler` is an `IHostedService` that schedules a per-message delayed check and sends notifications if still unread.
+- `NotificationSender` constructs the notification payload; `AcsOtpSender` applies the email subject for notifications while preserving OTP-specific formatting for the authentication flow.
 
 ## Security Notes
 * OTP codes are stored hashed by default (Argon2id + salt + pepper). To support legacy/testing scenarios, plaintext storage can be toggled with `Otp:HashingEnabled=false`.
