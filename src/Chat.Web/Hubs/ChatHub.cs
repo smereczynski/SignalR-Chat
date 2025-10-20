@@ -483,9 +483,14 @@ namespace Chat.Web.Hubs
             if (user == null || string.IsNullOrEmpty(user.CurrentRoom)) return;
             var updated = _messages.MarkRead(messageId, IdentityName);
             if (updated == null) return;
+            // Use the message's actual room name for broadcasting
+            var messageRoom = updated.RoomName;
+            if (string.IsNullOrEmpty(messageRoom)) return;
+            // Optionally, guard if the message's room does not match the user's current room
+            // if (!string.Equals(messageRoom, user.CurrentRoom, StringComparison.OrdinalIgnoreCase)) return;
             try
             {
-                await Clients.Group(user.CurrentRoom).SendAsync("messageRead", new { id = messageId, readers = updated.ReadBy?.ToArray() ?? Array.Empty<string>() });
+                await Clients.Group(messageRoom).SendAsync("messageRead", new { id = messageId, readers = updated.ReadBy?.ToArray() ?? Array.Empty<string>() });
             }
             catch { /* ignore broadcast errors */ }
         }
