@@ -23,9 +23,9 @@ namespace Chat.Web.Services
         public async Task NotifyAsync(ApplicationUser user, string roomName, Message message)
         {
             if (user == null) return;
-            var title = $"New message in #{roomName}";
-            var snippet = message?.Content ?? string.Empty;
-            var code = $"{title}: {snippet}";
+            // Per requirements: do not include any message content or prefixes.
+            // Body for both SMS and email must be exactly: "New message in #<channel>"
+            var code = $"New message in #{roomName}";
             // Reuse IOtpSender routing: destination contains '@' => email; else SMS
             // Send to both email and mobile if available
             if (!string.IsNullOrWhiteSpace(user.Email))
