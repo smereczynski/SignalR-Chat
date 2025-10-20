@@ -58,15 +58,11 @@ namespace Chat.Web.Repositories
             var s = Sanitize(phone, max: 64);
             if (string.IsNullOrWhiteSpace(s)) return string.Empty;
             var hasPlus = s.StartsWith('+');
-            var digits = new System.Text.StringBuilder();
-            foreach (var ch in s)
-            {
-                if (char.IsDigit(ch)) digits.Append(ch);
-            }
+            var digits = new string(s.Where(char.IsDigit).ToArray());
             if (digits.Length == 0) return hasPlus ? "+**" : "**";
             var keep = Math.Min(2, digits.Length);
             var stars = new string('*', Math.Max(0, digits.Length - keep));
-            var tail = digits.ToString(digits.Length - keep, keep);
+            var tail = digits.Substring(digits.Length - keep, keep);
             return (hasPlus ? "+" : string.Empty) + stars + tail;
         }
 
@@ -77,7 +73,7 @@ namespace Chat.Web.Repositories
             var s = Sanitize(dest, max: 256);
             if (s.Contains('@')) return MaskEmail(s);
             // Assume phone-like if it contains 5+ digits
-            int digitCount = 0; foreach (var ch in s) if (char.IsDigit(ch)) digitCount++;
+            var digitCount = s.Count(char.IsDigit);
             if (digitCount >= 5) return MaskPhone(s);
             return MaskGeneric(s);
         }
