@@ -31,8 +31,6 @@ namespace Chat.Web.Controllers
         private readonly IRoomsRepository _rooms;
         private readonly IUsersRepository _users;
         private readonly IHubContext<ChatHub> _hubContext;
-    private readonly Services.IInProcessMetrics _metrics;
-    private readonly Services.UnreadNotificationScheduler _unreadScheduler;
         private readonly ILogger<MessagesController> _logger;
         private readonly IConfiguration _configuration;
 
@@ -43,8 +41,6 @@ namespace Chat.Web.Controllers
             IRoomsRepository rooms,
             IUsersRepository users,
             IHubContext<ChatHub> hubContext,
-            Services.IInProcessMetrics metrics,
-            Services.UnreadNotificationScheduler unreadScheduler,
             ILogger<MessagesController> logger,
             IConfiguration configuration)
         {
@@ -52,8 +48,6 @@ namespace Chat.Web.Controllers
             _rooms = rooms;
             _users = users;
             _hubContext = hubContext;
-            _metrics = metrics;
-            _unreadScheduler = unreadScheduler;
             _logger = logger;
             _configuration = configuration;
         }
@@ -145,7 +139,9 @@ namespace Chat.Web.Controllers
         }
 
         [HttpPost]
-        public IActionResult Post([FromBody] CreateMessageDto dto)
+        public IActionResult Post([FromBody] CreateMessageDto dto,
+            [FromServices] Services.IInProcessMetrics metrics,
+            [FromServices] Services.UnreadNotificationScheduler unreadScheduler)
         {
             // Feature flag: disable REST creation path unless explicitly enabled (tests / emergency fallback)
             var enabled = string.Equals(_configuration["Features:EnableRestPostMessages"], "true", StringComparison.OrdinalIgnoreCase);
@@ -203,13 +199,13 @@ namespace Chat.Web.Controllers
             _ = _hubContext.Clients.Group(room.Name).SendAsync("newMessage", vm);
             try
             {
-                _unreadScheduler?.Schedule(message);
+                unreadScheduler?.Schedule(message);
             }
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Unread notification scheduling failed for message {Id} in room {Room}", message.Id, room.Name);
             }
-            _metrics.IncMessagesSent();
+            metrics?.IncMessagesSent();
 
             if (UseManualSerialization)
             {
