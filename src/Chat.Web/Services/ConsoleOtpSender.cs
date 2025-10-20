@@ -1,5 +1,6 @@
 using System;
 using System.Threading.Tasks;
+using Chat.Web.Repositories; // LogSanitizer
 
 namespace Chat.Web.Services
 {
@@ -10,7 +11,8 @@ namespace Chat.Web.Services
     {
         public Task SendAsync(string userName, string destination, string code)
         {
-            Console.WriteLine($"[OTP] User={userName} Dest={destination} Code={code}");
+            var masked = LogSanitizer.MaskDestination(destination);
+            Console.WriteLine($"[OTP] User={userName} Dest={masked} Code={code}");
             return Task.CompletedTask;
         }
     }

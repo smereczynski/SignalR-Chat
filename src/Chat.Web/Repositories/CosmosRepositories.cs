@@ -36,6 +36,55 @@ namespace Chat.Web.Repositories
             }
             return sb.ToString();
         }
+
+        // Mask an email address, preserving only the domain suffix for minimal utility.
+        // Example: john.doe@example.com -> ***@***.com
+        public static string MaskEmail(string email)
+        {
+            var s = Sanitize(email, max: 256);
+            if (string.IsNullOrWhiteSpace(s)) return string.Empty;
+            var at = s.IndexOf('@');
+            if (at < 0) return MaskGeneric(s);
+            var lastDot = s.LastIndexOf('.');
+            var suffix = lastDot > at && lastDot < s.Length - 1 ? s.Substring(lastDot) : string.Empty;
+            return $"***@***{suffix}";
+        }
+
+        // Mask a phone number keeping leading '+' (if present) and last 2 digits.
+        // Non-digit characters (spaces/dashes) are removed in the mask.
+        // Example: +48604970937 -> +*********37
+        public static string MaskPhone(string phone)
+        {
+            var s = Sanitize(phone, max: 64);
+            if (string.IsNullOrWhiteSpace(s)) return string.Empty;
+            var hasPlus = s.StartsWith('+');
+            var digits = new string(s.Where(char.IsDigit).ToArray());
+            if (digits.Length == 0) return hasPlus ? "+**" : "**";
+            var keep = Math.Min(2, digits.Length);
+            var stars = new string('*', Math.Max(0, digits.Length - keep));
+            var tail = digits.Substring(digits.Length - keep, keep);
+            return (hasPlus ? "+" : string.Empty) + stars + tail;
+        }
+
+        // Heuristic mask for destinations (email or phone or other handle)
+        public static string MaskDestination(string dest)
+        {
+            if (string.IsNullOrWhiteSpace(dest)) return string.Empty;
+            var s = Sanitize(dest, max: 256);
+            if (s.Contains('@')) return MaskEmail(s);
+            // Assume phone-like if it contains 5+ digits
+            var digitCount = s.Count(char.IsDigit);
+            if (digitCount >= 5) return MaskPhone(s);
+            return MaskGeneric(s);
+        }
+
+        private static string MaskGeneric(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return string.Empty;
+            var keep = Math.Min(2, s.Length);
+            var tail = s.Substring(s.Length - keep, keep);
+            return new string('*', Math.Max(0, s.Length - keep)) + tail;
+        }
     }
     public class CosmosClients
     {
@@ -99,7 +148,7 @@ namespace Chat.Web.Repositories
     // Simple DTOs for Cosmos storage
     internal class UserDoc { public string id { get; set; } public string userName { get; set; } public string fullName { get; set; } public string avatar { get; set; } public string email { get; set; } public string mobile { get; set; } public bool? enabled { get; set; } public string[] fixedRooms { get; set; } public string[] rooms { get; set; } public string defaultRoom { get; set; } }
     internal class RoomDoc { public string id { get; set; } public string name { get; set; } public string admin { get; set; } public string[] users { get; set; } }
-    internal class MessageDoc { public string id { get; set; } public string roomName { get; set; } public string content { get; set; } public string fromUser { get; set; } public DateTime timestamp { get; set; } }
+    internal class MessageDoc { public string id { get; set; } public string roomName { get; set; } public string content { get; set; } public string fromUser { get; set; } public DateTime timestamp { get; set; } public string[] readBy { get; set; } }
 
     public class CosmosUsersRepository : IUsersRepository
     {
@@ -378,7 +427,7 @@ namespace Chat.Web.Repositories
             var room = message.ToRoom ?? _roomsRepo.GetById(message.ToRoomId);
             var pk = room?.Name ?? "global";
             message.Id = message.Id == 0 ? new Random().Next(1, int.MaxValue) : message.Id;
-            var doc = new MessageDoc { id = message.Id.ToString(), roomName = pk, content = message.Content, fromUser = message.FromUser?.UserName, timestamp = message.Timestamp };
+            var doc = new MessageDoc { id = message.Id.ToString(), roomName = pk, content = message.Content, fromUser = message.FromUser?.UserName, timestamp = message.Timestamp, readBy = (message.ReadBy != null ? message.ReadBy.ToArray() : Array.Empty<string>()) };
             try
             {
                 var resp = Resilience.RetryHelper.ExecuteAsync(
@@ -440,7 +489,7 @@ namespace Chat.Web.Repositories
                     var d = page.FirstOrDefault();
                     if (d != null)
                     {
-                        return new Message { Id = int.Parse(d.id), Content = d.content, Timestamp = d.timestamp, ToRoom = new Room { Name = d.roomName }, ToRoomId = 0, FromUser = new ApplicationUser { UserName = d.fromUser } };
+                        return new Message { Id = int.Parse(d.id), Content = d.content, Timestamp = d.timestamp, ToRoom = new Room { Name = d.roomName }, ToRoomId = 0, FromUser = new ApplicationUser { UserName = d.fromUser }, ReadBy = d.readBy != null ? new List<string>(d.readBy) : new List<string>() };
                     }
                 }
                 return null;
@@ -469,7 +518,7 @@ namespace Chat.Web.Repositories
                         _logger,
                         "cosmos.messages.recent.readnext").GetAwaiter().GetResult();
                     activity?.AddEvent(new ActivityEvent("page", tags: new ActivityTagsCollection {{"db.page.count", page.Count}}));
-                    list.AddRange(page.Select(d => new Message { Id = int.Parse(d.id), Content = d.content, Timestamp = d.timestamp, ToRoom = new Room { Name = d.roomName }, FromUser = new ApplicationUser { UserName = d.fromUser } }));
+                    list.AddRange(page.Select(d => new Message { Id = int.Parse(d.id), Content = d.content, Timestamp = d.timestamp, ToRoom = new Room { Name = d.roomName }, FromUser = new ApplicationUser { UserName = d.fromUser }, ReadBy = d.readBy != null ? new List<string>(d.readBy) : new List<string>() }));
                 }
                 list = list.OrderBy(m => m.Timestamp).ToList();
                 activity?.SetTag("app.result.count", list.Count);
@@ -484,7 +533,7 @@ namespace Chat.Web.Repositories
             }
         }
 
-        public IEnumerable<Message> GetBeforeByRoom(string roomName, DateTime before, int take = 20)
+    public IEnumerable<Message> GetBeforeByRoom(string roomName, DateTime before, int take = 20)
         {
             using var activity = Tracing.ActivitySource.StartActivity("cosmos.messages.before", ActivityKind.Client);
             activity?.SetTag("app.room", roomName);
@@ -506,9 +555,10 @@ namespace Chat.Web.Repositories
                         _logger,
                         "cosmos.messages.before.readnext").GetAwaiter().GetResult();
                     activity?.AddEvent(new ActivityEvent("page", tags: new ActivityTagsCollection {{"db.page.count", page.Count}}));
-                    list.AddRange(page.Select(d => new Message { Id = int.Parse(d.id), Content = d.content, Timestamp = d.timestamp, ToRoom = new Room { Name = d.roomName }, FromUser = new ApplicationUser { UserName = d.fromUser } }));
+                    list.AddRange(page.Select(d => new Message { Id = int.Parse(d.id), Content = d.content, Timestamp = d.timestamp, ToRoom = new Room { Name = d.roomName }, FromUser = new ApplicationUser { UserName = d.fromUser }, ReadBy = d.readBy != null ? new List<string>(d.readBy) : new List<string>() }));
                 }
-                list = list.OrderBy(m => m.Timestamp).ToList();
+                // Keep only the newest 'take' items and return ascending order
+                list = list.OrderByDescending(m => m.Timestamp).Take(take).OrderBy(m => m.Timestamp).ToList();
                 activity?.SetTag("app.result.count", list.Count);
                 return list;
             }
@@ -519,6 +569,50 @@ namespace Chat.Web.Repositories
                 _logger.LogError(ex, "Cosmos messages before failed");
                 throw;
             }
+        }
+
+        public Message MarkRead(int id, string userName)
+        {
+            using var activity = Tracing.ActivitySource.StartActivity("cosmos.messages.markread", ActivityKind.Client);
+            activity?.SetTag("app.message.id", id);
+            if (string.IsNullOrWhiteSpace(userName)) return null;
+            var q = _messages.GetItemQueryIterator<MessageDoc>(new QueryDefinition("SELECT TOP 1 * FROM c WHERE c.id = @id").WithParameter("@id", id.ToString()));
+            MessageDoc d = null;
+            while (q.HasMoreResults && d == null)
+            {
+                var page = Resilience.RetryHelper.ExecuteAsync(
+                    _ => q.ReadNextAsync(),
+                    Transient.IsCosmosTransient,
+                    _logger,
+                    "cosmos.messages.markread.lookup").GetAwaiter().GetResult();
+                d = page.FirstOrDefault();
+            }
+            if (d == null) return null;
+            var pk = d.roomName;
+            var set = new HashSet<string>(d.readBy ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
+            if (set.Add(userName))
+            {
+                d.readBy = set.ToArray();
+                try
+                {
+                    var resp = Resilience.RetryHelper.ExecuteAsync(
+                        _ => _messages.UpsertItemAsync(d, new PartitionKey(pk)),
+                        Transient.IsCosmosTransient,
+                        _logger,
+                        "cosmos.messages.markread.upsert").GetAwaiter().GetResult();
+                    activity?.SetTag("db.status_code", (int)resp.StatusCode);
+                }
+                catch (CosmosException ex)
+                {
+                    activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+                    // Rethrow with contextual information rather than only logging and rethrowing,
+                    // to satisfy static analysis guidance and aid diagnostics upstream.
+                    throw new InvalidOperationException(
+                        $"Failed to mark message as read (Id={id}, Room={LogSanitizer.Sanitize(pk)}).",
+                        ex);
+                }
+            }
+            return new Message { Id = int.Parse(d.id), Content = d.content, Timestamp = d.timestamp, ToRoom = new Room { Name = d.roomName }, FromUser = new ApplicationUser { UserName = d.fromUser }, ReadBy = d.readBy != null ? new List<string>(d.readBy) : new List<string>() };
         }
     }
 }

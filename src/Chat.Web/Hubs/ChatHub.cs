@@ -37,6 +37,7 @@ namespace Chat.Web.Hubs
     private readonly Repositories.IUsersRepository _users;
     private readonly Repositories.IMessagesRepository _messages;
     private readonly Repositories.IRoomsRepository _rooms;
+        private readonly Services.UnreadNotificationScheduler _unreadScheduler;
         private readonly ILogger<ChatHub> _logger;
         private readonly Services.IInProcessMetrics _metrics;
 
@@ -47,13 +48,15 @@ namespace Chat.Web.Hubs
             Repositories.IMessagesRepository messages,
             Repositories.IRoomsRepository rooms,
             ILogger<ChatHub> logger,
-            Services.IInProcessMetrics metrics)
+            Services.IInProcessMetrics metrics,
+            Services.UnreadNotificationScheduler unreadScheduler)
         {
             _users = users;
             _messages = messages;
             _rooms = rooms;
             _logger = logger;
             _metrics = metrics;
+            _unreadScheduler = unreadScheduler;
         }
 
         /// <summary>
@@ -456,11 +459,46 @@ namespace Chat.Web.Hubs
                 Avatar = msg.FromUser?.Avatar,
                 Room = room.Name,
                 Timestamp = msg.Timestamp,
-                CorrelationId = correlationId
+                CorrelationId = correlationId,
+                ReadBy = (msg.ReadBy != null ? msg.ReadBy.ToArray() : Array.Empty<string>())
             };
             await Clients.Group(room.Name).SendAsync("newMessage", vm);
+            try
+            {
+                _unreadScheduler?.Schedule(msg);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Unread notification scheduling failed for message {Id} in room {Room}", msg.Id, room.Name);
+            }
             _metrics.IncMessagesSent();
             activity?.SetStatus(ActivityStatusCode.Ok);
+        }
+
+        /// <summary>
+        /// Marks a message as read by the current user and broadcasts an update to the room.
+        /// </summary>
+        public async Task MarkRead(int messageId)
+        {
+            using var activity = Tracing.ActivitySource.StartActivity("ChatHub.MarkRead");
+            activity?.SetTag("chat.messageId", messageId);
+            UserViewModel user;
+            lock (_ConnectionsLock)
+            {
+                user = _Connections.FirstOrDefault(u => u.UserName == IdentityName);
+            }
+            if (user == null || string.IsNullOrEmpty(user.CurrentRoom)) return;
+            var updated = _messages.MarkRead(messageId, IdentityName);
+            if (updated == null) return;
+            // Use the message's actual room name for broadcasting
+            var messageRoom = updated.ToRoom?.Name;
+            if (string.IsNullOrEmpty(messageRoom)) return;
+            // Optionally, guard if the message's room does not match the user's current room
+            try
+            {
+                await Clients.Group(messageRoom).SendAsync("messageRead", new { id = messageId, readers = updated.ReadBy?.ToArray() ?? Array.Empty<string>() });
+            }
+            catch { /* ignore broadcast errors */ }
         }
     }
 }
