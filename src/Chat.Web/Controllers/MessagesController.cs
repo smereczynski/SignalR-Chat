@@ -201,7 +201,14 @@ namespace Chat.Web.Controllers
 
             // Fire-and-forget hub broadcast (do not block API latency on network fan-out)
             _ = _hubContext.Clients.Group(room.Name).SendAsync("newMessage", vm);
-            try { _unreadScheduler?.Schedule(message); } catch { }
+            try
+            {
+                _unreadScheduler?.Schedule(message);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Unread notification scheduling failed for message {Id} in room {Room}", message.Id, room.Name);
+            }
             _metrics.IncMessagesSent();
 
             if (UseManualSerialization)
