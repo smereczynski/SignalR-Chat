@@ -57,7 +57,7 @@ namespace Chat.Web.Repositories
         {
             var s = Sanitize(phone, max: 64);
             if (string.IsNullOrWhiteSpace(s)) return string.Empty;
-            var hasPlus = s.StartsWith("+");
+            var hasPlus = s.StartsWith('+');
             var digits = new System.Text.StringBuilder();
             foreach (var ch in s)
             {
