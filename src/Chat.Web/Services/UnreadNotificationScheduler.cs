@@ -64,7 +64,11 @@ namespace Chat.Web.Services
         {
             if (message == null || message.Id <= 0) return;
             var delaySec = Math.Max(0, _options.Value?.UnreadDelaySeconds ?? 0);
-            if (delaySec <= 0) return;
+            if (delaySec <= 0)
+            {
+                _logger.LogDebug("Unread notifications disabled (delay <= 0). Skipping schedule for message {Id}", message.Id);
+                return;
+            }
             // If already scheduled, skip
             if (_timers.ContainsKey(message.Id)) return;
 
@@ -96,7 +100,26 @@ namespace Chat.Web.Services
                 var readers = new HashSet<string>((msg.ReadBy ?? Array.Empty<string>()).Select(u => u?.ToLowerInvariant()), StringComparer.OrdinalIgnoreCase);
                 // Gather target users assigned to room
                 var userNames = (room?.Users ?? new List<string>()).Where(u => !string.IsNullOrWhiteSpace(u)).ToList();
-                if (userNames.Count == 0) return;
+                if (userNames.Count == 0)
+                {
+                    // Fallback: if room.Users is not populated, infer from users whose FixedRooms include this room
+                    var inferred = _users.GetAll()
+                        ?.Where(u => u != null && u.Enabled != false && (u.FixedRooms?.Contains(roomName, StringComparer.OrdinalIgnoreCase) ?? false))
+                        ?.Select(u => u.UserName)
+                        ?.Where(n => !string.IsNullOrWhiteSpace(n))
+                        ?.Distinct(StringComparer.OrdinalIgnoreCase)
+                        ?.ToList() ?? new List<string>();
+                    if (inferred.Count > 0)
+                    {
+                        userNames = inferred;
+                        _logger.LogDebug("Recipients inferred from FixedRooms for room {Room}: {Count}", roomName, userNames.Count);
+                    }
+                    else
+                    {
+                        _logger.LogDebug("No recipients found for room {Room} (room.Users empty and no users with FixedRooms). Skipping notification for message {Id}", roomName, messageId);
+                        return;
+                    }
+                }
                 // Exclude sender and any readers
                 var toNotify = userNames.Where(u => !string.Equals(u, msg.FromUser?.UserName, StringComparison.OrdinalIgnoreCase) && !readers.Contains(u)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
                 if (toNotify.Count == 0) return;
