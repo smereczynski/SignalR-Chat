@@ -109,6 +109,22 @@ sequenceDiagram
   end
 ```
 
+### Read receipts flow
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant B as Browser (chat.js)
+  participant H as ChatHub
+  participant D as Store (Cosmos/EF)
+
+  Note over B: User views newest messages
+  B->>H: markRead(messageId)
+  H->>D: Persist add Reader to Message.ReadBy
+  H-->>B: Broadcast messageRead { id, user }
+  B-->>B: Update UI badges (per-room and per-message)
+```
+
 ## Runtime overview
 - ASP.NET Core 9 (Razor Pages + Controllers + SignalR Hub)
 - Persistence: EF Core; Cosmos DB repositories in normal mode, in-memory repositories in Testing:InMemory mode
@@ -213,8 +229,11 @@ This section captures core components and runtime flows beyond OTP specifics.
 | Layer | Component | Responsibility |
 |-------|-----------|----------------|
 | Client | `chat.js` | Connection lifecycle (connect/join/reconnect), outbox queue, optimistic sends, reconciling broadcasts, telemetry emission. |
+| Client | Read receipts UI | Debounced mark-as-read when timeline bottom is reached; updates per-message ReadBy badges. |
 | Client | `site.js` | General UI behaviors (sidebar toggles, OTP modal workflow, tooltips, message actions UI). |
 | Real-time | `ChatHub` | Single entry-point for sending messages and joining rooms. Normalizes routing, enriches tracing, broadcasts canonical message DTOs. |
+| Background | `UnreadNotificationScheduler` | Schedules per-message delayed unread checks; sends notifications to recipients excluding sender/readers. |
+| Services | `NotificationSender` / `AcsOtpSender` | Formats notification payloads and delivers them via email/SMS; enforces notification subject/body contract while preserving OTP formatting. |
 | Auth | Auth Controllers / OTP API | `start` (generate/store OTP in Redis), `verify` (validate OTP, issue auth cookie), `logout`. |
 | Data | `ApplicationDbContext` & EF migrations | Stores Users, Rooms, Messages. |
 | OTP Store | `RedisOtpStore` | Wrapper over StackExchange.Redis for code set/get/delete with TTL. |
@@ -260,6 +279,21 @@ Potential future roles: SignalR backplane, presence cache, rate limiting, hot me
 - Messages composed offline accumulate in queue
 - On reconnection + join success, queued messages flush automatically
 - Proactive reconnect is attempted on `visibilitychange` (when becoming visible) and `online` events
+
+### Unread notification scheduling
+1. On message send, the server schedules a delayed check for that message using `UnreadNotificationScheduler`.
+2. After `Notifications:UnreadDelaySeconds` (default 60), the scheduler queries the message state.
+3. If the message is still unread by all recipients, it computes recipients:
+  - Primary: `room.users` when present
+  - Fallback: users whose `fixedRooms` contains the room name
+  - Excludes: the sender and any users in `message.readBy`
+4. `NotificationSender` sends one notification per recipient through the configured channels.
+
+Formatting contract:
+- Email subject: `New message`
+- Email body: `New message in #<room>`
+- SMS body: `New message in #<room>`
+- No message text is included to avoid leaking content through notifications.
 
 ## Build & Front-End Delivery
 - Source JS under `wwwroot/js/` is used directly in development and referenced by pages. Optional build tasks can create minified bundles in `wwwroot/js/dist/` for production testing; pages do not reference `dist` by default.
@@ -378,6 +412,7 @@ Canonical fields:
   - id: string
   - userName: string
 - toRoomId: integer (foreign key to Room.id)
+- readBy: string[] (user names who have read the message)
 
 Relationships:
 - FromUser (many-to-one)
