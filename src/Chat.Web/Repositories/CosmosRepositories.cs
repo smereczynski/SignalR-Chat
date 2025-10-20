@@ -36,6 +36,59 @@ namespace Chat.Web.Repositories
             }
             return sb.ToString();
         }
+
+        // Mask an email address, preserving only the domain suffix for minimal utility.
+        // Example: john.doe@example.com -> ***@***.com
+        public static string MaskEmail(string email)
+        {
+            var s = Sanitize(email, max: 256);
+            if (string.IsNullOrWhiteSpace(s)) return string.Empty;
+            var at = s.IndexOf('@');
+            if (at < 0) return MaskGeneric(s);
+            var lastDot = s.LastIndexOf('.');
+            var suffix = lastDot > at && lastDot < s.Length - 1 ? s.Substring(lastDot) : string.Empty;
+            return $"***@***{suffix}";
+        }
+
+        // Mask a phone number keeping leading '+' (if present) and last 2 digits.
+        // Non-digit characters (spaces/dashes) are removed in the mask.
+        // Example: +48604970937 -> +*********37
+        public static string MaskPhone(string phone)
+        {
+            var s = Sanitize(phone, max: 64);
+            if (string.IsNullOrWhiteSpace(s)) return string.Empty;
+            var hasPlus = s.StartsWith("+");
+            var digits = new System.Text.StringBuilder();
+            foreach (var ch in s)
+            {
+                if (char.IsDigit(ch)) digits.Append(ch);
+            }
+            if (digits.Length == 0) return hasPlus ? "+**" : "**";
+            var keep = Math.Min(2, digits.Length);
+            var stars = new string('*', Math.Max(0, digits.Length - keep));
+            var tail = digits.ToString(digits.Length - keep, keep);
+            return (hasPlus ? "+" : string.Empty) + stars + tail;
+        }
+
+        // Heuristic mask for destinations (email or phone or other handle)
+        public static string MaskDestination(string dest)
+        {
+            if (string.IsNullOrWhiteSpace(dest)) return string.Empty;
+            var s = Sanitize(dest, max: 256);
+            if (s.Contains('@')) return MaskEmail(s);
+            // Assume phone-like if it contains 5+ digits
+            int digitCount = 0; foreach (var ch in s) if (char.IsDigit(ch)) digitCount++;
+            if (digitCount >= 5) return MaskPhone(s);
+            return MaskGeneric(s);
+        }
+
+        private static string MaskGeneric(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return string.Empty;
+            var keep = Math.Min(2, s.Length);
+            var tail = s.Substring(s.Length - keep, keep);
+            return new string('*', Math.Max(0, s.Length - keep)) + tail;
+        }
     }
     public class CosmosClients
     {
