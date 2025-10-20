@@ -37,6 +37,7 @@ namespace Chat.Web.Hubs
     private readonly Repositories.IUsersRepository _users;
     private readonly Repositories.IMessagesRepository _messages;
     private readonly Repositories.IRoomsRepository _rooms;
+        private readonly Services.UnreadNotificationScheduler _unreadScheduler;
         private readonly ILogger<ChatHub> _logger;
         private readonly Services.IInProcessMetrics _metrics;
 
@@ -47,13 +48,15 @@ namespace Chat.Web.Hubs
             Repositories.IMessagesRepository messages,
             Repositories.IRoomsRepository rooms,
             ILogger<ChatHub> logger,
-            Services.IInProcessMetrics metrics)
+            Services.IInProcessMetrics metrics,
+            Services.UnreadNotificationScheduler unreadScheduler)
         {
             _users = users;
             _messages = messages;
             _rooms = rooms;
             _logger = logger;
             _metrics = metrics;
+            _unreadScheduler = unreadScheduler;
         }
 
         /// <summary>
@@ -460,6 +463,7 @@ namespace Chat.Web.Hubs
                 ReadBy = (msg.ReadBy != null ? msg.ReadBy.ToArray() : Array.Empty<string>())
             };
             await Clients.Group(room.Name).SendAsync("newMessage", vm);
+            try { _unreadScheduler?.Schedule(msg); } catch { }
             _metrics.IncMessagesSent();
             activity?.SetStatus(ActivityStatusCode.Ok);
         }
