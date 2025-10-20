@@ -157,6 +157,18 @@
 			"isBackground": false,
 			"problemMatcher": [],
 			"group": "build"
+		},
+		{
+			"label": "git-commit-architecture-docs",
+			"type": "shell",
+			"command": "git",
+			"args": [
+				"commit",
+				"-a",
+				"-m",
+				"Docs: document viewport-based read marking after join/reconnect; update read receipts flow; note SonarQube exception handling in MarkRead"
+			],
+			"group": "build"
 		}
 	]
 }
