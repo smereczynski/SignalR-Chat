@@ -121,7 +121,7 @@ sequenceDiagram
   Note over B: User views newest messages
   B->>H: markRead(messageId)
   H->>D: Persist add Reader to Message.ReadBy
-  H-->>B: Broadcast messageRead { id, user }
+  H-->>B: Broadcast messageRead { id, readers }
   B-->>B: Update UI badges (per-room and per-message)
 ```
 
