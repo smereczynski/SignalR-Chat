@@ -463,7 +463,14 @@ namespace Chat.Web.Hubs
                 ReadBy = (msg.ReadBy != null ? msg.ReadBy.ToArray() : Array.Empty<string>())
             };
             await Clients.Group(room.Name).SendAsync("newMessage", vm);
-            try { _unreadScheduler?.Schedule(msg); } catch { }
+            try
+            {
+                _unreadScheduler?.Schedule(msg);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Unread notification scheduling failed for message {Id} in room {Room}", msg.Id, room.Name);
+            }
             _metrics.IncMessagesSent();
             activity?.SetStatus(ActivityStatusCode.Ok);
         }
@@ -487,7 +494,6 @@ namespace Chat.Web.Hubs
             var messageRoom = updated.ToRoom?.Name;
             if (string.IsNullOrEmpty(messageRoom)) return;
             // Optionally, guard if the message's room does not match the user's current room
-            // if (!string.Equals(messageRoom, user.CurrentRoom, StringComparison.OrdinalIgnoreCase)) return;
             try
             {
                 await Clients.Group(messageRoom).SendAsync("messageRead", new { id = messageId, readers = updated.ReadBy?.ToArray() ?? Array.Empty<string>() });
