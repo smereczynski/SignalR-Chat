@@ -44,7 +44,7 @@ namespace Chat.Web.Services
         private async Task SafeSend(string userName, string destination, string body)
         {
             try { await _otpSender.SendAsync(userName, destination, body); }
-            catch (Exception ex) { _logger?.LogWarning(ex, "Notification send failed to {Dest} for {User}", LogSanitizer.MaskDestination(destination), userName); }
+            catch (Exception ex) { _logger?.LogWarning(ex, "Notification send failed for user {User}", userName); }
         }
     }
 }
