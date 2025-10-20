@@ -31,7 +31,6 @@ namespace Chat.Web.Controllers
         private readonly IRoomsRepository _rooms;
         private readonly IUsersRepository _users;
         private readonly IHubContext<ChatHub> _hubContext;
-        private readonly Services.IInProcessMetrics _metrics;
         private readonly ILogger<MessagesController> _logger;
         private readonly IConfiguration _configuration;
 
@@ -42,7 +41,6 @@ namespace Chat.Web.Controllers
             IRoomsRepository rooms,
             IUsersRepository users,
             IHubContext<ChatHub> hubContext,
-            Services.IInProcessMetrics metrics,
             ILogger<MessagesController> logger,
             IConfiguration configuration)
         {
@@ -50,7 +48,6 @@ namespace Chat.Web.Controllers
             _rooms = rooms;
             _users = users;
             _hubContext = hubContext;
-            _metrics = metrics;
             _logger = logger;
             _configuration = configuration;
         }
@@ -90,7 +87,8 @@ namespace Chat.Web.Controllers
                 FromFullName = message.FromUser?.FullName,
                 Avatar = message.FromUser?.Avatar,
                 Room = message.ToRoom?.Name,
-                Timestamp = message.Timestamp
+                Timestamp = message.Timestamp,
+                ReadBy = message.ReadBy != null ? message.ReadBy.ToArray() : Array.Empty<string>()
             };
             return Ok(vm);
         }
@@ -119,7 +117,8 @@ namespace Chat.Web.Controllers
                 FromFullName = m.FromUser?.FullName,
                 Avatar = m.FromUser?.Avatar,
                 Room = room.Name,
-                Timestamp = m.Timestamp
+                Timestamp = m.Timestamp,
+                ReadBy = m.ReadBy != null ? m.ReadBy.ToArray() : Array.Empty<string>()
             });
             if (UseManualSerialization)
             {
@@ -140,7 +139,9 @@ namespace Chat.Web.Controllers
         }
 
         [HttpPost]
-        public IActionResult Post([FromBody] CreateMessageDto dto)
+        public IActionResult Post([FromBody] CreateMessageDto dto,
+            [FromServices] Services.IInProcessMetrics metrics,
+            [FromServices] Services.UnreadNotificationScheduler unreadScheduler)
         {
             // Feature flag: disable REST creation path unless explicitly enabled (tests / emergency fallback)
             var enabled = string.Equals(_configuration["Features:EnableRestPostMessages"], "true", StringComparison.OrdinalIgnoreCase);
@@ -190,18 +191,41 @@ namespace Chat.Web.Controllers
                 Avatar = message.FromUser?.Avatar,
                 Room = room.Name,
                 Timestamp = message.Timestamp,
-                CorrelationId = dto.CorrelationId
+                CorrelationId = dto.CorrelationId,
+                ReadBy = message.ReadBy != null ? message.ReadBy.ToArray() : Array.Empty<string>()
             };
 
             // Fire-and-forget hub broadcast (do not block API latency on network fan-out)
             _ = _hubContext.Clients.Group(room.Name).SendAsync("newMessage", vm);
-            _metrics.IncMessagesSent();
+            try
+            {
+                unreadScheduler?.Schedule(message);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Unread notification scheduling failed for message {Id} in room {Room}", message.Id, room.Name);
+            }
+            metrics?.IncMessagesSent();
 
             if (UseManualSerialization)
             {
                 return ManualJson(vm, StatusCodes.Status201Created, $"/api/Messages/{vm.Id}");
             }
             return Created($"/api/Messages/{vm.Id}", vm);
+        }
+
+        /// <summary>
+        /// Mark a message as read for the current user. Broadcasts update via hub.
+        /// </summary>
+        [HttpPost("{id}/read")]
+        public IActionResult MarkRead(int id)
+        {
+            var updated = _messages.MarkRead(id, User?.Identity?.Name);
+            if (updated == null) return NotFound();
+            // Fire-and-forget broadcast of readers list to the room
+            _ = _hubContext.Clients.Group(updated.ToRoom?.Name ?? string.Empty)
+                .SendAsync("messageRead", new { id = updated.Id, readers = updated.ReadBy?.ToArray() ?? Array.Empty<string>() });
+            return NoContent();
         }
     }
 }

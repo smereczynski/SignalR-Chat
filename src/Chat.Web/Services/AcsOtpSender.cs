@@ -49,13 +49,16 @@ namespace Chat.Web.Services
                 return;
             }
 
+            // Detect if this is a chat notification payload rather than an OTP numeric code.
+            var isNotification = !string.IsNullOrWhiteSpace(code) && code.StartsWith("New message in #", StringComparison.OrdinalIgnoreCase);
+
             if (IsEmail(destination))
             {
                 if (string.IsNullOrWhiteSpace(_options.EmailFrom))
                     throw new InvalidOperationException("AcsOptions.EmailFrom is required to send email OTP.");
 
-                var subject = "Your verification code";
-                var body = $"Your verification code is: {code}";
+                var subject = isNotification ? "New message" : "Your verification code";
+                var body = isNotification ? code : $"Your verification code is: {code}";
                 // Do not block on provider end-to-end completion; start send and return, with retries
                 try
                 {
@@ -80,7 +83,7 @@ namespace Chat.Web.Services
                 if (string.IsNullOrWhiteSpace(_options.SmsFrom))
                     throw new InvalidOperationException("AcsOptions.SmsFrom is required to send SMS OTP.");
 
-                var body = $"Code: {code}";
+                var body = isNotification ? code : $"Code: {code}";
                 try
                 {
                     await RetryHelper.ExecuteAsync(

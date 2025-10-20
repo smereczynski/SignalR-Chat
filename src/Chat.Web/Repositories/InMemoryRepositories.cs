@@ -72,6 +72,13 @@ namespace Chat.Web.Repositories
         public Message GetById(int id) => _messages.TryGetValue(id, out var m) ? m : null;
         public IEnumerable<Message> GetBeforeByRoom(string roomName, DateTime before, int take = 20) => GetRecentByRoom(roomName, take);
         public IEnumerable<Message> GetRecentByRoom(string roomName, int take = 20) => _messages.Values.Where(m => m.ToRoom != null && m.ToRoom.Name == roomName).OrderByDescending(m => m.Timestamp).Take(take);
+        public Message MarkRead(int id, string userName)
+        {
+            if (!_messages.TryGetValue(id, out var m) || string.IsNullOrWhiteSpace(userName)) return null;
+            var set = new HashSet<string>(m.ReadBy ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
+            if (set.Add(userName)) m.ReadBy = set.ToList();
+            return m;
+        }
     }
 
     public class InMemoryOtpStore : IOtpStore
