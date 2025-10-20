@@ -32,12 +32,12 @@ namespace Chat.Web.Services
             if (!string.IsNullOrWhiteSpace(user.Email))
             {
                 await SafeSend(user.UserName, user.Email, code);
-                _logger.LogInformation("Notification (email) queued to {Email} for user {User}", LogSanitizer.MaskEmail(user.Email), user.UserName);
+                _logger.LogInformation("Notification (email) queued for user {User}", user.UserName);
             }
             if (!string.IsNullOrWhiteSpace(user.MobileNumber))
             {
                 await SafeSend(user.UserName, user.MobileNumber, code);
-                _logger.LogInformation("Notification (sms) queued to {Phone} for user {User}", LogSanitizer.MaskPhone(user.MobileNumber), user.UserName);
+                _logger.LogInformation("Notification (sms) queued for user {User}", user.UserName);
             }
         }
 
