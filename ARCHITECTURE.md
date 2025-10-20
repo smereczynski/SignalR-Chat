@@ -118,10 +118,14 @@ sequenceDiagram
   participant H as ChatHub
   participant D as Store (Cosmos/EF)
 
-  Note over B: User views newest messages
-  B->>H: markRead(messageId)
-  H->>D: Persist add Reader to Message.ReadBy
-  H-->>B: Broadcast messageRead { id, readers }
+  Note over B: User views message list (render/scroll/focus/visibility)
+  B-->>B: Collect visible, non-mine, unread message ids
+  B-->>B: Debounce 300ms + de-dup cache (prevent repeats)
+  loop For each id in visibleIds
+    B->>H: markRead(id)
+    H->>D: Add reader to Message.ReadBy
+    H-->>B: Broadcast messageRead { id, readers }
+  end
   B-->>B: Update UI badges (per-room and per-message)
 ```
 
@@ -132,6 +136,7 @@ sequenceDiagram
 - Auth: Cookie authentication after OTP verification (dedicated `/login` page)
 - Observability: OpenTelemetry (traces, metrics, logs) with exporter auto-selection
  - SignalR transport: In-process by default; Azure SignalR is automatically added when not in Testing:InMemory mode
+ - Read receipts: Client marks messages as read in two ways: (1) on reaching timeline bottom (existing), and (2) after join/reconnect by scanning the viewport for visible, non-self messages and invoking `markRead` per id (debounced, idempotent). This ensures historical messages seen on reconnect are recorded as read.
 
 ## OTP authentication and hashing
 
@@ -229,7 +234,7 @@ This section captures core components and runtime flows beyond OTP specifics.
 | Layer | Component | Responsibility |
 |-------|-----------|----------------|
 | Client | `chat.js` | Connection lifecycle (connect/join/reconnect), outbox queue, optimistic sends, reconciling broadcasts, telemetry emission. |
-| Client | Read receipts UI | Debounced mark-as-read when timeline bottom is reached; updates per-message ReadBy badges. |
+| Client | Read receipts UI | Debounced mark-as-read when timeline bottom is reached and after join/reconnect by scanning visible messages; updates per-message ReadBy badges. |
 | Client | `site.js` | General UI behaviors (sidebar toggles, OTP modal workflow, tooltips, message actions UI). |
 | Real-time | `ChatHub` | Single entry-point for sending messages and joining rooms. Normalizes routing, enriches tracing, broadcasts canonical message DTOs. |
 | Background | `UnreadNotificationScheduler` | Schedules per-message delayed unread checks; sends notifications to recipients excluding sender/readers. |
@@ -246,6 +251,8 @@ SignalR provides the real-time bi-directional communication channel between brow
 - Broadcast fan-out scoped to room groups
 - Connection lifecycle events used to trigger auto-join and queued message flush
 - Basic ordering within a single hub instance (optimistic reconciliation on client covers timing gaps)
+
+Client read-marking is idempotent and safe across reconnects: the browser deduplicates per-session with a small cache and the server persists unique readers per message. No bulk API is required; a future optimization could add a `markReadMany` hub method if needed.
 
 Azure SignalR is used when not running in Testing:InMemory mode; otherwise in-process SignalR is used. No Redis backplane is configured; multi-instance scale-out could use Redis backplane as an alternative.
 
@@ -279,6 +286,12 @@ Potential future roles: SignalR backplane, presence cache, rate limiting, hot me
 - Messages composed offline accumulate in queue
 - On reconnection + join success, queued messages flush automatically
 - Proactive reconnect is attempted on `visibilitychange` (when becoming visible) and `online` events
+
+### Post-join/read reconciliation (viewport-based)
+1. After a successful join or reconnect, the client triggers a debounced scan of the message list.
+2. It computes which messages are currently visible in the viewport, excludes messages authored by the current user, and ignores any ids it already marked in this session.
+3. For each remaining id, it invokes the hub `markRead(id)`. Calls are debounced (300ms) and idempotent server-side.
+4. Upon `messageRead` broadcasts, the UI updates per-message badges and any per-room unread counters.
 
 ### Unread notification scheduling
 1. On message send, the server schedules a delayed check for that message using `UnreadNotificationScheduler`.
@@ -315,6 +328,7 @@ Formatting contract:
 - OTP codes are stored hashed by default (Argon2id + salt + pepper). Legacy/plaintext verification is supported only when explicitly enabled for testing and uses constant-time comparison. Provide a high-entropy Base64 pepper per environment via `Otp__Pepper`.
 - Correlation IDs are opaque UUIDs (avoid embedding user data)
 - OTP endpoints are rate-limited.
+ - Exception handling: Cosmos message `MarkRead` now rethrows with contextual information (message id and sanitized partition/room) instead of logging and rethrowing, aligning with static analysis guidance and improving diagnostics without exposing PII.
 
 ## Future Roadmap (Prioritized)
 1. Presence & typing indicators

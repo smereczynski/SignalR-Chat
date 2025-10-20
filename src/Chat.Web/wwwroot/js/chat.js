@@ -148,6 +148,7 @@ if(window.__chatAppBooted){
     if(!els.messagesList) return;
     const li=document.createElement('li');
     li.dataset.cid = m.correlationId || '';
+    if(typeof m.id === 'number') li.dataset.id = String(m.id);
     if(m.failed) li.classList.add('failed');
   const wrap=document.createElement('div'); wrap.className='message-item'; if(m.isMine) wrap.classList.add('ismine');
     if(!m.avatar){ const span=document.createElement('span'); span.className='avatar avatar-lg mx-2 text-uppercase'; span.textContent=initialFrom(m.fromFullName, m.fromUserName); wrap.appendChild(span);} else { const img=document.createElement('img'); img.className='avatar avatar-lg mx-2'; img.src='/avatars/'+m.avatar; wrap.appendChild(img);} 
@@ -178,6 +179,7 @@ if(window.__chatAppBooted){
     if(!els.messagesList || !m.correlationId) return false;
     const node = els.messagesList.querySelector('li[data-cid="'+m.correlationId+'"]');
     if(!node) return false;
+    if(typeof m.id === 'number') node.dataset.id = String(m.id);
   const timeEl = node.querySelector('.timestamp');
     if(timeEl){ const fp=formatDateParts(m.timestamp); timeEl.textContent=fp.relative; timeEl.dataset.bsTitle=fp.full; }
     const bodyEl = node.querySelector('.content'); if(bodyEl) bodyEl.textContent = m.content;
@@ -228,6 +230,8 @@ if(window.__chatAppBooted){
     if(window.bootstrap){ const ttEls = [].slice.call(els.messagesList.querySelectorAll('[data-bs-toggle="tooltip"]')); ttEls.forEach(el=>{ try{ new window.bootstrap.Tooltip(el); }catch(_){} }); }
     // If container cannot scroll yet but more pages are available, auto-load a few pages to enable scrolling
     maybeAutoFillHistory();
+    // After render settles, scan visible messages and mark them as read for this user (viewport-based)
+    scheduleMarkVisibleRead();
   }
   function maybeAutoFillHistory(){
     try {
@@ -819,6 +823,8 @@ if(window.__chatAppBooted){
       }
       // Also check read status when user scrolls
       maybeMarkRead();
+      // And mark any newly visible messages as read (viewport-based)
+      scheduleMarkVisibleRead();
     });
   }
   let pendingIdCounter=-1;
@@ -1208,8 +1214,8 @@ if(window.__chatAppBooted){
   }, 1500);
   // Flush when tab becomes visible again (covers background tab timing misses)
   document.addEventListener('visibilitychange', ()=>{ if(!document.hidden){ flushOutbox('visibility'); } });
-  document.addEventListener('visibilitychange', ()=>{ if(!document.hidden){ maybeMarkRead(); ensureConnected(); } });
-  window.addEventListener('focus', ()=>{ maybeMarkRead(); ensureConnected(); });
+  document.addEventListener('visibilitychange', ()=>{ if(!document.hidden){ maybeMarkRead(); scheduleMarkVisibleRead(); ensureConnected(); } });
+  window.addEventListener('focus', ()=>{ maybeMarkRead(); scheduleMarkVisibleRead(); ensureConnected(); });
   document.addEventListener('DOMContentLoaded',()=>{ 
     cacheDom(); 
     // Inject (or capture) offline banner element
@@ -1298,6 +1304,53 @@ if(window.__chatAppBooted){
     // Consider the message read if: tab visible, window focused, in a joined room, and scrolled to bottom
     try { return !document.hidden && !!state.joinedRoom && window.document.hasFocus() && isAtBottom(); } catch(_) { return false; }
   }
+  // ---------- Viewport-based mark-as-read (plan A) ----------
+  // Keeps a session-level cache of message IDs already sent for read-marking to avoid duplicate invokes
+  const _readMarkCache = new Set();
+  function getSelfUserLower(){ return (state.profile && state.profile.userName || '').toLowerCase(); }
+  function collectVisibleMessageIds(){
+    try {
+      const mc = document.querySelector('.messages-container');
+      if(!mc || !els.messagesList) return [];
+      const rect = mc.getBoundingClientRect();
+      const items = Array.from(els.messagesList.children || []);
+      const ids = [];
+      const self = getSelfUserLower();
+      for(const li of items){
+        if(!li || !li.getBoundingClientRect) continue;
+        const r = li.getBoundingClientRect();
+        // Consider visible if it intersects container viewport by at least 12px
+        const overlap = Math.min(rect.bottom, r.bottom) - Math.max(rect.top, r.top);
+        if(overlap > 12){
+          const idStr = li.dataset && li.dataset.id;
+          const id = idStr ? parseInt(idStr, 10) : NaN;
+          if(!Number.isFinite(id)) continue;
+          // Consult state for message meta: skip my own messages and those already read by me
+          const m = state.messages.find(x=> x && x.id===id);
+          if(!m || m.isMine) continue;
+          const readers = Array.isArray(m.readBy) ? m.readBy : [];
+          if(readers.some(u => (u||'').toLowerCase() === self)) continue;
+          ids.push(id);
+        }
+      }
+      // Deduplicate and cap per pass to a reasonable number
+      const unique = Array.from(new Set(ids));
+      return unique.slice(0, 50);
+    } catch(_) { return []; }
+  }
+  function markVisibleNow(){
+    try {
+      if(!hub || !state.joinedRoom) return;
+      const ids = collectVisibleMessageIds().filter(id => !_readMarkCache.has(id));
+      if(!ids.length) return;
+      // Optimistically add to cache to avoid duplicate invokes from rapid events
+      ids.forEach(id => _readMarkCache.add(id));
+      // Send individual invokes (server supports single-item MarkRead); keep lightweight and fire-and-forget
+      ids.forEach(id => { try { hub.invoke('MarkRead', id); } catch(_){} });
+    } catch(_) { /* ignore */ }
+  }
+  function debounce(fn, wait){ let t; return function(){ const args=arguments; clearTimeout(t); t=setTimeout(()=> fn.apply(null,args), wait); }; }
+  const scheduleMarkVisibleRead = debounce(markVisibleNow, 300);
   function maybeMarkRead(){
     if(state.unreadCount > 0 && isReadingView()){
       state.unreadCount = 0;
@@ -1309,7 +1362,7 @@ if(window.__chatAppBooted){
         // Debounce to avoid spamming on frequent scroll events
         if(!maybeMarkRead._last || Date.now() - maybeMarkRead._last > 750){
           maybeMarkRead._last = Date.now();
-          ids.forEach(id=>{ try { if(hub) hub.invoke('MarkRead', id); } catch(_){} });
+          ids.forEach(id=>{ try { if(hub) hub.invoke('MarkRead', id); _readMarkCache.add(id); } catch(_){} });
         }
       } catch(_){}
     } else if(state.unreadCount > 0){
