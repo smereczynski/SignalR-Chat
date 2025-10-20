@@ -21,5 +21,9 @@ namespace Chat.Web.ViewModels
         /// Optional client-supplied unique identifier (temporary) used to reconcile optimistic messages with server echo.
         /// </summary>
         public string CorrelationId { get; set; }
+        /// <summary>
+        /// Optional list of usernames who have read the message.
+        /// </summary>
+        public string[] ReadBy { get; set; }
     }
 }

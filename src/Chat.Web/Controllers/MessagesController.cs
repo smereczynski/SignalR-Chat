@@ -90,7 +90,8 @@ namespace Chat.Web.Controllers
                 FromFullName = message.FromUser?.FullName,
                 Avatar = message.FromUser?.Avatar,
                 Room = message.ToRoom?.Name,
-                Timestamp = message.Timestamp
+                Timestamp = message.Timestamp,
+                ReadBy = message.ReadBy != null ? message.ReadBy.ToArray() : Array.Empty<string>()
             };
             return Ok(vm);
         }
@@ -119,7 +120,8 @@ namespace Chat.Web.Controllers
                 FromFullName = m.FromUser?.FullName,
                 Avatar = m.FromUser?.Avatar,
                 Room = room.Name,
-                Timestamp = m.Timestamp
+                Timestamp = m.Timestamp,
+                ReadBy = m.ReadBy != null ? m.ReadBy.ToArray() : Array.Empty<string>()
             });
             if (UseManualSerialization)
             {
@@ -190,7 +192,8 @@ namespace Chat.Web.Controllers
                 Avatar = message.FromUser?.Avatar,
                 Room = room.Name,
                 Timestamp = message.Timestamp,
-                CorrelationId = dto.CorrelationId
+                CorrelationId = dto.CorrelationId,
+                ReadBy = message.ReadBy != null ? message.ReadBy.ToArray() : Array.Empty<string>()
             };
 
             // Fire-and-forget hub broadcast (do not block API latency on network fan-out)
@@ -202,6 +205,20 @@ namespace Chat.Web.Controllers
                 return ManualJson(vm, StatusCodes.Status201Created, $"/api/Messages/{vm.Id}");
             }
             return Created($"/api/Messages/{vm.Id}", vm);
+        }
+
+        /// <summary>
+        /// Mark a message as read for the current user. Broadcasts update via hub.
+        /// </summary>
+        [HttpPost("{id}/read")]
+        public IActionResult MarkRead(int id)
+        {
+            var updated = _messages.MarkRead(id, User?.Identity?.Name);
+            if (updated == null) return NotFound();
+            // Fire-and-forget broadcast of readers list to the room
+            _ = _hubContext.Clients.Group(updated.ToRoom?.Name ?? string.Empty)
+                .SendAsync("messageRead", new { id = updated.Id, readers = updated.ReadBy?.ToArray() ?? Array.Empty<string>() });
+            return NoContent();
         }
     }
 }

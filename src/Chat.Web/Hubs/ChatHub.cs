@@ -456,11 +456,34 @@ namespace Chat.Web.Hubs
                 Avatar = msg.FromUser?.Avatar,
                 Room = room.Name,
                 Timestamp = msg.Timestamp,
-                CorrelationId = correlationId
+                CorrelationId = correlationId,
+                ReadBy = (msg.ReadBy != null ? msg.ReadBy.ToArray() : Array.Empty<string>())
             };
             await Clients.Group(room.Name).SendAsync("newMessage", vm);
             _metrics.IncMessagesSent();
             activity?.SetStatus(ActivityStatusCode.Ok);
+        }
+
+        /// <summary>
+        /// Marks a message as read by the current user and broadcasts an update to the room.
+        /// </summary>
+        public async Task MarkRead(int messageId)
+        {
+            using var activity = Tracing.ActivitySource.StartActivity("ChatHub.MarkRead");
+            activity?.SetTag("chat.messageId", messageId);
+            UserViewModel user;
+            lock (_ConnectionsLock)
+            {
+                user = _Connections.FirstOrDefault(u => u.UserName == IdentityName);
+            }
+            if (user == null || string.IsNullOrEmpty(user.CurrentRoom)) return;
+            var updated = _messages.MarkRead(messageId, IdentityName);
+            if (updated == null) return;
+            try
+            {
+                await Clients.Group(user.CurrentRoom).SendAsync("messageRead", new { id = messageId, readers = updated.ReadBy?.ToArray() ?? Array.Empty<string>() });
+            }
+            catch { /* ignore broadcast errors */ }
         }
     }
 }
