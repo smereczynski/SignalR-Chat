@@ -605,8 +605,11 @@ namespace Chat.Web.Repositories
                 catch (CosmosException ex)
                 {
                     activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-                    _logger.LogError(ex, "Cosmos message mark read failed {Id}", id);
-                    throw;
+                    // Rethrow with contextual information rather than only logging and rethrowing,
+                    // to satisfy static analysis guidance and aid diagnostics upstream.
+                    throw new InvalidOperationException(
+                        $"Failed to mark message as read (Id={id}, Room={LogSanitizer.Sanitize(pk)}).",
+                        ex);
                 }
             }
             return new Message { Id = int.Parse(d.id), Content = d.content, Timestamp = d.timestamp, ToRoom = new Room { Name = d.roomName }, FromUser = new ApplicationUser { UserName = d.fromUser }, ReadBy = d.readBy != null ? new List<string>(d.readBy) : new List<string>() };
