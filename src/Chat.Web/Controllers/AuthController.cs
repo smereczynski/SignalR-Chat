@@ -96,8 +96,9 @@ namespace Chat.Web.Controllers
                 _ = Task.Run(async () =>
                 {
                     var sanitizedUserName = req.UserName.Replace("\r", "").Replace("\n", "");
-                    try { await op().ConfigureAwait(false); _logger.LogInformation("OTP dispatched to {Destination} for {User}", dest, sanitizedUserName); }
-                    catch (Exception ex) { _logger.LogWarning(ex, "OTP dispatch failed to {Destination} for {User}", dest, sanitizedUserName); }
+                    var masked = Chat.Web.Repositories.LogSanitizer.MaskDestination(dest);
+                    try { await op().ConfigureAwait(false); _logger.LogInformation("OTP dispatched to {Destination} for {User}", masked, sanitizedUserName); }
+                    catch (Exception ex) { _logger.LogWarning(ex, "OTP dispatch failed to {Destination} for {User}", masked, sanitizedUserName); }
                 });
             }
             foreach (var dest in destinations)

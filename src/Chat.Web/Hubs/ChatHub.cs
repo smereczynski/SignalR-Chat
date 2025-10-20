@@ -484,7 +484,7 @@ namespace Chat.Web.Hubs
             var updated = _messages.MarkRead(messageId, IdentityName);
             if (updated == null) return;
             // Use the message's actual room name for broadcasting
-            var messageRoom = updated.RoomName;
+            var messageRoom = updated.ToRoom?.Name;
             if (string.IsNullOrEmpty(messageRoom)) return;
             // Optionally, guard if the message's room does not match the user's current room
             // if (!string.Equals(messageRoom, user.CurrentRoom, StringComparison.OrdinalIgnoreCase)) return;
