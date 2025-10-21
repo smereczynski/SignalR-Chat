@@ -13,6 +13,13 @@ namespace Chat.IntegrationTests
 {
     public class CustomWebApplicationFactory : WebApplicationFactory<Program>
     {
+        private Action<IServiceCollection> _configureTestServices;
+
+        public void ConfigureTestServices(Action<IServiceCollection> configureServices)
+        {
+            _configureTestServices = configureServices;
+        }
+
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             builder.ConfigureAppConfiguration((ctx, config) =>
@@ -26,10 +33,18 @@ namespace Chat.IntegrationTests
                     ["RateLimiting:Auth:PermitLimit"] = "5",
                     ["RateLimiting:Auth:WindowSeconds"] = "5",
                     ["RateLimiting:Auth:QueueLimit"] = "0",
-                    ["Features:EnableRestPostMessages"] = "true"
+                    ["Features:EnableRestPostMessages"] = "true",
+                    // Default MarkRead rate limiting for tests
+                    ["RateLimiting:MarkRead:MarkReadPermitLimit"] = "100",
+                    ["RateLimiting:MarkRead:MarkReadWindowSeconds"] = "10"
                 };
                 config.AddInMemoryCollection(dict!);
             });
+
+            if (_configureTestServices != null)
+            {
+                builder.ConfigureServices(_configureTestServices);
+            }
         }
     }
 }

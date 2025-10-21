@@ -70,6 +70,24 @@ export Cosmos__MessagesTtlSeconds=604800
 export Cosmos__MessagesTtlSeconds=-1
 ```
 
+## Configuration
+The app uses standard ASP.NET Core configuration with environment-specific overrides:
+
+* **`appsettings.Development.json`**: Development-time settings including relaxed CORS, in-memory testing flags, console telemetry, and development rate limits.
+* **`appsettings.Production.json`**: Production-ready settings with stricter rate limits, Azure Monitor telemetry integration, and production-grade security policies.
+
+Key configuration sections:
+* `Otp`: OTP hashing parameters (Argon2id memory, iterations, parallelism), TTL, hashing toggle
+* `RateLimiting`: Per-endpoint rate limits (OTP request/verify, MarkRead operations)
+* `Cosmos`: Connection strings, database/container names, messages TTL
+* `Redis`: Connection string for OTP storage and caching
+* `AzureSignalR`: Connection string (auto-added when not in test mode)
+* `Acs`: Azure Communication Services for email/SMS delivery
+* `Notifications`: Unread message notification delays and channels
+* `OTel`: OpenTelemetry exporter endpoints (Azure Monitor, OTLP)
+
+Environment variables override appsettings values using the standard colon-to-double-underscore mapping (e.g., `Otp__Pepper`, `Cosmos__MessagesTtlSeconds`).
+
 ## Local Development
 Prerequisites:
 * .NET 9 SDK
