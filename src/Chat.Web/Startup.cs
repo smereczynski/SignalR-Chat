@@ -262,7 +262,17 @@ namespace Chat.Web
             services.AddSingleton<Services.IMarkReadRateLimiter, Services.MarkReadRateLimiter>();
             // Notification plumbing
             services.AddSingleton<Services.INotificationSender, Services.NotificationSender>();
-            services.AddSingleton<Services.UnreadNotificationScheduler>();
+            services.AddSingleton<Services.UnreadNotificationScheduler>(sp =>
+                new Services.UnreadNotificationScheduler(
+                    sp.GetRequiredService<IRoomsRepository>(),
+                    sp.GetRequiredService<IUsersRepository>(),
+                    sp.GetRequiredService<IMessagesRepository>(),
+                    sp.GetRequiredService<Services.INotificationSender>(),
+                    sp.GetRequiredService<IOtpSender>(),
+                    sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<Chat.Web.Options.NotificationOptions>>(),
+                    sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<Services.UnreadNotificationScheduler>>()
+                )
+            );
             services.AddHostedService(sp => sp.GetRequiredService<Services.UnreadNotificationScheduler>());
             // Rate limiting: protect auth endpoints (OTP request / verify) - configurable for tests vs prod
             services.AddRateLimiter(options =>
