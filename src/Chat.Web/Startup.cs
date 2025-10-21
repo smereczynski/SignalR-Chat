@@ -179,6 +179,7 @@ namespace Chat.Web
             services.Configure<AcsOptions>(Configuration.GetSection("Acs"));
             services.Configure<OtpOptions>(Configuration.GetSection("Otp"));
             services.Configure<Chat.Web.Options.NotificationOptions>(Configuration.GetSection("Notifications"));
+            services.Configure<Chat.Web.Options.RateLimitingOptions>(Configuration.GetSection("RateLimiting:MarkRead"));
             services.PostConfigure<OtpOptions>(opts =>
             {
                 // Allow env var override of pepper per guide: Otp__Pepper
@@ -257,6 +258,8 @@ namespace Chat.Web
             services.AddRazorPages();
             services.AddControllers();
             services.AddSingleton<Services.IInProcessMetrics, Services.InProcessMetrics>();
+            // Rate limiting for hub operations
+            services.AddSingleton<Services.IMarkReadRateLimiter, Services.MarkReadRateLimiter>();
             // Notification plumbing
             services.AddSingleton<Services.INotificationSender, Services.NotificationSender>();
             services.AddSingleton<Services.UnreadNotificationScheduler>();

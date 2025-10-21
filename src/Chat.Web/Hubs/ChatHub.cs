@@ -43,6 +43,7 @@ namespace Chat.Web.Hubs
         private readonly Services.UnreadNotificationScheduler _unreadScheduler;
         private readonly ILogger<ChatHub> _logger;
         private readonly Services.IInProcessMetrics _metrics;
+        private readonly Services.IMarkReadRateLimiter _markReadRateLimiter;
 
         /// <summary>
         /// Creates a new Hub instance.
@@ -52,13 +53,16 @@ namespace Chat.Web.Hubs
             Repositories.IRoomsRepository rooms,
             ILogger<ChatHub> logger,
             Services.IInProcessMetrics metrics,
-            Services.UnreadNotificationScheduler unreadScheduler)
+            Services.UnreadNotificationScheduler unreadScheduler,
+            Services.IMarkReadRateLimiter markReadRateLimiter)
         {
             _users = users;
             _messages = messages;
             _rooms = rooms;
             _logger = logger;
             _metrics = metrics;
+            _unreadScheduler = unreadScheduler;
+            _markReadRateLimiter = markReadRateLimiter;
             _unreadScheduler = unreadScheduler;
         }
 
@@ -474,11 +478,23 @@ namespace Chat.Web.Hubs
 
         /// <summary>
         /// Marks a message as read by the current user and broadcasts an update to the room.
+        /// Rate limited per user to prevent abuse and database saturation.
         /// </summary>
         public async Task MarkRead(int messageId)
         {
             using var activity = Tracing.ActivitySource.StartActivity("ChatHub.MarkRead");
             activity?.SetTag("chat.messageId", messageId);
+            
+            // Check rate limit first
+            if (!_markReadRateLimiter.TryAcquire(IdentityName))
+            {
+                _logger.LogWarning("MarkRead rate limit exceeded for user {User}, messageId={MessageId}", IdentityName, messageId);
+                _metrics.IncMarkReadRateLimitViolation(IdentityName);
+                activity?.SetStatus(ActivityStatusCode.Error, "rate_limit_exceeded");
+                await Clients.Caller.SendAsync("onError", "Rate limit exceeded. Please slow down.");
+                return;
+            }
+            
             UserViewModel user;
             lock (_ConnectionsLock)
             {
