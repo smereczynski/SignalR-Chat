@@ -561,8 +561,8 @@ if(window.__chatAppBooted){
             updateTitleBlinkLabel(m.room || (state.joinedRoom && state.joinedRoom.name) || '');
             startTitleBlink();
           } else {
-            // Immediately mark as read when user is actively reading and view is at bottom
-            maybeMarkRead();
+            // User is actively viewing - schedule viewport-based read marking
+            scheduleMarkVisibleRead();
           }
         }
       } catch(_) { /* ignore */ }
@@ -1304,6 +1304,10 @@ if(window.__chatAppBooted){
     // Consider the message read if: tab visible, window focused, in a joined room, and scrolled to bottom
     try { return !document.hidden && !!state.joinedRoom && window.document.hasFocus() && isAtBottom(); } catch(_) { return false; }
   }
+  function isActivelyViewing(){
+    // User is actively viewing (regardless of scroll position): tab visible, window focused, in a joined room
+    try { return !document.hidden && !!state.joinedRoom && window.document.hasFocus(); } catch(_) { return false; }
+  }
   // ---------- Viewport-based mark-as-read (plan A) ----------
   // Keeps a session-level cache of message IDs already sent for read-marking to avoid duplicate invokes
   const _readMarkCache = new Set();
@@ -1340,6 +1344,8 @@ if(window.__chatAppBooted){
   }
   function markVisibleNow(){
     try {
+      // Only mark as read if user is actively viewing: tab visible + window focused (same as title blink conditions)
+      if(!isActivelyViewing()) return;
       if(!hub || !state.joinedRoom) return;
       const ids = collectVisibleMessageIds().filter(id => !_readMarkCache.has(id));
       if(!ids.length) return;
@@ -1355,16 +1361,8 @@ if(window.__chatAppBooted){
     if(state.unreadCount > 0 && isReadingView()){
       state.unreadCount = 0;
       stopTitleBlink();
-      // Inform server that the most recent window of messages are read by this user
-      try {
-        const recent = state.messages.slice(-10); // last up to 10 messages
-        const ids = recent.filter(m=> !m.isMine).map(m=> m.id).filter(id=> typeof id==='number');
-        // Debounce to avoid spamming on frequent scroll events
-        if(!maybeMarkRead._last || Date.now() - maybeMarkRead._last > 750){
-          maybeMarkRead._last = Date.now();
-          ids.forEach(id=>{ try { if(hub) hub.invoke('MarkRead', id); _readMarkCache.add(id); } catch(_){} });
-        }
-      } catch(_){}
+      // Mark visible messages as read using viewport-based detection
+      scheduleMarkVisibleRead();
     } else if(state.unreadCount > 0){
       // Keep label up-to-date (e.g., switched rooms)
       updateTitleBlinkLabel(state.joinedRoom && state.joinedRoom.name || '');

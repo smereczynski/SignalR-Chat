@@ -50,7 +50,11 @@
         flow.firstSendAt = Date.now();
       } else {
         const sinceFirst = Date.now() - (flow.firstSendAt || 0);
-        if (sinceFirst < resendDelayMs) return;
+        if (sinceFirst < resendDelayMs) {
+          const remainingSeconds = Math.ceil((resendDelayMs - sinceFirst) / 1000);
+          setOtpError(`Please wait ${remainingSeconds} seconds before resending`);
+          return;
+        }
       }
       const indicator = document.getElementById('otpSendingIndicator');
       const countdownEl = document.getElementById('otpSendCountdown');

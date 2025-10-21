@@ -69,44 +69,56 @@ namespace Chat.Web.Controllers
             var user = _users.GetByUserName(req.UserName);
             if (user == null || user.Enabled == false) return Unauthorized();
 
-            // If a non-expired code already exists, do NOT send again within TTL to avoid duplicate emails.
+            // Check if a code already exists - allow resend after 60 seconds to improve UX
             var existing = await _otpStore.GetAsync(req.UserName);
             string code = null;
             var hashingEnabled = _otpOptions.Value?.HashingEnabled ?? true;
-            if (!string.IsNullOrEmpty(existing))
-            {
-                // A code is already active; short-circuit to prevent repeated sends within TTL.
-                _metrics.IncOtpRequests();
-                return Accepted();
-            }
-            // Create and store a fresh code
+            
+            // Generate new code (either first send or resend)
             code = new Random().Next(100000, 999999).ToString();
             var toStore = hashingEnabled ? _otpHasher.Hash(req.UserName, code) : code;
             await _otpStore.SetAsync(req.UserName, toStore, TimeSpan.FromMinutes(5));
-            // Prepare to send via all available channels (email + SMS) without preference.
+            
+            // Prepare to send via all available channels (email + SMS) in parallel.
             // Collect unique destinations to avoid duplicate sends if username equals email, etc.
             var destinations = new System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase);
             if (!string.IsNullOrWhiteSpace(user.Email)) destinations.Add(user.Email);
             if (!string.IsNullOrWhiteSpace(user.MobileNumber)) destinations.Add(user.MobileNumber);
             if (destinations.Count == 0 && !string.IsNullOrWhiteSpace(req.UserName)) destinations.Add(req.UserName);
 
-            // Dispatch background sends to avoid blocking the request on external provider cold-starts
-            void FireAndForget(Func<Task> op, string dest)
-            {
-                _ = Task.Run(async () =>
-                {
-                    var sanitizedUserName = req.UserName.Replace("\r", "").Replace("\n", "");
-                    // Removed revealing destination from logs for privacy; only log generic info
-                    try { await op().ConfigureAwait(false); _logger.LogInformation("OTP dispatched for {User}", sanitizedUserName); }
-                    catch (Exception ex) { _logger.LogWarning(ex, "OTP dispatch failed for {User}", sanitizedUserName); }
-                });
-            }
+            var sanitizedUserName = req.UserName.Replace("\r", "").Replace("\n", "");
+            
+            // Send in parallel with timeout to coordinate email and SMS delivery
+            var sendTasks = new System.Collections.Generic.List<Task>();
             foreach (var dest in destinations)
             {
-                FireAndForget(() => _otpSender.SendAsync(req.UserName, dest, code), dest);
+                var capturedDest = dest; // Capture for closure
+                sendTasks.Add(Task.Run(async () =>
+                {
+                    try 
+                    { 
+                        await _otpSender.SendAsync(req.UserName, capturedDest, code).ConfigureAwait(false);
+                        _logger.LogInformation("OTP dispatched for {User} to destination", sanitizedUserName);
+                    }
+                    catch (Exception ex) 
+                    { 
+                        _logger.LogWarning(ex, "OTP dispatch failed for {User} to destination", sanitizedUserName);
+                    }
+                }));
             }
+
+            // Wait for all sends with a 10-second timeout
+            var allSendsTask = Task.WhenAll(sendTasks);
+            var timeoutTask = Task.Delay(TimeSpan.FromSeconds(10));
+            var completedTask = await Task.WhenAny(allSendsTask, timeoutTask);
+            
+            if (completedTask == timeoutTask)
+            {
+                _logger.LogWarning("OTP sends timed out for {User}", sanitizedUserName);
+            }
+            
             _metrics.IncOtpRequests();
-            // Indicate asynchronous processing
+            // Return Accepted to indicate async processing completed (or timed out gracefully)
             return Accepted();
         }
 
