@@ -65,7 +65,7 @@ namespace Chat.Web.Services
         /// <summary>
         /// Cancel a scheduled notification for the specified message (e.g., when marked as read).
         /// </summary>
-        public void Cancel(int messageId)
+        public void CancelNotification(int messageId)
         {
             if (_timers.TryRemove(messageId, out var timer))
             {

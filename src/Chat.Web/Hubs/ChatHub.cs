@@ -507,7 +507,7 @@ namespace Chat.Web.Hubs
             // Cancel any pending unread notification for this message since someone has read it
             try
             {
-                _unreadScheduler?.Cancel(messageId);
+                _unreadScheduler?.CancelNotification(messageId);
             }
             catch (Exception ex)
             {
