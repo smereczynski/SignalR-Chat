@@ -21,6 +21,7 @@ namespace Chat.Web.Services
         void DecRoomPresence(string roomName);
     void UserAvailable(string userName);
         void UserUnavailable(string userName);
+        void IncMarkReadRateLimitViolation(string userName);
         MetricsSnapshot Snapshot();
         DateTimeOffset StartTime { get; }
     }
@@ -51,6 +52,7 @@ namespace Chat.Web.Services
         private static readonly UpDownCounter<long> ActiveConnectionsGauge = Meter.CreateUpDownCounter<long>("chat.connections.active");
         private static readonly UpDownCounter<long> RoomPresenceGauge = Meter.CreateUpDownCounter<long>("chat.room.presence");
         private static readonly Counter<long> AvailabilityEventsCounter = Meter.CreateCounter<long>("chat.user.availability.events");
+        private static readonly Counter<long> MarkReadRateLimitViolationsCounter = Meter.CreateCounter<long>("chat.markread.ratelimit.violations");
 
         public DateTimeOffset StartTime { get; } = DateTimeOffset.UtcNow;
 
@@ -65,6 +67,7 @@ namespace Chat.Web.Services
         public void DecRoomPresence(string roomName){ RoomPresenceGauge.Add(-1, new System.Collections.Generic.KeyValuePair<string, object>("room", roomName)); }
     public void UserAvailable(string userName){ AvailabilityEventsCounter.Add(1, new ("user", userName), new ("state", "online")); }
         public void UserUnavailable(string userName){ AvailabilityEventsCounter.Add(1, new ("user", userName), new ("state", "offline")); }
+        public void IncMarkReadRateLimitViolation(string userName){ MarkReadRateLimitViolationsCounter.Add(1, new System.Collections.Generic.KeyValuePair<string, object>("user", userName)); }
 
         public MetricsSnapshot Snapshot() => new(
             _messagesSent,
