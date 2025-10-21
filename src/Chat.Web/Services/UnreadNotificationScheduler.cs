@@ -195,11 +195,11 @@ namespace Chat.Web.Services
                     try
                     {
                         await _otpSender.SendAsync(string.Join(',', kv.Value), kv.Key, body).ConfigureAwait(false);
-                        _logger.LogInformation("Unread notification (email) queued for destination (users: {Users})", string.Join(',', kv.Value));
+                        _logger.LogInformation("Unread notification (email) queued for {UserCount} user(s)", kv.Value.Count);
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogWarning(ex, "Failed to send unread email notification for destination");
+                        _logger.LogWarning(ex, "Failed to send unread email notification");
                     }
                 }
 
@@ -209,11 +209,11 @@ namespace Chat.Web.Services
                     try
                     {
                         await _otpSender.SendAsync(string.Join(',', kv.Value), kv.Key, body).ConfigureAwait(false);
-                        _logger.LogInformation("Unread notification (sms) queued for destination (users: {Users})", string.Join(',', kv.Value));
+                        _logger.LogInformation("Unread notification (sms) queued for {UserCount} user(s)", kv.Value.Count);
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogWarning(ex, "Failed to send unread sms notification for destination");
+                        _logger.LogWarning(ex, "Failed to send unread sms notification");
                     }
                 }
 
