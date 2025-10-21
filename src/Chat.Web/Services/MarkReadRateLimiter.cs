@@ -48,7 +48,7 @@ namespace Chat.Web.Services
         /// <summary>
         /// Per-user rate limit state with thread-safe sliding window tracking.
         /// </summary>
-        private class UserRateLimit
+        private sealed class UserRateLimit
         {
             private readonly object _lock = new object();
             private readonly System.Collections.Generic.Queue<DateTimeOffset> _timestamps = new();
