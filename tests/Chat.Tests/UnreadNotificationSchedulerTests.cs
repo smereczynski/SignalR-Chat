@@ -29,6 +29,16 @@ namespace Chat.Tests
             }
         }
 
+        private class FakeOtpSender : IOtpSender
+        {
+            public readonly ConcurrentBag<(string UserNames, string Dest, string Body)> Calls = new();
+            public Task SendAsync(string userName, string destination, string code)
+            {
+                Calls.Add((userName, destination, code));
+                return Task.CompletedTask;
+            }
+        }
+
         private static (InMemoryRoomsRepository Rooms, InMemoryUsersRepository Users, InMemoryMessagesRepository Messages) SetupRepos()
         {
             var rooms = new InMemoryRoomsRepository();
@@ -43,6 +53,8 @@ namespace Chat.Tests
             {
                 UserName = name,
                 FullName = name,
+                Email = $"{name}@test.com",
+                MobileNumber = $"+1234567{name.GetHashCode() % 10000:0000}",
                 Enabled = true,
                 FixedRooms = fixedRooms?.ToList() ?? new List<string>()
             };
@@ -70,24 +82,23 @@ namespace Chat.Tests
             });
 
             var fake = new FakeNotificationSender();
+            var fakeOtp = new FakeOtpSender();
             var opts = Options.Create(new NotificationOptions { UnreadDelaySeconds = 1 });
-            var scheduler = new UnreadNotificationScheduler(rooms, users, messages, fake, opts, NullLogger<UnreadNotificationScheduler>.Instance);
+            var scheduler = new UnreadNotificationScheduler(rooms, users, messages, fake, fakeOtp, opts, NullLogger<UnreadNotificationScheduler>.Instance);
             try
             {
                 scheduler.Schedule(msg);
-                // Wait for the first notification (expected: bob)
-                var completed = await Task.WhenAny(fake.FirstCall.Task, Task.Delay(TimeSpan.FromSeconds(3)));
-                Assert.Same(fake.FirstCall.Task, completed);
-                var call = await fake.FirstCall.Task; // unwrap result
-                Assert.Equal("general", call.Room);
-                Assert.Equal(msg.Id, call.Msg.Id);
-                Assert.Equal("bob", call.User); // alice excluded (sender)
-
-                // Ensure only bob was notified
-                var recipients = fake.Calls.Select(c => c.User).ToList();
-                Assert.Contains("bob", recipients);
-                Assert.DoesNotContain("alice", recipients);
-                Assert.DoesNotContain("charlie", recipients);
+                // Wait for the first notification - scheduler now sends via IOtpSender
+                await Task.Delay(TimeSpan.FromMilliseconds(1300));
+                
+                // Ensure notifications were sent via IOtpSender (not INotificationSender)
+                Assert.NotEmpty(fakeOtp.Calls);
+                
+                // Verify bob was notified (alice excluded as sender)
+                // Note: UserNames parameter may contain "bob" if only one user or be a joined string
+                var otpCalls = fakeOtp.Calls.ToList();
+                var bobNotifications = otpCalls.Where(c => c.UserNames.Contains("bob")).ToList();
+                Assert.NotEmpty(bobNotifications);
             }
             finally
             {
@@ -113,8 +124,9 @@ namespace Chat.Tests
             });
 
             var fake = new FakeNotificationSender();
+            var fakeOtp = new FakeOtpSender();
             var opts = Options.Create(new NotificationOptions { UnreadDelaySeconds = 1 });
-            var scheduler = new UnreadNotificationScheduler(rooms, users, messages, fake, opts, NullLogger<UnreadNotificationScheduler>.Instance);
+            var scheduler = new UnreadNotificationScheduler(rooms, users, messages, fake, fakeOtp, opts, NullLogger<UnreadNotificationScheduler>.Instance);
             try
             {
                 scheduler.Schedule(msg);

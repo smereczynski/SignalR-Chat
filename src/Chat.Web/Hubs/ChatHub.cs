@@ -503,6 +503,17 @@ namespace Chat.Web.Hubs
             if (user == null || string.IsNullOrEmpty(user.CurrentRoom)) return;
             var updated = _messages.MarkRead(messageId, IdentityName);
             if (updated == null) return;
+            
+            // Cancel any pending unread notification for this message since someone has read it
+            try
+            {
+                _unreadScheduler?.CancelNotification(messageId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to cancel unread notification for message {Id}", messageId);
+            }
+            
             // Use the message's actual room name for broadcasting
             var messageRoom = updated.ToRoom?.Name;
             if (string.IsNullOrEmpty(messageRoom)) return;
