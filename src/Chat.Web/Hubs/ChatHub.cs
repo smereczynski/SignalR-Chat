@@ -3,6 +3,7 @@ using Chat.Web.ViewModels;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
@@ -27,12 +28,14 @@ namespace Chat.Web.Hubs
     public static readonly List<UserViewModel> _Connections = new List<UserViewModel>();
     internal static readonly object _ConnectionsLock = new object();
         // Track active connection counts per user to avoid removing presence when alternate connections remain
-        private static readonly Dictionary<string, int> _UserConnectionCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        // Using ConcurrentDictionary for thread-safe access without explicit locking
+        private static readonly ConcurrentDictionary<string, int> _UserConnectionCounts = new ConcurrentDictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
         /// <summary>
         /// Map userName -> current SignalR connection id (latest). Allows targeted messaging.
+        /// Using ConcurrentDictionary for thread-safe access without explicit locking
         /// </summary>
-        private static readonly Dictionary<string, string> _ConnectionsMap = new Dictionary<string, string>();
+        private static readonly ConcurrentDictionary<string, string> _ConnectionsMap = new ConcurrentDictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
     private readonly Repositories.IUsersRepository _users;
     private readonly Repositories.IMessagesRepository _messages;
@@ -201,14 +204,7 @@ namespace Chat.Web.Hubs
                 {
                     existing = _Connections.FirstOrDefault(u => u.UserName == IdentityName);
                     // Increment (or initialize) active connection count for this user
-                    if (_UserConnectionCounts.TryGetValue(IdentityName, out var cnt))
-                    {
-                        _UserConnectionCounts[IdentityName] = cnt + 1;
-                    }
-                    else
-                    {
-                        _UserConnectionCounts[IdentityName] = 1;
-                    }
+                    _UserConnectionCounts.AddOrUpdate(IdentityName, 1, (key, oldValue) => oldValue + 1);
                 }
                 if (existing != null)
                 {
@@ -295,12 +291,13 @@ namespace Chat.Web.Hubs
                 lock (_ConnectionsLock)
                 {
                     user = _Connections.FirstOrDefault(u => u.UserName == IdentityName);
+                    // Decrement connection count atomically
                     if (_UserConnectionCounts.TryGetValue(IdentityName, out var cnt))
                     {
                         cnt = Math.Max(0, cnt - 1);
                         if (cnt == 0)
                         {
-                            _UserConnectionCounts.Remove(IdentityName);
+                            _UserConnectionCounts.TryRemove(IdentityName, out _);
                         }
                         else
                         {
@@ -330,7 +327,7 @@ namespace Chat.Web.Hubs
                     // Remove mapping only if it points at this connection id
                     if (_ConnectionsMap.TryGetValue(user.UserName, out var mapped) && string.Equals(mapped, Context.ConnectionId, StringComparison.Ordinal))
                     {
-                        _ConnectionsMap.Remove(user.UserName);
+                        _ConnectionsMap.TryRemove(user.UserName, out _);
                     }
                     _logger.LogInformation("User disconnected {User}", IdentityName);
                     _metrics.DecActiveConnections();
@@ -342,7 +339,7 @@ namespace Chat.Web.Hubs
                     // Only clear stale mapping if it matches this connection id.
                     if (_ConnectionsMap.TryGetValue(user.UserName, out var mapped) && string.Equals(mapped, Context.ConnectionId, StringComparison.Ordinal))
                     {
-                        _ConnectionsMap.Remove(user.UserName);
+                        _ConnectionsMap.TryRemove(user.UserName, out _);
                     }
                     _logger.LogDebug("User {User} has {Count} remaining connections; presence retained", IdentityName, remainingConnections);
                 }
