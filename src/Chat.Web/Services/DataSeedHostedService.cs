@@ -58,8 +58,14 @@ namespace Chat.Web.Services
             try
             {
                 // Optional gating flag: Seeding:Enabled=true (default true if not set)
-                var enabled = Environment.GetEnvironmentVariable("Seeding__Enabled");
-                if (!string.IsNullOrWhiteSpace(enabled) && enabled.Equals("false", StringComparison.OrdinalIgnoreCase))
+                // Check both Configuration and Environment variable (env var takes precedence)
+                var enabledFromConfig = _configuration.GetValue<bool?>("Seeding:Enabled");
+                var enabledFromEnv = Environment.GetEnvironmentVariable("Seeding__Enabled");
+                
+                var isDisabled = (enabledFromConfig.HasValue && !enabledFromConfig.Value) ||
+                                (!string.IsNullOrWhiteSpace(enabledFromEnv) && enabledFromEnv.Equals("false", StringComparison.OrdinalIgnoreCase));
+                
+                if (isDisabled)
                 {
                     _logger.LogInformation("Data seeding skipped (Seeding:Enabled=false)");
                     return;
