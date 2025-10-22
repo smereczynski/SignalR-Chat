@@ -18,15 +18,22 @@ namespace Chat.Web.Health
         {
             try
             {
-                // Quick ping by reading database properties
-                var resp = await _clients.Database.ReadAsync(cancellationToken: cancellationToken);
+                // Quick ping by reading database properties with 2 second timeout
+                using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                cts.CancelAfter(TimeSpan.FromSeconds(2));
+                
+                var resp = await _clients.Database.ReadAsync(cancellationToken: cts.Token);
                 return resp.StatusCode == System.Net.HttpStatusCode.OK
                     ? HealthCheckResult.Healthy()
                     : HealthCheckResult.Unhealthy($"Cosmos status {resp.StatusCode}");
             }
+            catch (OperationCanceledException)
+            {
+                return HealthCheckResult.Unhealthy("Cosmos health check timeout (2s exceeded)");
+            }
             catch (Exception ex)
             {
-                return HealthCheckResult.Unhealthy("Cosmos exception", ex);
+                return HealthCheckResult.Unhealthy("Cosmos connection failed", ex);
             }
         }
     }

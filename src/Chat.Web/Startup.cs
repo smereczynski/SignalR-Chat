@@ -229,13 +229,18 @@ namespace Chat.Web
 
                 // Redis OTP store (fail fast if placeholder)
                 var redisConn = ConfigurationGuards.Require(Configuration["Redis:ConnectionString"], "Redis:ConnectionString");
-                services.AddSingleton<IConnectionMultiplexer>(sp => ConnectionMultiplexer.Connect(redisConn));
+                // Configure Redis with shorter timeouts for multi-instance scenarios
+                var redisConfig = ConfigurationOptions.Parse(redisConn);
+                redisConfig.ConnectTimeout = 5000; // 5 seconds
+                redisConfig.SyncTimeout = 5000;
+                redisConfig.AbortOnConnectFail = false; // Don't fail startup if Redis is temporarily unavailable
+                services.AddSingleton<IConnectionMultiplexer>(sp => ConnectionMultiplexer.Connect(redisConfig));
                 services.AddSingleton<IOtpStore, RedisOtpStore>();
 
-                // Health checks for Redis and Cosmos
+                // Health checks for Redis and Cosmos with timeouts
                 services.AddHealthChecks()
-                    .AddCheck<Chat.Web.Health.RedisHealthCheck>("redis", tags: new[] { "ready" })
-                    .AddCheck<Chat.Web.Health.CosmosHealthCheck>("cosmos", tags: new[] { "ready" });
+                    .AddCheck<Chat.Web.Health.RedisHealthCheck>("redis", tags: new[] { "ready" }, timeout: TimeSpan.FromSeconds(3))
+                    .AddCheck<Chat.Web.Health.CosmosHealthCheck>("cosmos", tags: new[] { "ready" }, timeout: TimeSpan.FromSeconds(5));
             }
             // Prefer ACS sender if configured, otherwise console
             var acsConn = Configuration["Acs:ConnectionString"];            
