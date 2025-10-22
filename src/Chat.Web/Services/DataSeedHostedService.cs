@@ -70,7 +70,7 @@ namespace Chat.Web.Services
                 var isTestMode = _configuration.GetValue<bool>("Testing:InMemory");
                 if (!isTestMode)
                 {
-                    var instanceDelay = new Random().Next(100, 1000); // 100-1000ms random delay
+                    var instanceDelay = Random.Shared.Next(100, 1000); // 100-1000ms random delay
                     await Task.Delay(instanceDelay, cancellationToken);
                     _logger.LogInformation("Starting data seeding (delayed {DelayMs}ms to stagger multi-instance startup)", instanceDelay);
                 }
