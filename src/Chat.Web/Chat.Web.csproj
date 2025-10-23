@@ -7,15 +7,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Content Remove="compilerconfig.json" />
-  </ItemGroup>
-  <ItemGroup>
     <_ContentIncludedByDefault Remove="wwwroot\css\site.min.css" />
-    <_ContentIncludedByDefault Remove="wwwroot\css\_content.css" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <None Include="compilerconfig.json" />
   </ItemGroup>
 
   <ItemGroup>
