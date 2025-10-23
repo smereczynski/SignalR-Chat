@@ -17,25 +17,12 @@ namespace Chat.Web.Hubs
     [Authorize]
     /// <summary>
     /// SignalR hub handling real-time chat operations: user presence, room membership and message broadcast.
-    /// Tracks connected users for quick lookup and updates custom OpenTelemetry counters.
-    /// Private direct messaging removed; connection map retained for future notification use-cases.
+    /// Uses Context.Items for per-connection state and Redis for distributed presence snapshot.
     /// </summary>
     public class ChatHub : Hub
     {
-        /// <summary>
-        /// Active connections with lightweight user information (room participation tracked per user).
-        /// </summary>
-    public static readonly List<UserViewModel> _Connections = new List<UserViewModel>();
-    internal static readonly object _ConnectionsLock = new object();
         // Track active connection counts per user to avoid removing presence when alternate connections remain
-        // Using ConcurrentDictionary for thread-safe access without explicit locking
         private static readonly ConcurrentDictionary<string, int> _UserConnectionCounts = new ConcurrentDictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-
-        /// <summary>
-        /// Map userName -> current SignalR connection id (latest). Allows targeted messaging.
-        /// Using ConcurrentDictionary for thread-safe access without explicit locking
-        /// </summary>
-        private static readonly ConcurrentDictionary<string, string> _ConnectionsMap = new ConcurrentDictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
     private readonly Repositories.IUsersRepository _users;
     private readonly Repositories.IMessagesRepository _messages;
@@ -103,29 +90,24 @@ namespace Chat.Web.Hubs
                     activity?.SetStatus(ActivityStatusCode.Error, "room unauthorized");
                     return;
                 }
-                // Get current user from distributed presence tracker
-                var allUsers = await _presenceTracker.GetAllUsersAsync();
-                var user = allUsers.FirstOrDefault(u => u.UserName == IdentityName);
                 
-                // If user not yet tracked (race with OnConnected) create an entry.
+                // Get user from Context.Items (per-connection state)
+                var user = Context.Items["UserProfile"] as UserViewModel;
+                var previous = Context.Items["CurrentRoom"] as string;
+                
                 if (user == null)
                 {
-                    user = new UserViewModel
-                    {
-                        UserName = profile?.UserName ?? IdentityName,
-                        FullName = profile?.FullName ?? IdentityName,
-                        Avatar = profile?.Avatar,
-                        CurrentRoom = string.Empty
-                    };
+                    _logger.LogWarning("Join called but UserProfile not in Context for {User}", IdentityName);
+                    await Clients.Caller.SendAsync("onError", "User profile not found.");
+                    return;
                 }
                 
-                if (user.CurrentRoom == roomName)
+                if (previous == roomName)
                 {
                     // Already in requested room; no-op
                     return;
                 }
                 
-                var previous = user.CurrentRoom;
                 if (!string.IsNullOrEmpty(previous))
                 {
                     await Clients.OthersInGroup(previous).SendAsync("removeUser", user);
@@ -133,28 +115,28 @@ namespace Chat.Web.Hubs
                     activity?.AddEvent(new ActivityEvent("leave", tags: new ActivityTagsCollection {{"chat.room.prev", previous}}));
                     _metrics.DecRoomPresence(previous);
                     await Groups.RemoveFromGroupAsync(Context.ConnectionId, previous);
-                    await _presenceTracker.UserLeftRoomAsync(IdentityName, previous);
                 }
                 
                 await Groups.AddToGroupAsync(Context.ConnectionId, roomName);
                 
-                // Update distributed presence tracker
-                await _presenceTracker.UserJoinedRoomAsync(IdentityName, profile?.FullName ?? IdentityName, profile?.Avatar, roomName);
-                await _presenceTracker.UpdateConnectionIdAsync(IdentityName, Context.ConnectionId);
-                
-                // Update local reference for broadcast
+                // Update Context.Items for this connection
+                Context.Items["CurrentRoom"] = roomName;
                 user.CurrentRoom = roomName;
                 
-                // Broadcast to the entire group (including the caller) so every client receives a consistent
-                // addUser event even if their initial user list isn't yet loaded. This fixes a race where
-                // existing members failed to update presence until another hub action occurred.
+                // Update Redis presence (for cross-instance snapshot)
+                await _presenceTracker.SetUserRoomAsync(IdentityName, user.FullName, user.Avatar, roomName);
+                
+                // Broadcast to the entire group (including the caller)
                 await Clients.Group(roomName).SendAsync("addUser", user);
                 
-                // After broadcasting the new user, send a full presence snapshot to the caller to ensure
-                // they have every existing user even if some addUser events were missed before subscription.
-                var presenceSnapshot = (await _presenceTracker.GetUsersInRoomAsync(roomName))
-                    .Select(u => new { u.UserName, u.FullName, u.Avatar, u.CurrentRoom }).ToList();
+                // Send full presence snapshot to caller (get from Redis for cross-instance consistency)
+                var allUsers = await _presenceTracker.GetAllUsersAsync();
+                var presenceSnapshot = allUsers
+                    .Where(u => u.CurrentRoom == roomName)
+                    .Select(u => new { u.UserName, u.FullName, u.Avatar, u.CurrentRoom })
+                    .ToList();
                 await Clients.Caller.SendAsync("presenceSnapshot", presenceSnapshot);
+                
                 _logger.LogInformation("User {User} joined room {Room}", IdentityName, roomName);
                 _metrics.IncRoomsJoined();
                 _metrics.IncRoomPresence(roomName);
@@ -192,13 +174,14 @@ namespace Chat.Web.Hubs
             activity?.SetTag("chat.room", roomName);
             if (string.IsNullOrWhiteSpace(roomName)) return Enumerable.Empty<UserViewModel>();
             
-            var users = await _presenceTracker.GetUsersInRoomAsync(roomName);
+            var allUsers = await _presenceTracker.GetAllUsersAsync();
+            var users = allUsers.Where(u => u.CurrentRoom == roomName).ToList();
             activity?.SetTag("chat.user.count", users.Count);
             return users;
         }
 
         /// <summary>
-        /// Lifecycle hook: new client connection established. Adds/updates user state and increments active connection counter.
+        /// Lifecycle hook: new client connection established. Stores user profile in Context.Items.
         /// </summary>
         public override async Task OnConnectedAsync()
         {
@@ -207,82 +190,66 @@ namespace Chat.Web.Hubs
             {
                 var user = _users.GetByUserName(IdentityName);
                 
-                // Check if user already exists in distributed presence
-                var allUsers = await _presenceTracker.GetAllUsersAsync();
-                var existing = allUsers.FirstOrDefault(u => u.UserName == IdentityName);
+                var userViewModel = new UserViewModel
+                {
+                    UserName = user?.UserName ?? IdentityName,
+                    FullName = user?.FullName ?? IdentityName,
+                    Avatar = user?.Avatar,
+                    CurrentRoom = string.Empty
+                };
                 
-                // Increment (or initialize) active connection count for this user (still per-instance for now)
-                lock (_ConnectionsLock)
-                {
-                    _UserConnectionCounts.AddOrUpdate(IdentityName, 1, (key, oldValue) => oldValue + 1);
-                }
+                // Store user profile in Context.Items for fast access (per-connection state)
+                Context.Items["UserProfile"] = userViewModel;
+                Context.Items["CurrentRoom"] = string.Empty;
                 
-                if (existing != null)
-                {
-                    // Update connection ID in distributed tracker
-                    await _presenceTracker.UpdateConnectionIdAsync(IdentityName, Context.ConnectionId);
-                    activity?.SetTag("chat.duplicateConnection", true);
-                    _logger.LogDebug("Duplicate connection for {User} reassigned connectionId", IdentityName);
-                    await Clients.Caller.SendAsync("getProfileInfo", existing);
-                }
-                else
-                {
-                    var userViewModel = new UserViewModel
-                    {
-                        UserName = user?.UserName ?? IdentityName,
-                        FullName = user?.FullName ?? IdentityName,
-                        Avatar = user?.Avatar,
-                        CurrentRoom = string.Empty
-                    };
-                    
-                    // Add to distributed presence tracker (no room yet)
-                    await _presenceTracker.UserJoinedRoomAsync(
-                        userViewModel.UserName,
-                        userViewModel.FullName,
-                        userViewModel.Avatar,
-                        string.Empty);
-                    await _presenceTracker.UpdateConnectionIdAsync(IdentityName, Context.ConnectionId);
-                    
-                    _logger.LogInformation("User connected {User}", IdentityName);
-                    _metrics.IncActiveConnections();
-                    _metrics.UserAvailable(IdentityName);
-                    await Clients.Caller.SendAsync("getProfileInfo", userViewModel);
+                // Increment connection count
+                _UserConnectionCounts.AddOrUpdate(IdentityName, 1, (key, oldValue) => oldValue + 1);
+                
+                // Update Redis presence (for cross-instance snapshot API)
+                await _presenceTracker.SetUserRoomAsync(
+                    userViewModel.UserName,
+                    userViewModel.FullName,
+                    userViewModel.Avatar,
+                    string.Empty);
+                
+                _logger.LogInformation("User connected {User}", IdentityName);
+                _metrics.IncActiveConnections();
+                _metrics.UserAvailable(IdentityName);
+                await Clients.Caller.SendAsync("getProfileInfo", userViewModel);
 
-                    // Auto-join default room logic
-                    try
+                // Auto-join default room logic
+                try
+                {
+                    var fixedRooms = user?.FixedRooms ?? new System.Collections.Generic.List<string>();
+                    if (fixedRooms.Any())
                     {
-                        var fixedRooms = user?.FixedRooms ?? new System.Collections.Generic.List<string>();
-                        if (fixedRooms.Any())
+                        string target = null;
+                        string strategy = null;
+                        if (!string.IsNullOrWhiteSpace(user?.DefaultRoom) && fixedRooms.Contains(user.DefaultRoom))
                         {
-                            string target = null;
-                            string strategy = null;
-                            if (!string.IsNullOrWhiteSpace(user?.DefaultRoom) && fixedRooms.Contains(user.DefaultRoom))
-                            {
-                                target = user.DefaultRoom;
-                                strategy = "autoJoin.default";
-                            }
-                            else if (fixedRooms.Count == 1)
-                            {
-                                target = fixedRooms.First();
-                                strategy = "autoJoin.single";
-                            }
-                            else
-                            {
-                                target = fixedRooms.OrderBy(r => r).First();
-                                strategy = "autoJoin.firstAlphabetical";
-                            }
-                            if (!string.IsNullOrEmpty(target))
-                            {
-                                Tracing.ActivitySource.StartActivity(strategy)?.Dispose();
-                                // Await join so that any presence broadcast happens deterministically before OnConnected completes
-                                await Join(target);
-                            }
+                            target = user.DefaultRoom;
+                            strategy = "autoJoin.default";
+                        }
+                        else if (fixedRooms.Count == 1)
+                        {
+                            target = fixedRooms.First();
+                            strategy = "autoJoin.single";
+                        }
+                        else
+                        {
+                            target = fixedRooms.OrderBy(r => r).First();
+                            strategy = "autoJoin.firstAlphabetical";
+                        }
+                        if (!string.IsNullOrEmpty(target))
+                        {
+                            Tracing.ActivitySource.StartActivity(strategy)?.Dispose();
+                            await Join(target);
                         }
                     }
-                    catch (System.Exception ex)
-                    {
-                        _logger.LogWarning(ex, "Auto-join default room failed for {User}", IdentityName);
-                    }
+                }
+                catch (System.Exception ex)
+                {
+                    _logger.LogWarning(ex, "Auto-join default room failed for {User}", IdentityName);
                 }
             }
             catch (Exception ex)
@@ -295,34 +262,31 @@ namespace Chat.Web.Hubs
         }
 
         /// <summary>
-        /// Lifecycle hook: client disconnected. Removes mapping and decrements active connection counter.
+        /// Lifecycle hook: client disconnected. Removes presence when last connection closes.
         /// </summary>
         public override async Task OnDisconnectedAsync(Exception exception)
         {
             using var activity = Tracing.ActivitySource.StartActivity("ChatHub.OnDisconnected");
             try
             {
-                // Get user from distributed presence
-                var allUsers = await _presenceTracker.GetAllUsersAsync();
-                var user = allUsers.FirstOrDefault(u => u.UserName == IdentityName);
+                // Get user from Context.Items
+                var user = Context.Items["UserProfile"] as UserViewModel;
+                var currentRoom = Context.Items["CurrentRoom"] as string;
                 
                 int remainingConnections = 0;
-                lock (_ConnectionsLock)
+                // Decrement connection count atomically
+                if (_UserConnectionCounts.TryGetValue(IdentityName, out var cnt))
                 {
-                    // Decrement connection count atomically
-                    if (_UserConnectionCounts.TryGetValue(IdentityName, out var cnt))
+                    cnt = Math.Max(0, cnt - 1);
+                    if (cnt == 0)
                     {
-                        cnt = Math.Max(0, cnt - 1);
-                        if (cnt == 0)
-                        {
-                            _UserConnectionCounts.TryRemove(IdentityName, out _);
-                        }
-                        else
-                        {
-                            _UserConnectionCounts[IdentityName] = cnt;
-                        }
-                        remainingConnections = cnt;
+                        _UserConnectionCounts.TryRemove(IdentityName, out _);
                     }
+                    else
+                    {
+                        _UserConnectionCounts[IdentityName] = cnt;
+                    }
+                    remainingConnections = cnt;
                 }
                 
                 if (user == null)
@@ -335,14 +299,14 @@ namespace Chat.Web.Hubs
                 // Only remove presence when the last connection closes
                 if (remainingConnections <= 0)
                 {
-                    if (!string.IsNullOrWhiteSpace(user.CurrentRoom))
+                    if (!string.IsNullOrWhiteSpace(currentRoom))
                     {
-                        await Clients.OthersInGroup(user.CurrentRoom).SendAsync("removeUser", user);
-                        _metrics.DecRoomPresence(user.CurrentRoom);
+                        await Clients.OthersInGroup(currentRoom).SendAsync("removeUser", user);
+                        _metrics.DecRoomPresence(currentRoom);
                     }
                     
-                    // Remove from distributed presence tracker
-                    await _presenceTracker.UserDisconnectedAsync(IdentityName);
+                    // Remove from Redis
+                    await _presenceTracker.RemoveUserAsync(IdentityName);
                     
                     _logger.LogInformation("User disconnected {User}", IdentityName);
                     _metrics.DecActiveConnections();
@@ -350,31 +314,15 @@ namespace Chat.Web.Hubs
                 }
                 else
                 {
-                    // Multiple active connections remain; presence is retained in Redis
                     _logger.LogDebug("User {User} has {Count} remaining connections; presence retained", IdentityName, remainingConnections);
                 }
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "OnDisconnected failure {User}", IdentityName);
-                await Clients.Caller.SendAsync("onError", "OnDisconnected: " + ex.Message);
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
             }
             await base.OnDisconnectedAsync(exception);
-        }
-
-        /// <summary>
-        /// Sends a direct notification (non-chat message) to a single connected user if online.
-        /// </summary>
-        public Task NotifyUser(string targetUserName, string title, string body)
-        {
-            if (string.IsNullOrWhiteSpace(targetUserName) || string.IsNullOrWhiteSpace(title))
-                return Task.CompletedTask;
-            if (_ConnectionsMap.TryGetValue(targetUserName, out var connId))
-            {
-                return Clients.Client(connId).SendAsync("notify", new { title, body, from = IdentityName, ts = DateTime.UtcNow });
-            }
-            return Task.CompletedTask;
         }
 
         private string IdentityName => Context.User.Identity.Name;
@@ -398,30 +346,31 @@ namespace Chat.Web.Hubs
             activity?.SetTag("chat.correlationId", correlationId);
             activity?.SetTag("chat.content.length", content?.Length ?? 0);
             if (string.IsNullOrWhiteSpace(content)) { activity?.AddEvent(new ActivityEvent("empty_content")); return; }
-            UserViewModel user;
-            lock (_ConnectionsLock)
-            {
-                user = _Connections.FirstOrDefault(u => u.UserName == IdentityName);
-            }
-            if (user == null || string.IsNullOrEmpty(user.CurrentRoom))
+            
+            // Get user and room from Context.Items (per-connection state - no Redis query needed!)
+            var user = Context.Items["UserProfile"] as UserViewModel;
+            var currentRoom = Context.Items["CurrentRoom"] as string;
+            
+            if (user == null || string.IsNullOrEmpty(currentRoom))
             {
                 _logger.LogWarning("SendMessage denied (no room) user={User}", IdentityName);
                 activity?.SetStatus(ActivityStatusCode.Error, "no_room");
                 await Clients.Caller.SendAsync("onError", "You are not in a room.");
                 return;
             }
+            
             var domainUser = _users.GetByUserName(IdentityName);
-            if (domainUser?.FixedRooms != null && domainUser.FixedRooms.Any() && !domainUser.FixedRooms.Contains(user.CurrentRoom))
+            if (domainUser?.FixedRooms != null && domainUser.FixedRooms.Any() && !domainUser.FixedRooms.Contains(currentRoom))
             {
-                _logger.LogWarning("SendMessage unauthorized user={User} room={Room}", IdentityName, user.CurrentRoom);
+                _logger.LogWarning("SendMessage unauthorized user={User} room={Room}", IdentityName, currentRoom);
                 activity?.SetStatus(ActivityStatusCode.Error, "unauthorized");
                 await Clients.Caller.SendAsync("onError", "Not authorized for this room.");
                 return;
             }
-            var room = _rooms.GetByName(user.CurrentRoom);
+            var room = _rooms.GetByName(currentRoom);
             if (room == null)
             {
-                _logger.LogWarning("SendMessage room missing user={User} room={Room}", IdentityName, user.CurrentRoom);
+                _logger.LogWarning("SendMessage room missing user={User} room={Room}", IdentityName, currentRoom);
                 activity?.SetStatus(ActivityStatusCode.Error, "room_missing");
                 await Clients.Caller.SendAsync("onError", "Room no longer exists.");
                 return;
@@ -492,12 +441,12 @@ namespace Chat.Web.Hubs
                 return;
             }
             
-            UserViewModel user;
-            lock (_ConnectionsLock)
-            {
-                user = _Connections.FirstOrDefault(u => u.UserName == IdentityName);
-            }
-            if (user == null || string.IsNullOrEmpty(user.CurrentRoom)) return;
+            // Get user and room from Context.Items (per-connection state)
+            var user = Context.Items["UserProfile"] as UserViewModel;
+            var currentRoom = Context.Items["CurrentRoom"] as string;
+            
+            if (user == null || string.IsNullOrEmpty(currentRoom)) return;
+            
             var updated = _messages.MarkRead(messageId, IdentityName);
             if (updated == null) return;
             
