@@ -110,36 +110,8 @@ namespace Chat.Web.Services
 
             try
             {
-                var db = _redis.GetDatabase();
-                var server = _redis.GetServer(_redis.GetEndPoints().First());
-                var keys = server.Keys(pattern: PresenceKeyPrefix + "*").ToArray();
-
-                if (keys.Length == 0)
-                    return Array.Empty<UserViewModel>();
-
-                var values = await db.StringGetAsync(keys);
-                var users = new List<UserViewModel>();
-
-                foreach (var value in values)
-                {
-                    if (value.HasValue)
-                    {
-                        try
-                        {
-                            var user = JsonSerializer.Deserialize<UserViewModel>(value.ToString());
-                            if (user != null && user.CurrentRoom == roomName)
-                            {
-                                users.Add(user);
-                            }
-                        }
-                        catch
-                        {
-                            // Skip malformed entries
-                        }
-                    }
-                }
-
-                return users;
+                var allUsers = await GetAllUsersInternalAsync();
+                return allUsers.Where(u => u.CurrentRoom == roomName).ToList();
             }
             catch (Exception ex)
             {
@@ -152,42 +124,47 @@ namespace Chat.Web.Services
         {
             try
             {
-                var db = _redis.GetDatabase();
-                var server = _redis.GetServer(_redis.GetEndPoints().First());
-                var keys = server.Keys(pattern: PresenceKeyPrefix + "*").ToArray();
-
-                if (keys.Length == 0)
-                    return Array.Empty<UserViewModel>();
-
-                var values = await db.StringGetAsync(keys);
-                var users = new List<UserViewModel>();
-
-                foreach (var value in values)
-                {
-                    if (value.HasValue)
-                    {
-                        try
-                        {
-                            var user = JsonSerializer.Deserialize<UserViewModel>(value.ToString());
-                            if (user != null)
-                            {
-                                users.Add(user);
-                            }
-                        }
-                        catch
-                        {
-                            // Skip malformed entries
-                        }
-                    }
-                }
-
-                return users;
+                return await GetAllUsersInternalAsync();
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to get all users from Redis");
                 return Array.Empty<UserViewModel>();
             }
+        }
+
+        private async Task<List<UserViewModel>> GetAllUsersInternalAsync()
+        {
+            var db = _redis.GetDatabase();
+            var server = _redis.GetServer(_redis.GetEndPoints().First());
+            var keys = server.Keys(pattern: PresenceKeyPrefix + "*").ToArray();
+
+            if (keys.Length == 0)
+                return new List<UserViewModel>();
+
+            var values = await db.StringGetAsync(keys);
+            var users = new List<UserViewModel>();
+
+            foreach (var value in values)
+            {
+                if (value.HasValue)
+                {
+                    try
+                    {
+                        var user = JsonSerializer.Deserialize<UserViewModel>(value.ToString());
+                        if (user != null)
+                        {
+                            users.Add(user);
+                        }
+                    }
+                    catch
+                    {
+                        // Skip malformed entries
+                    }
+                }
+            }
+
+            return users;
         }
 
         public async Task UpdateConnectionIdAsync(string userName, string connectionId)
