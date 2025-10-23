@@ -159,60 +159,57 @@ namespace Chat.Web.Services
                 var toNotify = userNames.Where(u => !string.Equals(u, msg.FromUser?.UserName, StringComparison.OrdinalIgnoreCase)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
                 if (toNotify.Count == 0) return;
 
+                _logger.LogInformation("Unread notification check for message {Id}: {UserCount} recipients to notify (excluding sender)", 
+                    messageId, toNotify.Count);
+
                 // Mark as sent before sending to prevent duplicate sends if multiple timers fire
                 _notificationsSent.TryAdd(messageId, true);
-
-                // Aggregate unique destinations (email / mobile) across users to avoid duplicate sends to same address/number
-                var emailDests = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase); // dest -> usernames
-                var smsDests = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
-                foreach (var uname in toNotify)
-                {
-                    var user = _users.GetByUserName(uname);
-                    if (user == null || user.Enabled == false) continue;
-                    if (!string.IsNullOrWhiteSpace(user.Email))
-                    {
-                        if (!emailDests.TryGetValue(user.Email, out var list)) { list = new List<string>(); emailDests[user.Email] = list; }
-                        list.Add(user.UserName);
-                    }
-                    if (!string.IsNullOrWhiteSpace(user.MobileNumber))
-                    {
-                        if (!smsDests.TryGetValue(user.MobileNumber, out var list)) { list = new List<string>(); smsDests[user.MobileNumber] = list; }
-                        list.Add(user.UserName);
-                    }
-                }
 
                 // Prepare message body
                 var body = $"New message in #{roomName}";
 
-                // Send to unique email destinations once
-                foreach (var kv in emailDests)
+                // Send notifications to each user individually (no deduplication by email/phone)
+                var emailsSent = 0;
+                var smsSent = 0;
+                
+                foreach (var uname in toNotify)
                 {
-                    try
+                    var user = _users.GetByUserName(uname);
+                    if (user == null || user.Enabled == false) continue;
+                    
+                    // Send email if user has one
+                    if (!string.IsNullOrWhiteSpace(user.Email))
                     {
-                        await _otpSender.SendAsync(string.Join(',', kv.Value), kv.Key, body).ConfigureAwait(false);
-                        _logger.LogInformation("Unread notification (email) queued for {UserCount} user(s)", kv.Value.Count);
+                        try
+                        {
+                            await _otpSender.SendAsync(user.UserName, user.Email, body).ConfigureAwait(false);
+                            emailsSent++;
+                            _logger.LogInformation("Unread notification (email) queued");
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "Failed to send unread email notification");
+                        }
                     }
-                    catch (Exception ex)
+                    
+                    // Send SMS if user has one
+                    if (!string.IsNullOrWhiteSpace(user.MobileNumber))
                     {
-                        _logger.LogWarning(ex, "Failed to send unread email notification");
+                        try
+                        {
+                            await _otpSender.SendAsync(user.UserName, user.MobileNumber, body).ConfigureAwait(false);
+                            smsSent++;
+                            _logger.LogInformation("Unread notification (sms) queued");
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "Failed to send unread sms notification");
+                        }
                     }
                 }
 
-                // Send to unique SMS destinations once
-                foreach (var kv in smsDests)
-                {
-                    try
-                    {
-                        await _otpSender.SendAsync(string.Join(',', kv.Value), kv.Key, body).ConfigureAwait(false);
-                        _logger.LogInformation("Unread notification (sms) queued for {UserCount} user(s)", kv.Value.Count);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogWarning(ex, "Failed to send unread sms notification");
-                    }
-                }
-
-                _logger.LogInformation("Unread notifications processed for message {Id}; target user count: {Count}, email destinations: {Emails}, sms destinations: {Sms}", messageId, toNotify.Count, emailDests.Count, smsDests.Count);
+                _logger.LogInformation("Unread notifications processed for message {Id}: {UserCount} users, {EmailCount} emails sent, {SmsCount} SMS sent", 
+                    messageId, toNotify.Count, emailsSent, smsSent);
             }
             catch (Exception ex)
             {
