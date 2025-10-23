@@ -138,28 +138,23 @@ namespace Chat.Web.Services
                     return;
                 }
                 
-                // Gather target users assigned to room
-                var userNames = (room?.Users ?? new List<string>()).Where(u => !string.IsNullOrWhiteSpace(u)).ToList();
+                // Gather ALL users assigned to the room from FixedRooms (source of truth for room membership)
+                // Note: room.Users contains only currently connected users (presence tracking), not all assigned users
+                var userNames = _users.GetAll()
+                    ?.Where(u => u != null && u.Enabled != false && (u.FixedRooms?.Contains(roomName, StringComparer.OrdinalIgnoreCase) ?? false))
+                    ?.Select(u => u.UserName)
+                    ?.Where(n => !string.IsNullOrWhiteSpace(n))
+                    ?.Distinct(StringComparer.OrdinalIgnoreCase)
+                    ?.ToList() ?? new List<string>();
+                
                 if (userNames.Count == 0)
                 {
-                    // Fallback: if room.Users is not populated, infer from users whose FixedRooms include this room
-                    var inferred = _users.GetAll()
-                        ?.Where(u => u != null && u.Enabled != false && (u.FixedRooms?.Contains(roomName, StringComparer.OrdinalIgnoreCase) ?? false))
-                        ?.Select(u => u.UserName)
-                        ?.Where(n => !string.IsNullOrWhiteSpace(n))
-                        ?.Distinct(StringComparer.OrdinalIgnoreCase)
-                        ?.ToList() ?? new List<string>();
-                    if (inferred.Count > 0)
-                    {
-                        userNames = inferred;
-                        _logger.LogDebug("Recipients inferred from FixedRooms for room {Room}: {Count}", roomName, userNames.Count);
-                    }
-                    else
-                    {
-                        _logger.LogDebug("No recipients found for room {Room} (room.Users empty and no users with FixedRooms). Skipping notification for message {Id}", roomName, messageId);
-                        return;
-                    }
+                    _logger.LogDebug("No recipients found for room {Room} (no users with FixedRooms containing this room). Skipping notification for message {Id}", roomName, messageId);
+                    return;
                 }
+                
+                _logger.LogDebug("Found {Count} recipients for room {Room} from FixedRooms", userNames.Count, roomName);
+                
                 // Exclude sender only (don't exclude readers since we already checked if anyone read it above)
                 var toNotify = userNames.Where(u => !string.Equals(u, msg.FromUser?.UserName, StringComparison.OrdinalIgnoreCase)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
                 if (toNotify.Count == 0) return;
