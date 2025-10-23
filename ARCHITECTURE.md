@@ -236,7 +236,8 @@ This section captures core components and runtime flows beyond OTP specifics.
 | Client | `chat.js` | Connection lifecycle (connect/join/reconnect), outbox queue, optimistic sends, reconciling broadcasts, telemetry emission. |
 | Client | Read receipts UI | Debounced mark-as-read when timeline bottom is reached and after join/reconnect by scanning visible messages; updates per-message ReadBy badges. |
 | Client | `site.js` | General UI behaviors (sidebar toggles, OTP modal workflow, tooltips, message actions UI). |
-| Real-time | `ChatHub` | Single entry-point for sending messages and joining rooms. Normalizes routing, enriches tracing, broadcasts canonical message DTOs. |
+| Real-time | `ChatHub` | Single entry-point for sending messages and joining rooms. Normalizes routing, enriches tracing, broadcasts canonical message DTOs. Uses Context.Items for per-connection state (user, room). |
+| Presence | `IPresenceTracker` / `RedisPresenceTracker` | Tracks user presence across instances using Context.Items (local) + Redis hash (distributed snapshot). |
 | Background | `UnreadNotificationScheduler` | Schedules per-message delayed unread checks; sends notifications to recipients excluding sender/readers. |
 | Services | `NotificationSender` / `AcsOtpSender` | Formats notification payloads and delivers them via email/SMS; enforces notification subject/body contract while preserving OTP formatting. |
 | Auth | Auth Controllers / OTP API | `start` (generate/store OTP in Redis), `verify` (validate OTP, issue auth cookie), `logout`. |
@@ -257,12 +258,15 @@ Client read-marking is idempotent and safe across reconnects: the browser dedupl
 Azure SignalR is used when not running in Testing:InMemory mode; otherwise in-process SignalR is used. No Redis backplane is configured; multi-instance scale-out could use Redis backplane as an alternative.
 
 ## Redis Role
-Redis is presently limited to OTP storage:
-- Key pattern: `otp:{userName}`
-- Value: versioned Argon2id hash by default (format `OtpHash:v2:argon2id:...`) with TTL `RedisOptions.OtpTtlSeconds` (default 300s); plaintext is supported only when `Otp:HashingEnabled=false` for testing/legacy
-- Operations: set, get, remove invoked through `RedisOtpStore` with retry + cooldown guards for transient errors
+Redis serves two purposes:
+1. **OTP storage**: Key pattern `otp:{userName}` with versioned Argon2id hash (format `OtpHash:v2:argon2id:...`) and TTL (default 300s)
+2. **Presence tracking**: Single hash key `presence:users` stores current user presence for cross-instance snapshot queries
 
-Potential future roles: SignalR backplane, presence cache, rate limiting, hot message cache.
+Operations:
+- OTP: set, get, remove via `RedisOtpStore` with retry + cooldown guards
+- Presence: HSET/HGET/HDEL via `RedisPresenceTracker` for distributed user state
+
+Potential future roles: SignalR backplane, rate limiting, hot message cache.
 
 ## Runtime Flows
 ### OTP Authentication
@@ -308,6 +312,38 @@ Formatting contract:
 - SMS body: `New message in #<room>`
 - No message text is included to avoid leaking content through notifications.
 
+### Presence tracking
+The application tracks which users are currently online and in which rooms using a hybrid approach:
+
+1. **Per-connection state (Context.Items)**:
+   - When a user connects, `OnConnectedAsync` stores `UserViewModel` in `Context.Items["UserProfile"]`
+   - Current room is tracked in `Context.Items["CurrentRoom"]`
+   - This provides instant access in hub methods (SendMessage, MarkRead) without Redis queries
+   - Automatically cleaned up when connection closes
+
+2. **Distributed snapshot (Redis)**:
+   - Single hash key: `presence:users`
+   - Hash fields: `{userName}` → JSON-serialized `UserViewModel` with `CurrentRoom`
+   - Updated on: Join (room change), OnConnectedAsync (initial), OnDisconnectedAsync (cleanup)
+   - TTL: 10 minutes, refreshed on updates
+   - Used by: GetUsers (cross-instance queries), presence API endpoint
+
+3. **Multi-instance coordination**:
+   - `_UserConnectionCounts` (ConcurrentDictionary) tracks per-instance connection counts
+   - Only removes from Redis when last connection for that user (on this instance) closes
+   - SignalR groups handle cross-instance message broadcasting
+
+4. **Interfaces**:
+   - `IPresenceTracker`: Simplified interface (4 methods: SetUserRoomAsync, GetUserAsync, RemoveUserAsync, GetAllUsersAsync)
+   - `RedisPresenceTracker`: Production implementation using Redis hash operations (no key scanning)
+   - `InMemoryPresenceTracker`: Test/dev implementation using ConcurrentDictionary
+
+Benefits:
+- Fast: No Redis queries in hot path (SendMessage, MarkRead)
+- Simple: Context.Items is single source of truth per connection
+- Scalable: Hash operations instead of key scanning
+- Reliable: Per-connection scope, automatic cleanup, TTL safety net
+
 ## Build & Front-End Delivery
 - Source JS under `wwwroot/js/` is used directly in development and referenced by pages. Optional build tasks can create minified bundles in `wwwroot/js/dist/` for production testing; pages do not reference `dist` by default.
 
@@ -322,7 +358,7 @@ Formatting contract:
 | Message persistence | Single EF DB | Shard or move to partitioned store |
 | OTP store | Single Redis | Managed/clustered Redis |
 | Outbox durability | sessionStorage | IndexedDB or server-side queue |
-| Presence tracking | Not implemented | Redis sets / ephemeral keys |
+| Presence tracking | Redis hash (single key) | Sharded Redis or dedicated presence service |
 
 ## Security Notes
 - OTP codes are stored hashed by default (Argon2id + salt + pepper). Legacy/plaintext verification is supported only when explicitly enabled for testing and uses constant-time comparison. Provide a high-entropy Base64 pepper per environment via `Otp__Pepper`.
@@ -331,7 +367,7 @@ Formatting contract:
  - Exception handling: Cosmos message `MarkRead` now rethrows with contextual information (message id and sanitized partition/room) instead of logging and rethrowing, aligning with static analysis guidance and improving diagnostics without exposing PII.
 
 ## Future Roadmap (Prioritized)
-1. Presence & typing indicators
+1. Typing indicators
 2. Backplane scale-out metrics & multi-instance benchmarks
 3. Enhanced pagination UX/accessibility
 4. Additional OTP anti-abuse policies (per-user/IP counters in Redis)
