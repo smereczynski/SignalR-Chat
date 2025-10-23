@@ -52,7 +52,6 @@ namespace Chat.Web
     ///  - Configure authentication (cookie vs test header auth) & SignalR (Azure vs in-process)
     ///  - Set up OpenTelemetry (Traces + Metrics + Logs) with exporter auto-selection
     ///  - Apply rate limiting to sensitive OTP endpoints
-    ///  - Seed baseline data on startup
     ///  - Expose health and hub endpoints
     /// </summary>
     public class Startup
@@ -339,9 +338,6 @@ namespace Chat.Web
                 .AddAzureSignalR();
             }
             
-            // Seeding service (runs once at startup)
-            // Background service: seeds default room/users if they do not yet exist (idempotent on restart).
-            services.AddHostedService<DataSeedHostedService>();
             // Now that external dependencies (Cosmos client, Redis multiplexer) are registered, configure OpenTelemetry
             services.AddOpenTelemetry()
                 .ConfigureResource(rb => rb.AddService(Tracing.ServiceName, serviceVersion: assemblyVersion))
