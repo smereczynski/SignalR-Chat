@@ -5,6 +5,8 @@ using Chat.Web.Repositories;
 using Chat.Web.Models;
 using Chat.DataSeed;
 
+#nullable disable warnings
+
 namespace Chat.DataSeed.Tests;
 
 public class DataSeederTests
