@@ -26,8 +26,8 @@ namespace Chat.Web.Controllers
         {
             var allUsers = await _presenceTracker.GetAllUsersAsync();
             var snapshot = allUsers
+                .Where(u => !string.IsNullOrWhiteSpace(u.CurrentRoom))
                 .GroupBy(u => u.CurrentRoom)
-                .Where(g => !string.IsNullOrWhiteSpace(g.Key))
                 .Select(g => new {
                     room = g.Key,
                     count = g.Count(),
