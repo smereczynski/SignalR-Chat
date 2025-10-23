@@ -33,7 +33,7 @@ namespace Chat.Web.Repositories
         private readonly ConcurrentDictionary<string, Room> _roomsByName = new();
         public InMemoryRoomsRepository()
         {
-            // Pre-seed static rooms with deterministic IDs (1..n)
+            // Pre-initialize static rooms for testing (deterministic IDs 1..n)
             var rooms = new[]{"general","ops","random"};
             int id=1; foreach(var r in rooms){ var room=new Room{Id=id++, Name=r, Users = new List<string>()}; _roomsById[room.Id]=room; _roomsByName[room.Name]=room; }
         }

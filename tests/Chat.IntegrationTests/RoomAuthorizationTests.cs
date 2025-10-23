@@ -14,7 +14,7 @@ namespace Chat.IntegrationTests
         [Fact]
         public async Task User_Cannot_Join_Unassigned_Room()
         {
-            // charlie is seeded only for "general"; attempt to join "ops" should trigger onError
+            // Test fixture provides charlie with access only to "general"; attempt to join "ops" should trigger onError
             var baseClient = _factory.CreateClient();
             baseClient.DefaultRequestHeaders.Add("X-Test-User", "charlie");
             var hubUrl = baseClient.BaseAddress + "chatHub";
