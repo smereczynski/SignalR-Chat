@@ -222,8 +222,15 @@ Endpoints:
 * Use `build all` only when you want to produce minified bundles alongside a .NET build.
 * Run the `test` task before pushing changes.
 * Consider adding a local `--watch` script if iterating frequently (not included by default).
+## Presence Tracking
+The application tracks user presence across multiple instances using a hybrid approach:
+* **Per-connection state**: Stored in `Context.Items` for instant access in hub methods (no Redis query needed for SendMessage/MarkRead)
+* **Distributed snapshot**: Redis hash (`presence:users`) stores user presence for cross-instance consistency
+* **Interfaces**: `IPresenceTracker` with `RedisPresenceTracker` (production) and `InMemoryPresenceTracker` (testing)
+* **Endpoints**: `GET /api/health/chat/presence` (authenticated) returns per-room user presence
+
 ## Future Enhancements (Not Implemented)
-* Presence / typing indicators
+* Typing indicators
 * Backplane scale-out metrics & multi-instance benchmarks
 * Additional anti-abuse policies for OTP attempts (per-user/IP counters in Redis)
 * Rich pagination UX (virtualization, skeleton loaders)
