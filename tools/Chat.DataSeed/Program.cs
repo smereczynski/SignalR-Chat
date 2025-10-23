@@ -23,6 +23,8 @@ namespace Chat.DataSeed;
 /// </summary>
 class Program
 {
+    private Program() { }
+
     static async Task<int> Main(string[] args)
     {
         Console.WriteLine("=== Chat Data Seed Tool ===");
@@ -171,7 +173,7 @@ public class DataSeeder
         _logger.LogInformation("Data seed process completed");
     }
 
-    private async Task ClearExistingDataAsync()
+    private Task ClearExistingDataAsync()
     {
         _logger.LogWarning("Clearing existing data...");
         
@@ -185,9 +187,10 @@ public class DataSeeder
         }
 
         _logger.LogInformation("Existing data cleared");
+        return Task.CompletedTask;
     }
 
-    private async Task SeedRoomsAsync(bool dryRun)
+    private Task SeedRoomsAsync(bool dryRun)
     {
         _logger.LogInformation("Seeding rooms...");
 
@@ -221,15 +224,14 @@ public class DataSeeder
                 
                 // For Cosmos, you'll need to directly insert the document
                 // This requires access to the CosmosClient - may need to enhance the interface
-                _logger.LogWarning("Room creation in Cosmos requires direct container access");
-                _logger.LogWarning("Please create rooms manually in Cosmos DB or enhance this tool");
+                _logger.LogWarning("Room creation in Cosmos requires direct container access. Please create rooms manually in Cosmos DB or enhance this tool");
             }
         }
 
-        await Task.CompletedTask;
+        return Task.CompletedTask;
     }
 
-    private async Task SeedUsersAsync(bool dryRun)
+    private Task SeedUsersAsync(bool dryRun)
     {
         _logger.LogInformation("Seeding users...");
 
@@ -283,8 +285,7 @@ public class DataSeeder
             {
                 _logger.LogInformation("[DRY RUN] Would create user: {UserName} ({FullName})", 
                     user.UserName, user.FullName);
-                _logger.LogInformation("  - Email: {Email}", user.Email);
-                _logger.LogInformation("  - FixedRooms: {Rooms}", string.Join(", ", user.FixedRooms));
+                _logger.LogInformation("  - Email: {Email}, FixedRooms: {Rooms}", user.Email, string.Join(", ", user.FixedRooms));
             }
             else
             {
@@ -294,6 +295,6 @@ public class DataSeeder
             }
         }
 
-        await Task.CompletedTask;
+        return Task.CompletedTask;
     }
 }
