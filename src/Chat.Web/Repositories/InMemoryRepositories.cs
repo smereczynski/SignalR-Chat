@@ -18,7 +18,7 @@ namespace Chat.Web.Repositories
             _rooms = rooms;
         }
         public IEnumerable<ApplicationUser> GetAll() => _users.Values;
-    public ApplicationUser GetByUserName(string userName) => _users.GetOrAdd(userName, u => new ApplicationUser { UserName = u, FullName = u, Enabled = true });
+        public ApplicationUser GetByUserName(string userName) => _users.TryGetValue(userName, out var user) ? user : null;
         public void Upsert(ApplicationUser user)
         {
             if (user == null || string.IsNullOrWhiteSpace(user.UserName)) return;
