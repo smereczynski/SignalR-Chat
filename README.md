@@ -31,7 +31,7 @@ The project intentionally keeps scope tight: fixed public rooms, text messages o
 * Delayed unread notifications: if a message remains unread after a configurable delay, send notification via email/SMS
 
 ## Fixed Room Topology
-Rooms are static; there is no runtime CRUD. The seeding hosted service ensures the three canonical rooms and initial users exist on startup.
+Rooms are static; there is no runtime CRUD. Rooms and initial users must be provisioned via the bootstrap script (see `docs/BOOTSTRAP.md` for details).
 
 ## Architecture Overview
 **Runtime**: ASP.NET Core 9 (Razor Pages + Controllers + SignalR Hub)  

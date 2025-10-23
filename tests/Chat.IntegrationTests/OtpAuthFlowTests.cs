@@ -31,11 +31,14 @@ namespace Chat.IntegrationTests
         [Fact]
         public async Task LegacyPlaintext_Mode_StoresPlaintext()
         {
-            // Force plaintext mode by overriding config
-            var factory = _factory.WithWebHostBuilder(b =>
+            // Create a factory with hashing disabled via ConfigureTestServices
+            var factory = new CustomWebApplicationFactory();
+            factory.ConfigureTestServices(services =>
             {
-                b.UseSetting("Otp:HashingEnabled", "false");
+                // Override OtpOptions to disable hashing
+                services.Configure<Chat.Web.Options.OtpOptions>(opts => opts.HashingEnabled = false);
             });
+            
             var client = factory.CreateClient();
             var start = await client.PostAsJsonAsync("/api/auth/start", new StartReq("bob"));
             Assert.True(start.StatusCode == HttpStatusCode.OK || start.StatusCode == HttpStatusCode.Accepted);
