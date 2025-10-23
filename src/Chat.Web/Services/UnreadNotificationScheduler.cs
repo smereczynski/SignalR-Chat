@@ -159,6 +159,9 @@ namespace Chat.Web.Services
                 var toNotify = userNames.Where(u => !string.Equals(u, msg.FromUser?.UserName, StringComparison.OrdinalIgnoreCase)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
                 if (toNotify.Count == 0) return;
 
+                _logger.LogInformation("Unread notification check for message {Id}: {UserCount} recipients to notify (excluding sender {Sender}): {Users}", 
+                    messageId, toNotify.Count, msg.FromUser?.UserName, string.Join(", ", toNotify));
+
                 // Mark as sent before sending to prevent duplicate sends if multiple timers fire
                 _notificationsSent.TryAdd(messageId, true);
 
@@ -180,6 +183,9 @@ namespace Chat.Web.Services
                         list.Add(user.UserName);
                     }
                 }
+
+                _logger.LogInformation("Unread notification recipients: {UserCount} users → {EmailCount} unique emails, {SmsCount} unique SMS numbers", 
+                    toNotify.Count, emailDests.Count, smsDests.Count);
 
                 // Prepare message body
                 var body = $"New message in #{roomName}";
