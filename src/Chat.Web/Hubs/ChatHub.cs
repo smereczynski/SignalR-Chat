@@ -44,6 +44,7 @@ namespace Chat.Web.Hubs
         private readonly ILogger<ChatHub> _logger;
         private readonly Services.IInProcessMetrics _metrics;
         private readonly Services.IMarkReadRateLimiter _markReadRateLimiter;
+        private readonly Services.IPresenceTracker _presenceTracker;
 
         /// <summary>
         /// Creates a new Hub instance.
@@ -54,7 +55,8 @@ namespace Chat.Web.Hubs
             ILogger<ChatHub> logger,
             Services.IInProcessMetrics metrics,
             Services.UnreadNotificationScheduler unreadScheduler,
-            Services.IMarkReadRateLimiter markReadRateLimiter)
+            Services.IMarkReadRateLimiter markReadRateLimiter,
+            Services.IPresenceTracker presenceTracker)
         {
             _users = users;
             _messages = messages;
@@ -63,7 +65,7 @@ namespace Chat.Web.Hubs
             _metrics = metrics;
             _unreadScheduler = unreadScheduler;
             _markReadRateLimiter = markReadRateLimiter;
-            _unreadScheduler = unreadScheduler;
+            _presenceTracker = presenceTracker;
         }
 
         /// <summary>
@@ -101,11 +103,10 @@ namespace Chat.Web.Hubs
                     activity?.SetStatus(ActivityStatusCode.Error, "room unauthorized");
                     return;
                 }
-                UserViewModel user;
-                lock (_ConnectionsLock)
-                {
-                    user = _Connections.FirstOrDefault(u => u.UserName == IdentityName);
-                }
+                // Get current user from distributed presence tracker
+                var allUsers = await _presenceTracker.GetAllUsersAsync();
+                var user = allUsers.FirstOrDefault(u => u.UserName == IdentityName);
+                
                 // If user not yet tracked (race with OnConnected) create an entry.
                 if (user == null)
                 {
@@ -116,17 +117,14 @@ namespace Chat.Web.Hubs
                         Avatar = profile?.Avatar,
                         CurrentRoom = string.Empty
                     };
-                    lock (_ConnectionsLock)
-                    {
-                        _Connections.Add(user);
-                    }
-                    _ConnectionsMap[IdentityName] = Context.ConnectionId;
                 }
+                
                 if (user.CurrentRoom == roomName)
                 {
                     // Already in requested room; no-op
                     return;
                 }
+                
                 var previous = user.CurrentRoom;
                 if (!string.IsNullOrEmpty(previous))
                 {
@@ -135,19 +133,27 @@ namespace Chat.Web.Hubs
                     activity?.AddEvent(new ActivityEvent("leave", tags: new ActivityTagsCollection {{"chat.room.prev", previous}}));
                     _metrics.DecRoomPresence(previous);
                     await Groups.RemoveFromGroupAsync(Context.ConnectionId, previous);
+                    await _presenceTracker.UserLeftRoomAsync(IdentityName, previous);
                 }
+                
                 await Groups.AddToGroupAsync(Context.ConnectionId, roomName);
-                lock (_ConnectionsLock)
-                {
-                    user.CurrentRoom = roomName;
-                }
+                
+                // Update distributed presence tracker
+                await _presenceTracker.UserJoinedRoomAsync(IdentityName, profile?.FullName ?? IdentityName, profile?.Avatar, roomName);
+                await _presenceTracker.UpdateConnectionIdAsync(IdentityName, Context.ConnectionId);
+                
+                // Update local reference for broadcast
+                user.CurrentRoom = roomName;
+                
                 // Broadcast to the entire group (including the caller) so every client receives a consistent
                 // addUser event even if their initial user list isn't yet loaded. This fixes a race where
                 // existing members failed to update presence until another hub action occurred.
                 await Clients.Group(roomName).SendAsync("addUser", user);
+                
                 // After broadcasting the new user, send a full presence snapshot to the caller to ensure
                 // they have every existing user even if some addUser events were missed before subscription.
-                var presenceSnapshot = Snapshot().Where(u => u.CurrentRoom == roomName).Select(u => new { u.UserName, u.FullName, u.Avatar, u.CurrentRoom }).ToList();
+                var presenceSnapshot = (await _presenceTracker.GetUsersInRoomAsync(roomName))
+                    .Select(u => new { u.UserName, u.FullName, u.Avatar, u.CurrentRoom }).ToList();
                 await Clients.Caller.SendAsync("presenceSnapshot", presenceSnapshot);
                 _logger.LogInformation("User {User} joined room {Room}", IdentityName, roomName);
                 _metrics.IncRoomsJoined();
@@ -178,18 +184,15 @@ namespace Chat.Web.Hubs
         }
 
         /// <summary>
-        /// Returns all connected users in a given room (in-memory snapshot).
+        /// Returns all connected users in a given room from distributed presence tracker.
         /// </summary>
-        public IEnumerable<UserViewModel> GetUsers(string roomName)
+        public async Task<IEnumerable<UserViewModel>> GetUsers(string roomName)
         {
             using var activity = Tracing.ActivitySource.StartActivity("ChatHub.GetUsers");
             activity?.SetTag("chat.room", roomName);
             if (string.IsNullOrWhiteSpace(roomName)) return Enumerable.Empty<UserViewModel>();
-                List<UserViewModel> users;
-                lock (_ConnectionsLock)
-                {
-                    users = _Connections.Where(u => u.CurrentRoom == roomName).ToList();
-                }
+            
+            var users = await _presenceTracker.GetUsersInRoomAsync(roomName);
             activity?.SetTag("chat.user.count", users.Count);
             return users;
         }
@@ -203,16 +206,21 @@ namespace Chat.Web.Hubs
             try
             {
                 var user = _users.GetByUserName(IdentityName);
-                UserViewModel existing;
+                
+                // Check if user already exists in distributed presence
+                var allUsers = await _presenceTracker.GetAllUsersAsync();
+                var existing = allUsers.FirstOrDefault(u => u.UserName == IdentityName);
+                
+                // Increment (or initialize) active connection count for this user (still per-instance for now)
                 lock (_ConnectionsLock)
                 {
-                    existing = _Connections.FirstOrDefault(u => u.UserName == IdentityName);
-                    // Increment (or initialize) active connection count for this user
                     _UserConnectionCounts.AddOrUpdate(IdentityName, 1, (key, oldValue) => oldValue + 1);
                 }
+                
                 if (existing != null)
                 {
-                    _ConnectionsMap[IdentityName] = Context.ConnectionId;
+                    // Update connection ID in distributed tracker
+                    await _presenceTracker.UpdateConnectionIdAsync(IdentityName, Context.ConnectionId);
                     activity?.SetTag("chat.duplicateConnection", true);
                     _logger.LogDebug("Duplicate connection for {User} reassigned connectionId", IdentityName);
                     await Clients.Caller.SendAsync("getProfileInfo", existing);
@@ -226,11 +234,15 @@ namespace Chat.Web.Hubs
                         Avatar = user?.Avatar,
                         CurrentRoom = string.Empty
                     };
-                    lock (_ConnectionsLock)
-                    {
-                        _Connections.Add(userViewModel);
-                    }
-                    _ConnectionsMap[IdentityName] = Context.ConnectionId;
+                    
+                    // Add to distributed presence tracker (no room yet)
+                    await _presenceTracker.UserJoinedRoomAsync(
+                        userViewModel.UserName,
+                        userViewModel.FullName,
+                        userViewModel.Avatar,
+                        string.Empty);
+                    await _presenceTracker.UpdateConnectionIdAsync(IdentityName, Context.ConnectionId);
+                    
                     _logger.LogInformation("User connected {User}", IdentityName);
                     _metrics.IncActiveConnections();
                     _metrics.UserAvailable(IdentityName);
@@ -290,11 +302,13 @@ namespace Chat.Web.Hubs
             using var activity = Tracing.ActivitySource.StartActivity("ChatHub.OnDisconnected");
             try
             {
-                UserViewModel user;
+                // Get user from distributed presence
+                var allUsers = await _presenceTracker.GetAllUsersAsync();
+                var user = allUsers.FirstOrDefault(u => u.UserName == IdentityName);
+                
                 int remainingConnections = 0;
                 lock (_ConnectionsLock)
                 {
-                    user = _Connections.FirstOrDefault(u => u.UserName == IdentityName);
                     // Decrement connection count atomically
                     if (_UserConnectionCounts.TryGetValue(IdentityName, out var cnt))
                     {
@@ -310,41 +324,33 @@ namespace Chat.Web.Hubs
                         remainingConnections = cnt;
                     }
                 }
+                
                 if (user == null)
                 {
                     _logger.LogDebug("Disconnect for unknown user {User}", IdentityName);
                     await base.OnDisconnectedAsync(exception);
                     return;
                 }
+                
                 // Only remove presence when the last connection closes
                 if (remainingConnections <= 0)
                 {
-                    lock (_ConnectionsLock)
-                    {
-                        _Connections.Remove(user);
-                    }
                     if (!string.IsNullOrWhiteSpace(user.CurrentRoom))
                     {
                         await Clients.OthersInGroup(user.CurrentRoom).SendAsync("removeUser", user);
                         _metrics.DecRoomPresence(user.CurrentRoom);
                     }
-                    // Remove mapping only if it points at this connection id
-                    if (_ConnectionsMap.TryGetValue(user.UserName, out var mapped) && string.Equals(mapped, Context.ConnectionId, StringComparison.Ordinal))
-                    {
-                        _ConnectionsMap.TryRemove(user.UserName, out _);
-                    }
+                    
+                    // Remove from distributed presence tracker
+                    await _presenceTracker.UserDisconnectedAsync(IdentityName);
+                    
                     _logger.LogInformation("User disconnected {User}", IdentityName);
                     _metrics.DecActiveConnections();
                     _metrics.UserUnavailable(IdentityName);
                 }
                 else
                 {
-                    // Multiple active connections remain; do not remove presence or mapping if a newer connection exists.
-                    // Only clear stale mapping if it matches this connection id.
-                    if (_ConnectionsMap.TryGetValue(user.UserName, out var mapped) && string.Equals(mapped, Context.ConnectionId, StringComparison.Ordinal))
-                    {
-                        _ConnectionsMap.TryRemove(user.UserName, out _);
-                    }
+                    // Multiple active connections remain; presence is retained in Redis
                     _logger.LogDebug("User {User} has {Count} remaining connections; presence retained", IdentityName, remainingConnections);
                 }
             }
@@ -376,20 +382,11 @@ namespace Chat.Web.Hubs
         // Device indicator removed as unused.
 
         /// <summary>
-        /// Returns a thread-safe deep snapshot of current connections (used externally for presence API).
+        /// Returns a snapshot of current connections from distributed presence tracker (used externally for presence API).
         /// </summary>
-        public static IReadOnlyList<UserViewModel> Snapshot()
+        public async Task<IReadOnlyList<UserViewModel>> SnapshotAsync()
         {
-            lock (_ConnectionsLock)
-            {
-                return _Connections.Select(c => new UserViewModel
-                {
-                    UserName = c.UserName,
-                    FullName = c.FullName,
-                    Avatar = c.Avatar,
-                    CurrentRoom = c.CurrentRoom
-                }).ToList();
-            }
+            return await _presenceTracker.GetAllUsersAsync();
         }
 
         /// <summary>
