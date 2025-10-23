@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Threading.Tasks;
 using Chat.Web.ViewModels;
 using Microsoft.Extensions.Logging;
@@ -10,16 +9,15 @@ using System.Text.Json;
 namespace Chat.Web.Services
 {
     /// <summary>
-    /// Redis-backed distributed presence tracker for multi-instance SignalR deployments.
-    /// Uses Redis hashes to store user presence data with TTL-based cleanup.
+    /// Simplified Redis-backed presence tracker using a single hash for all users.
+    /// Stores userName → user data (fullName, avatar, currentRoom) with TTL-based cleanup.
     /// </summary>
     public class RedisPresenceTracker : IPresenceTracker
     {
         private readonly IConnectionMultiplexer _redis;
         private readonly ILogger<RedisPresenceTracker> _logger;
-        private const string PresenceKeyPrefix = "presence:user:";
-        private const string ConnectionMapKey = "presence:connections";
-        private const int PresenceTtlSeconds = 300; // 5 minutes
+        private const string PresenceHashKey = "presence:users";
+        private const int PresenceTtlSeconds = 600; // 10 minutes
 
         public RedisPresenceTracker(IConnectionMultiplexer redis, ILogger<RedisPresenceTracker> logger)
         {
@@ -27,64 +25,56 @@ namespace Chat.Web.Services
             _logger = logger;
         }
 
-        public async Task UserJoinedRoomAsync(string userName, string fullName, string avatar, string roomName)
+        public async Task SetUserRoomAsync(string userName, string fullName, string avatar, string roomName)
         {
-            if (string.IsNullOrWhiteSpace(userName) || string.IsNullOrWhiteSpace(roomName))
+            if (string.IsNullOrWhiteSpace(userName))
                 return;
 
             try
             {
                 var db = _redis.GetDatabase();
-                var key = PresenceKeyPrefix + userName;
                 var user = new UserViewModel
                 {
                     UserName = userName,
                     FullName = fullName ?? userName,
                     Avatar = avatar,
-                    CurrentRoom = roomName
+                    CurrentRoom = roomName ?? string.Empty
                 };
 
                 var json = JsonSerializer.Serialize(user);
-                await db.StringSetAsync(key, json, TimeSpan.FromSeconds(PresenceTtlSeconds));
-                _logger.LogDebug("Redis: User {User} joined room {Room}", userName, roomName);
+                await db.HashSetAsync(PresenceHashKey, userName, json);
+                await db.KeyExpireAsync(PresenceHashKey, TimeSpan.FromSeconds(PresenceTtlSeconds));
+                _logger.LogDebug("Redis: User {User} set to room {Room}", userName, roomName);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to track user join in Redis: {User} -> {Room}", userName, roomName);
+                _logger.LogError(ex, "Failed to set user room in Redis: {User} -> {Room}", userName, roomName);
             }
         }
 
-        public async Task UserLeftRoomAsync(string userName, string roomName)
+        public async Task<UserViewModel> GetUserAsync(string userName)
         {
             if (string.IsNullOrWhiteSpace(userName))
-                return;
+                return null;
 
             try
             {
                 var db = _redis.GetDatabase();
-                var key = PresenceKeyPrefix + userName;
+                var json = await db.HashGetAsync(PresenceHashKey, userName);
                 
-                // Check if user exists and update their room to empty
-                var existing = await db.StringGetAsync(key);
-                if (existing.HasValue)
-                {
-                    var user = JsonSerializer.Deserialize<UserViewModel>(existing.ToString());
-                    if (user != null && user.CurrentRoom == roomName)
-                    {
-                        user.CurrentRoom = string.Empty;
-                        var json = JsonSerializer.Serialize(user);
-                        await db.StringSetAsync(key, json, TimeSpan.FromSeconds(PresenceTtlSeconds));
-                        _logger.LogDebug("Redis: User {User} left room {Room}", userName, roomName);
-                    }
-                }
+                if (!json.HasValue)
+                    return null;
+
+                return JsonSerializer.Deserialize<UserViewModel>(json.ToString());
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to track user leave in Redis: {User} <- {Room}", userName, roomName);
+                _logger.LogError(ex, "Failed to get user from Redis: {User}", userName);
+                return null;
             }
         }
 
-        public async Task UserDisconnectedAsync(string userName)
+        public async Task RemoveUserAsync(string userName)
         {
             if (string.IsNullOrWhiteSpace(userName))
                 return;
@@ -92,10 +82,8 @@ namespace Chat.Web.Services
             try
             {
                 var db = _redis.GetDatabase();
-                var key = PresenceKeyPrefix + userName;
-                await db.KeyDeleteAsync(key);
-                await db.HashDeleteAsync(ConnectionMapKey, userName);
-                _logger.LogDebug("Redis: User {User} disconnected", userName);
+                await db.HashDeleteAsync(PresenceHashKey, userName);
+                _logger.LogDebug("Redis: User {User} removed", userName);
             }
             catch (Exception ex)
             {
@@ -103,55 +91,22 @@ namespace Chat.Web.Services
             }
         }
 
-        public async Task<IReadOnlyList<UserViewModel>> GetUsersInRoomAsync(string roomName)
-        {
-            if (string.IsNullOrWhiteSpace(roomName))
-                return Array.Empty<UserViewModel>();
-
-            try
-            {
-                var allUsers = await GetAllUsersInternalAsync();
-                return allUsers.Where(u => u.CurrentRoom == roomName).ToList();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to get users in room from Redis: {Room}", roomName);
-                return Array.Empty<UserViewModel>();
-            }
-        }
-
         public async Task<IReadOnlyList<UserViewModel>> GetAllUsersAsync()
         {
             try
             {
-                return await GetAllUsersInternalAsync();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to get all users from Redis");
-                return Array.Empty<UserViewModel>();
-            }
-        }
+                var db = _redis.GetDatabase();
+                var entries = await db.HashGetAllAsync(PresenceHashKey);
 
-        private async Task<List<UserViewModel>> GetAllUsersInternalAsync()
-        {
-            var db = _redis.GetDatabase();
-            var server = _redis.GetServer(_redis.GetEndPoints().First());
-            var keys = server.Keys(pattern: PresenceKeyPrefix + "*").ToArray();
+                if (entries.Length == 0)
+                    return Array.Empty<UserViewModel>();
 
-            if (keys.Length == 0)
-                return new List<UserViewModel>();
-
-            var values = await db.StringGetAsync(keys);
-            var users = new List<UserViewModel>();
-
-            foreach (var value in values)
-            {
-                if (value.HasValue)
+                var users = new List<UserViewModel>();
+                foreach (var entry in entries)
                 {
                     try
                     {
-                        var user = JsonSerializer.Deserialize<UserViewModel>(value.ToString());
+                        var user = JsonSerializer.Deserialize<UserViewModel>(entry.Value.ToString());
                         if (user != null)
                         {
                             users.Add(user);
@@ -162,43 +117,13 @@ namespace Chat.Web.Services
                         // Skip malformed entries
                     }
                 }
-            }
 
-            return users;
-        }
-
-        public async Task UpdateConnectionIdAsync(string userName, string connectionId)
-        {
-            if (string.IsNullOrWhiteSpace(userName) || string.IsNullOrWhiteSpace(connectionId))
-                return;
-
-            try
-            {
-                var db = _redis.GetDatabase();
-                await db.HashSetAsync(ConnectionMapKey, userName, connectionId);
-                await db.KeyExpireAsync(ConnectionMapKey, TimeSpan.FromSeconds(PresenceTtlSeconds));
+                return users;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to update connection ID in Redis: {User}", userName);
-            }
-        }
-
-        public async Task<string> GetConnectionIdAsync(string userName)
-        {
-            if (string.IsNullOrWhiteSpace(userName))
-                return null;
-
-            try
-            {
-                var db = _redis.GetDatabase();
-                var connectionId = await db.HashGetAsync(ConnectionMapKey, userName);
-                return connectionId.HasValue ? connectionId.ToString() : null;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to get connection ID from Redis: {User}", userName);
-                return null;
+                _logger.LogError(ex, "Failed to get all users from Redis");
+                return Array.Empty<UserViewModel>();
             }
         }
     }
