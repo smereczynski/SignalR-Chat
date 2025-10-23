@@ -5,44 +5,30 @@ using Chat.Web.ViewModels;
 namespace Chat.Web.Services
 {
     /// <summary>
-    /// Distributed presence tracking service for multi-instance deployments.
-    /// Ensures user presence state is synchronized across all app instances via Redis.
+    /// Simplified presence tracking for distributed SignalR deployments.
+    /// Stores user → room mappings in Redis. Per-connection state uses Context.Items.
     /// </summary>
     public interface IPresenceTracker
     {
         /// <summary>
-        /// Marks a user as online in a specific room.
+        /// Sets the user's current room and profile in distributed storage.
+        /// Pass empty roomName to indicate connected but not in a room.
         /// </summary>
-        Task UserJoinedRoomAsync(string userName, string fullName, string avatar, string roomName);
+        Task SetUserRoomAsync(string userName, string fullName, string avatar, string roomName);
 
         /// <summary>
-        /// Removes a user from a specific room.
+        /// Gets a single user's presence information.
         /// </summary>
-        Task UserLeftRoomAsync(string userName, string roomName);
+        Task<UserViewModel> GetUserAsync(string userName);
 
         /// <summary>
-        /// Completely removes a user from all rooms (on disconnect).
+        /// Removes a user from distributed presence (on disconnect).
         /// </summary>
-        Task UserDisconnectedAsync(string userName);
+        Task RemoveUserAsync(string userName);
 
         /// <summary>
-        /// Gets all users currently in a specific room across all instances.
-        /// </summary>
-        Task<IReadOnlyList<UserViewModel>> GetUsersInRoomAsync(string roomName);
-
-        /// <summary>
-        /// Gets a snapshot of all users and their current rooms across all instances.
+        /// Gets all users for presence snapshot API (not used in hot path).
         /// </summary>
         Task<IReadOnlyList<UserViewModel>> GetAllUsersAsync();
-
-        /// <summary>
-        /// Updates the user's connection ID (for targeted messaging).
-        /// </summary>
-        Task UpdateConnectionIdAsync(string userName, string connectionId);
-
-        /// <summary>
-        /// Gets the connection ID for a specific user (if online).
-        /// </summary>
-        Task<string> GetConnectionIdAsync(string userName);
     }
 }
