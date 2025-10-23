@@ -1,7 +1,8 @@
 using System.Linq;
+using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Chat.Web.Hubs;
+using Chat.Web.Services;
 
 namespace Chat.Web.Controllers
 {
@@ -10,10 +11,17 @@ namespace Chat.Web.Controllers
     [ApiController]
     public class ChatHealthController : ControllerBase
     {
-        [HttpGet("presence")]
-        public IActionResult Presence()
+        private readonly IPresenceTracker _presenceTracker;
+
+        public ChatHealthController(IPresenceTracker presenceTracker)
         {
-            var snapshot = ChatHub.Snapshot();
+            _presenceTracker = presenceTracker;
+        }
+
+        [HttpGet("presence")]
+        public async Task<IActionResult> Presence()
+        {
+            var snapshot = await _presenceTracker.GetAllUsersAsync();
             var rooms = snapshot.GroupBy(u => u.CurrentRoom)
                 .Select(g => new { room = string.IsNullOrEmpty(g.Key) ? "" : g.Key, users = g.Select(x => new { x.UserName }).ToList(), count = g.Count() })
                 .OrderBy(r => r.room)

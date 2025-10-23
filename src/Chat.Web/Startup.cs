@@ -199,6 +199,7 @@ namespace Chat.Web
                 services.AddSingleton<IRoomsRepository, InMemoryRoomsRepository>();
                 services.AddSingleton<IMessagesRepository, InMemoryMessagesRepository>();
                 services.AddSingleton<IOtpStore, InMemoryOtpStore>();
+                services.AddSingleton<Services.IPresenceTracker, Services.InMemoryPresenceTracker>();
             }
             else
             {
@@ -236,6 +237,7 @@ namespace Chat.Web
                 redisConfig.AbortOnConnectFail = false; // Don't fail startup if Redis is temporarily unavailable
                 services.AddSingleton<IConnectionMultiplexer>(sp => ConnectionMultiplexer.Connect(redisConfig));
                 services.AddSingleton<IOtpStore, RedisOtpStore>();
+                services.AddSingleton<Services.IPresenceTracker, Services.RedisPresenceTracker>();
 
                 // Health checks for Redis and Cosmos with timeouts
                 services.AddHealthChecks()
