@@ -13,7 +13,7 @@ namespace Chat.IntegrationTests
         [Fact]
         public async Task Alice_Can_Join_All_Assigned_Rooms()
         {
-            // alice seeded for general, ops
+            // Test fixture provides alice with access to general and ops
             var baseClient = _factory.CreateClient();
             baseClient.DefaultRequestHeaders.Add("X-Test-User", "alice");
             var hubUrl = baseClient.BaseAddress + "chatHub";

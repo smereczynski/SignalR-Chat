@@ -53,8 +53,8 @@ namespace Chat.IntegrationTests
         }
 
         /// <summary>
-        /// Ensures the server has fully started and data has been seeded.
-        /// Since hosted services don't run reliably in WebApplicationFactory, we seed directly.
+        /// Ensures the server has fully started and test data is initialized.
+        /// Since hosted services don't run reliably in WebApplicationFactory, we initialize test data directly.
         /// </summary>
         private void EnsureServerStarted()
         {
@@ -67,10 +67,10 @@ namespace Chat.IntegrationTests
                 // Access the Server property to force lazy initialization
                 _ = Server;
                 
-                // Seed test data directly (DataSeedHostedService doesn't run in test harness)
+                // Initialize test fixture data directly (test infrastructure, not production seeding)
                 var usersRepo = Services.GetRequiredService<IUsersRepository>();
                 
-                // Only seed if not already seeded
+                // Only initialize if not already present
                 if (!usersRepo.GetAll().Any())
                 {
                     usersRepo.Upsert(new Chat.Web.Models.ApplicationUser
@@ -105,13 +105,13 @@ namespace Chat.IntegrationTests
                     });
                 }
                 
-                // Verify seeding completed
+                // Verify test data initialization completed
                 var finalUsers = usersRepo.GetAll().ToList();
                 if (finalUsers.Count < 3)
                 {
                     var userNames = string.Join(", ", finalUsers.Select(u => u.UserName));
                     throw new InvalidOperationException(
-                        $"Data seeding failed. Expected at least 3 users, found {finalUsers.Count}: [{userNames}]");
+                        $"Test fixture initialization failed. Expected at least 3 users, found {finalUsers.Count}: [{userNames}]");
                 }
                 
                 _initialized = true;
@@ -119,7 +119,7 @@ namespace Chat.IntegrationTests
         }
 
         /// <summary>
-        /// Creates a client after ensuring the server and data seeding are ready.
+        /// Creates a client after ensuring the server and test fixture data are ready.
         /// </summary>
         public new HttpClient CreateClient()
         {
