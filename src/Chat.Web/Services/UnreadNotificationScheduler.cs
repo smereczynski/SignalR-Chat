@@ -159,8 +159,8 @@ namespace Chat.Web.Services
                 var toNotify = userNames.Where(u => !string.Equals(u, msg.FromUser?.UserName, StringComparison.OrdinalIgnoreCase)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
                 if (toNotify.Count == 0) return;
 
-                _logger.LogInformation("Unread notification check for message {Id}: {UserCount} recipients to notify (excluding sender {Sender}): {Users}", 
-                    messageId, toNotify.Count, msg.FromUser?.UserName, string.Join(", ", toNotify));
+                _logger.LogInformation("Unread notification check for message {Id}: {UserCount} recipients to notify (excluding sender)", 
+                    messageId, toNotify.Count);
 
                 // Mark as sent before sending to prevent duplicate sends if multiple timers fire
                 _notificationsSent.TryAdd(messageId, true);
@@ -184,11 +184,11 @@ namespace Chat.Web.Services
                         {
                             await _otpSender.SendAsync(user.UserName, user.Email, body).ConfigureAwait(false);
                             emailsSent++;
-                            _logger.LogInformation("Unread notification (email) queued for user {User}", user.UserName);
+                            _logger.LogInformation("Unread notification (email) queued");
                         }
                         catch (Exception ex)
                         {
-                            _logger.LogWarning(ex, "Failed to send unread email notification to {User}", user.UserName);
+                            _logger.LogWarning(ex, "Failed to send unread email notification");
                         }
                     }
                     
@@ -199,11 +199,11 @@ namespace Chat.Web.Services
                         {
                             await _otpSender.SendAsync(user.UserName, user.MobileNumber, body).ConfigureAwait(false);
                             smsSent++;
-                            _logger.LogInformation("Unread notification (sms) queued for user {User}", user.UserName);
+                            _logger.LogInformation("Unread notification (sms) queued");
                         }
                         catch (Exception ex)
                         {
-                            _logger.LogWarning(ex, "Failed to send unread sms notification to {User}", user.UserName);
+                            _logger.LogWarning(ex, "Failed to send unread sms notification");
                         }
                     }
                 }
