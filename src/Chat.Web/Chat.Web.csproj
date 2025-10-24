@@ -17,6 +17,7 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Azure.SignalR" Version="1.30.3" />
   <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.38.1" />
+  <PackageReference Include="Serilog.Sinks.ApplicationInsights" Version="4.0.0" />
     <PackageReference Include="StackExchange.Redis" Version="2.7.33" />
   <PackageReference Include="Isopoh.Cryptography.Argon2" Version="2.0.0" />
     <PackageReference Include="Azure.Communication.Email" Version="1.0.0" />
