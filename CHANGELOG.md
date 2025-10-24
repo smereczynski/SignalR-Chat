@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.2] - 2025-10-24
+
+### Fixed
+- **Documentation**: Updated ARCHITECTURE.md to reflect correct data access implementation (Cosmos DB with custom repositories, not Entity Framework Core)
+
+## [0.9.1] - 2025-10-24
+
+### Fixed
+- **Application Insights Logging**: Added Serilog.Sinks.ApplicationInsights package to enable Production logging visibility
+  - Configured Serilog to write logs directly to Application Insights in Production environment
+  - Resolves observability gap where Information-level logs were not visible in Azure Monitor
+  - Enables monitoring of notification system metrics (email/SMS delivery counts, user activity)
+  - Uses `APPLICATIONINSIGHTS_CONNECTION_STRING` environment variable
+  - Maintains OTLP and Console sinks for other environments
+- **Logging Level Configuration**: Changed Production logging level from Warning to Information to capture application logs
+  - Updated `appsettings.Production.json` to include Information-level logs for Chat.Web namespace
+
 ## [0.9.0] - 2025-10-24
 
 ### Added

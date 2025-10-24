@@ -1,8 +1,8 @@
 # SignalR-Chat
 
-**Version**: 0.9.0
+**Version**: 0.9.2
 
-Real-time multi-room chat on .NET 9 using SignalR (in‑process hub), EF Core persistence, Redis for OTP codes (or in‑memory when testing), optional Azure SignalR (configured automatically when not in test mode), OpenTelemetry (traces + metrics + logs) and a small vanilla JavaScript client. OTP codes are stored hashed by default using Argon2id with a per-code salt and an environment-supplied pepper.
+Real-time multi-room chat on .NET 9 using SignalR (in‑process hub), Azure Cosmos DB persistence, Redis for OTP codes (or in‑memory when testing), optional Azure SignalR (configured automatically when not in test mode), OpenTelemetry (traces + metrics + logs) and a small vanilla JavaScript client. OTP codes are stored hashed by default using Argon2id with a per-code salt and an environment-supplied pepper.
 
 The project intentionally keeps scope tight: fixed public rooms, text messages only, no editing/deleting, and OTP-based authentication.
 
@@ -39,7 +39,7 @@ Rooms are static; there is no runtime CRUD. Rooms and initial users must be prov
 ## Architecture Overview
 **Runtime**: ASP.NET Core 9 (Razor Pages + Controllers + SignalR Hub)  
 **Real-time**: SignalR hub (Azure SignalR automatically added when not running in in-memory test mode)  
-**Persistence**: EF Core context for users, rooms, messages (Cosmos repositories or in-memory depending on config)  
+**Persistence**: Azure Cosmos DB with custom repository pattern (or in-memory repositories for testing)  
 **OTP / Cache**: Redis (or in-memory fallback) storing short-lived OTP codes (`otp:{user}`)  
 **Auth Flow**: Request code → store in OTP store → user enters code → cookie issued → hub connects  
 **Observability**: OpenTelemetry (trace + metric + log providers) with exporter priority (Azure Monitor > OTLP > Console) and domain counters  
