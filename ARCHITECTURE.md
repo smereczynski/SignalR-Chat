@@ -131,7 +131,7 @@ sequenceDiagram
 
 ## Runtime overview
 - ASP.NET Core 9 (Razor Pages + Controllers + SignalR Hub)
-- Persistence: EF Core; Cosmos DB repositories in normal mode, in-memory repositories in Testing:InMemory mode
+- Persistence: Azure Cosmos DB with custom repository pattern; in-memory repositories when Testing:InMemory mode enabled
 - OTP store: Redis in normal mode, in-memory in Testing:InMemory
 - Auth: Cookie authentication after OTP verification (dedicated `/login` page)
 - Observability: OpenTelemetry (traces, metrics, logs) with exporter auto-selection
@@ -218,7 +218,7 @@ This section captures core components and runtime flows beyond OTP specifics.
 ## Current Overview
 - **Framework**: ASP.NET Core (Razor Pages + minimal MVC endpoints + SignalR Hub)
 - **Real-time Transport**: SignalR (in-process hub).
-- **Persistence**: Entity Framework Core (ApplicationDbContext) with underlying relational store (migrations indicate relational usage).
+- **Persistence**: Azure Cosmos DB with custom repository pattern (CosmosUsersRepository, CosmosRoomsRepository, CosmosMessagesRepository). In-memory repositories available for testing.
 - **Authentication**: Passwordless one-time passcode (OTP) flow. Short-lived OTP codes stored in Redis; successful verification establishes cookie-auth session.
 - **Redis Usage**: Only for OTP storage (key prefix `otp:`) with TTL; no chat message caching or SignalR backplane configured yet.
 - **Front-End**: Vanilla JavaScript modules (`chat.js`, `site.js`, `login.js`) referenced directly by Razor pages. Optional esbuild step can produce minified bundles in `wwwroot/js/dist/` for production testing.
@@ -383,7 +383,8 @@ Benefits:
 This section documents the canonical shapes for the three core entities used by the application: user, room, and message.
 
 Notes on storage:
-- The domain models are defined via EF Core entities, but the app can also use Cosmos-backed repositories. Shapes below capture the semantic contract across both.
+- The domain models use custom repository interfaces (IUsersRepository, IRoomsRepository, IMessagesRepository) with Cosmos DB and in-memory implementations.
+- Cosmos repositories use Microsoft.Azure.Cosmos SDK directly with custom query building.
 - Admin tooling may emit slightly different field names; compatibility rules are noted per entity.
 
 ### User
