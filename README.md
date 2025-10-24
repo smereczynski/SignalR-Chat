@@ -1,4 +1,7 @@
 # SignalR-Chat
+
+**Version**: 0.9.0
+
 Real-time multi-room chat on .NET 9 using SignalR (in‑process hub), EF Core persistence, Redis for OTP codes (or in‑memory when testing), optional Azure SignalR (configured automatically when not in test mode), OpenTelemetry (traces + metrics + logs) and a small vanilla JavaScript client. OTP codes are stored hashed by default using Argon2id with a per-code salt and an environment-supplied pepper.
 
 The project intentionally keeps scope tight: fixed public rooms, text messages only, no editing/deleting, and OTP-based authentication.
