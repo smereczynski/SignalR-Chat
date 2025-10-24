@@ -7,6 +7,7 @@ using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using Chat.Web.Observability;
 using System;
+using Microsoft.ApplicationInsights.Extensibility;
 
 namespace Chat.Web
 {
@@ -25,6 +26,8 @@ namespace Chat.Web
         public static void Main(string[] args)
         {
             var otlpEndpoint = Environment.GetEnvironmentVariable("OTel__OtlpEndpoint");
+            var aiConnectionString = Environment.GetEnvironmentVariable("APPLICATIONINSIGHTS_CONNECTION_STRING");
+            var envName = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT");
             // Determine OTLP protocol from endpoint: default to gRPC unless port 4318 is used
             var useHttpProto = !string.IsNullOrWhiteSpace(otlpEndpoint) && otlpEndpoint.Contains(":4318", StringComparison.Ordinal);
 
@@ -36,7 +39,15 @@ namespace Chat.Web
                 .Enrich.WithThreadId()
                 .WriteTo.Console(outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {SourceContext} {Message:lj} {Properties:j}{NewLine}{Exception}");
 
-            if (!string.IsNullOrWhiteSpace(otlpEndpoint))
+            // In Production, write to Application Insights if connection string available
+            if (string.Equals(envName, "Production", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(aiConnectionString))
+            {
+                var telemetryConfig = TelemetryConfiguration.CreateDefault();
+                telemetryConfig.ConnectionString = aiConnectionString;
+                loggerConfig = loggerConfig.WriteTo.ApplicationInsights(telemetryConfig, TelemetryConverter.Traces);
+            }
+            // Otherwise, if OTLP endpoint configured, use OpenTelemetry sink
+            else if (!string.IsNullOrWhiteSpace(otlpEndpoint))
             {
                 loggerConfig = loggerConfig.WriteTo.OpenTelemetry(options =>
                 {
@@ -64,6 +75,19 @@ namespace Chat.Web
             {
                 Log.CloseAndFlush();
             }
+        }
+
+        private static string ExtractInstrumentationKey(string connectionString)
+        {
+            var parts = connectionString.Split(';');
+            foreach (var part in parts)
+            {
+                if (part.StartsWith("InstrumentationKey=", StringComparison.OrdinalIgnoreCase))
+                {
+                    return part.Substring("InstrumentationKey=".Length);
+                }
+            }
+            return string.Empty;
         }
 
         /// <summary>

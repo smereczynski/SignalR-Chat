@@ -170,6 +170,8 @@ namespace Chat.Web
                     AddSelectedExporter(o, otlpEndpoint, Configuration);
                     o.IncludeFormattedMessage = true;
                     o.IncludeScopes = false;
+                    // Respect appsettings.json LogLevel configuration
+                    o.SetResourceBuilder(ResourceBuilder.CreateDefault().AddService(Tracing.ServiceName));
                 });
             });
             // Options
