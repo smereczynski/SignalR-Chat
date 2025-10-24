@@ -43,6 +43,11 @@ jobs:
     
     - name: Run tests
       run: dotnet test src/Chat.sln --configuration Release --no-build --verbosity normal
+      env:
+        Testing__InMemory: "true"
+        Acs__ConnectionString: "endpoint=https://test.communication.azure.com/;accesskey=dGVzdGtleQ=="
+        Acs__EmailFrom: "test@example.com"
+        Acs__SmsFrom: "+1234567890"
     
     - name: Publish application
       run: dotnet publish src/Chat.Web/Chat.Web.csproj --configuration Release --output ./publish --no-build
