@@ -11,8 +11,48 @@
     <environment exclude="Development">
         <link rel="stylesheet" href="~/css/site.min.css" asp-append-version="true" />
     </environment>
+    <style>
+        .culture-switcher {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            z-index: 1050;
+        }
+        .culture-switcher select {
+            padding: 0.25rem 0.5rem;
+            font-size: 0.875rem;
+            border-radius: 0.25rem;
+            border: 1px solid #dee2e6;
+            background-color: white;
+            cursor: pointer;
+        }
+        .culture-switcher select:hover {
+            border-color: #0d6efd;
+        }
+    </style>
 </head>
 <body>
+    <!-- Culture Switcher -->
+    <div class="culture-switcher">
+        <form action="/Culture/Set" method="post">
+            <select name="culture" onchange="this.form.submit()" class="form-select form-select-sm">
+                @{
+                    var currentCulture = System.Globalization.CultureInfo.CurrentUICulture.Name;
+                }
+                <option value="en" selected="@(currentCulture == "en" || currentCulture.StartsWith("en-"))">🇬🇧 English</option>
+                <option value="pl-PL" selected="@(currentCulture == "pl-PL" || currentCulture.StartsWith("pl"))">🇵🇱 Polski</option>
+                <option value="de-DE" selected="@(currentCulture == "de-DE" || currentCulture.StartsWith("de"))">🇩🇪 Deutsch</option>
+                <option value="cs-CZ" selected="@(currentCulture == "cs-CZ" || currentCulture.StartsWith("cs"))">🇨🇿 Čeština</option>
+                <option value="sk-SK" selected="@(currentCulture == "sk-SK" || currentCulture.StartsWith("sk"))">🇸🇰 Slovenčina</option>
+                <option value="uk-UA" selected="@(currentCulture == "uk-UA" || currentCulture.StartsWith("uk"))">🇺🇦 Українська</option>
+                <option value="be-BY" selected="@(currentCulture == "be-BY" || currentCulture.StartsWith("be"))">🇧🇾 Беларуская</option>
+                <option value="lt-LT" selected="@(currentCulture == "lt-LT" || currentCulture.StartsWith("lt"))">🇱🇹 Lietuvių</option>
+                <option value="ru-RU" selected="@(currentCulture == "ru-RU" || currentCulture.StartsWith("ru"))">🇷🇺 Русский</option>
+            </select>
+            <input type="hidden" name="returnUrl" value="@Context.Request.Path" />
+        </form>
+    </div>
+
     <div class="vh-100">
         @RenderBody()
     </div>
