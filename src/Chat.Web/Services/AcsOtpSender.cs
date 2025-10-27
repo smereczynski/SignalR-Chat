@@ -5,6 +5,7 @@ using Azure.Communication.Sms;
 using Chat.Web.Options;
 using Chat.Web.Resilience;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Localization;
 
 namespace Chat.Web.Services
 {
@@ -18,6 +19,7 @@ namespace Chat.Web.Services
     private readonly EmailClient _emailClient;
     private readonly SmsClient _smsClient;
     private readonly ILogger<AcsOtpSender> _logger;
+        private readonly IStringLocalizer<Resources.SharedResources> _localizer;
         private static DateTimeOffset _cooldownUntil = DateTimeOffset.MinValue;
         private static readonly object _gate = new object();
         private const int CooldownSeconds = 15; // brief cooldown after repeated failures
@@ -25,7 +27,7 @@ namespace Chat.Web.Services
     /// <summary>
     /// Validates configuration and primes Email + SMS clients.
     /// </summary>
-    public AcsOtpSender(AcsOptions options, ILogger<AcsOtpSender> logger)
+    public AcsOtpSender(AcsOptions options, ILogger<AcsOtpSender> logger, IStringLocalizer<Resources.SharedResources> localizer)
         {
             _options = options;
             if (string.IsNullOrWhiteSpace(options?.ConnectionString))
@@ -33,6 +35,7 @@ namespace Chat.Web.Services
             _emailClient = new EmailClient(options.ConnectionString);
             _smsClient = new SmsClient(options.ConnectionString);
             _logger = logger;
+            _localizer = localizer;
         }
 
     /// <inheritdoc />
@@ -57,8 +60,8 @@ namespace Chat.Web.Services
                 if (string.IsNullOrWhiteSpace(_options.EmailFrom))
                     throw new InvalidOperationException("AcsOptions.EmailFrom is required to send email OTP.");
 
-                var subject = isNotification ? "New message" : "Your verification code";
-                var body = isNotification ? code : $"Your verification code is: {code}";
+                var subject = isNotification ? _localizer["EmailSubjectNewMessage"] : _localizer["EmailSubjectVerificationCode"];
+                var body = isNotification ? code : _localizer["EmailBodyVerificationCode", code];
                 // Do not block on provider end-to-end completion; start send and return, with retries
                 try
                 {
@@ -83,7 +86,7 @@ namespace Chat.Web.Services
                 if (string.IsNullOrWhiteSpace(_options.SmsFrom))
                     throw new InvalidOperationException("AcsOptions.SmsFrom is required to send SMS OTP.");
 
-                var body = isNotification ? code : $"Code: {code}";
+                var body = isNotification ? code : _localizer["SmsBodyVerificationCode", code];
                 try
                 {
                     await RetryHelper.ExecuteAsync(

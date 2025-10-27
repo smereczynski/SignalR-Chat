@@ -27,6 +27,7 @@ using Microsoft.AspNetCore.Authentication;
 using System.Security.Claims;
 using System.Text.Encodings.Web;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Localization;
 // OpenTelemetry instrumentation extension namespaces (ensure packages installed: OpenTelemetry.Instrumentation.AspNetCore, OpenTelemetry.Exporter.OpenTelemetryProtocol)
 using System.Diagnostics;
 #if OPENTELEMETRY_INSTRUMENTATION
@@ -255,7 +256,10 @@ namespace Chat.Web
                     EmailFrom = Configuration["Acs:EmailFrom"],
                     SmsFrom = Configuration["Acs:SmsFrom"]
                 };
-                services.AddSingleton<IOtpSender>(sp => new AcsOtpSender(acsOptions, sp.GetRequiredService<ILogger<AcsOtpSender>>()));
+                services.AddSingleton<IOtpSender>(sp => new AcsOtpSender(
+                    acsOptions, 
+                    sp.GetRequiredService<ILogger<AcsOtpSender>>(),
+                    sp.GetRequiredService<IStringLocalizer<Resources.SharedResources>>()));
                 // Include ACS in health checks if present (config check only)
                 services.AddHealthChecks().AddCheck("acs-config", () => HealthCheckResult.Healthy("configured"), tags: new[] { "ready" });
             }
