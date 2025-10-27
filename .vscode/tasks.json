@@ -4,7 +4,7 @@
 		{
 			"label": "test",
 			"type": "shell",
-			"command": "dotnet test --no-build --nologo",
+			"command": "dotnet test src/Chat.sln --no-build --nologo",
 			"group": "test",
 			"problemMatcher": [
 				"$msCompile"

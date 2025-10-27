@@ -246,26 +246,34 @@ namespace Chat.Web
                     .AddCheck<Chat.Web.Health.RedisHealthCheck>("redis", tags: new[] { "ready" }, timeout: TimeSpan.FromSeconds(3))
                     .AddCheck<Chat.Web.Health.CosmosHealthCheck>("cosmos", tags: new[] { "ready" }, timeout: TimeSpan.FromSeconds(5));
             }
-            // Prefer ACS sender if configured, otherwise console
-            var acsConn = Configuration["Acs:ConnectionString"];            
-            if (!string.IsNullOrWhiteSpace(acsConn))
+            
+            // OTP sender: always use console mock in test mode, otherwise prefer ACS if configured
+            if (inMemoryTest)
             {
-                var acsOptions = new AcsOptions
-                {
-                    ConnectionString = acsConn,
-                    EmailFrom = Configuration["Acs:EmailFrom"],
-                    SmsFrom = Configuration["Acs:SmsFrom"]
-                };
-                services.AddSingleton<IOtpSender>(sp => new AcsOtpSender(
-                    acsOptions, 
-                    sp.GetRequiredService<ILogger<AcsOtpSender>>(),
-                    sp.GetRequiredService<IStringLocalizer<Resources.SharedResources>>()));
-                // Include ACS in health checks if present (config check only)
-                services.AddHealthChecks().AddCheck("acs-config", () => HealthCheckResult.Healthy("configured"), tags: new[] { "ready" });
+                services.AddSingleton<IOtpSender, ConsoleOtpSender>();
             }
             else
             {
-                services.AddSingleton<IOtpSender, ConsoleOtpSender>();
+                var acsConn = Configuration["Acs:ConnectionString"];            
+                if (!string.IsNullOrWhiteSpace(acsConn))
+                {
+                    var acsOptions = new AcsOptions
+                    {
+                        ConnectionString = acsConn,
+                        EmailFrom = Configuration["Acs:EmailFrom"],
+                        SmsFrom = Configuration["Acs:SmsFrom"]
+                    };
+                    services.AddSingleton<IOtpSender>(sp => new AcsOtpSender(
+                        acsOptions, 
+                        sp.GetRequiredService<ILogger<AcsOtpSender>>(),
+                        sp.GetRequiredService<IStringLocalizer<Resources.SharedResources>>()));
+                    // Include ACS in health checks if present (config check only)
+                    services.AddHealthChecks().AddCheck("acs-config", () => HealthCheckResult.Healthy("configured"), tags: new[] { "ready" });
+                }
+                else
+                {
+                    services.AddSingleton<IOtpSender, ConsoleOtpSender>();
+                }
             }
 
             // Localization configuration
