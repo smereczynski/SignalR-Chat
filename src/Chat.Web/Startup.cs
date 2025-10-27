@@ -263,6 +263,36 @@ namespace Chat.Web
             {
                 services.AddSingleton<IOtpSender, ConsoleOtpSender>();
             }
+
+            // Localization configuration
+            services.AddLocalization(options => options.ResourcesPath = "Resources");
+            services.Configure<RequestLocalizationOptions>(options =>
+            {
+                var supportedCultures = new[]
+                {
+                    new System.Globalization.CultureInfo("en"), // English (default)
+                    new System.Globalization.CultureInfo("pl-PL"), // Poland
+                    new System.Globalization.CultureInfo("de-DE"), // Germany
+                    new System.Globalization.CultureInfo("cs-CZ"), // Czech Republic
+                    new System.Globalization.CultureInfo("sk-SK"), // Slovakia
+                    new System.Globalization.CultureInfo("uk-UA"), // Ukraine
+                    new System.Globalization.CultureInfo("be-BY"), // Belarus
+                    new System.Globalization.CultureInfo("lt-LT"), // Lithuania
+                    new System.Globalization.CultureInfo("ru-RU")  // Russia
+                };
+                
+                options.DefaultRequestCulture = new Microsoft.AspNetCore.Localization.RequestCulture("en");
+                options.SupportedCultures = supportedCultures;
+                options.SupportedUICultures = supportedCultures;
+                
+                // Priority: Cookie > Accept-Language > Default
+                options.RequestCultureProviders = new List<Microsoft.AspNetCore.Localization.IRequestCultureProvider>
+                {
+                    new Microsoft.AspNetCore.Localization.CookieRequestCultureProvider(),
+                    new Microsoft.AspNetCore.Localization.AcceptLanguageHeaderRequestCultureProvider()
+                };
+            });
+
             services.AddRazorPages();
             services.AddControllers();
             services.AddSingleton<Services.IInProcessMetrics, Services.InProcessMetrics>();
@@ -396,6 +426,9 @@ namespace Chat.Web
 
             app.UseHttpsRedirection();
             app.UseStaticFiles();
+
+            // Localization middleware (must be before UseRouting)
+            app.UseRequestLocalization();
 
             app.UseRouting();
 

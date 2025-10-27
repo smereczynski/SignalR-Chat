@@ -1,0 +1,267 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="metadata">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" />
+              </xsd:sequence>
+              <xsd:attribute name="name" use="required" type="xsd:string" />
+              <xsd:attribute name="type" type="xsd:string" />
+              <xsd:attribute name="mimetype" type="xsd:string" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="assembly">
+            <xsd:complexType>
+              <xsd:attribute name="alias" type="xsd:string" />
+              <xsd:attribute name="name" type="xsd:string" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" msdata:Ordinal="1" />
+              <xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" />
+              <xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="resheader">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  
+  <!-- Application Common -->
+  <data name="AppTitle" xml:space="preserve">
+    <value>SignalR Chat</value>
+  </data>
+  <data name="AppDescription" xml:space="preserve">
+    <value>Real-time chat application.</value>
+  </data>
+  <data name="Loading" xml:space="preserve">
+    <value>Loading…</value>
+  </data>
+  <data name="Error" xml:space="preserve">
+    <value>Error</value>
+  </data>
+  <data name="Retry" xml:space="preserve">
+    <value>Retry</value>
+  </data>
+  <data name="Search" xml:space="preserve">
+    <value>Search</value>
+  </data>
+  
+  <!-- Navigation & Actions -->
+  <data name="GoToChat" xml:space="preserve">
+    <value>Go to Chat</value>
+  </data>
+  <data name="SignInToContinue" xml:space="preserve">
+    <value>Sign in to continue</value>
+  </data>
+  <data name="SignIn" xml:space="preserve">
+    <value>Sign in</value>
+  </data>
+  
+  <!-- Chat Interface -->
+  <data name="ChatRooms" xml:space="preserve">
+    <value>Chat Rooms</value>
+  </data>
+  <data name="SelectRoomToJoin" xml:space="preserve">
+    <value>Please select room to join!</value>
+  </data>
+  <data name="NoMessages" xml:space="preserve">
+    <value>There are no messages.</value>
+  </data>
+  <data name="MessageInputPlaceholder" xml:space="preserve">
+    <value>What's on your mind?</value>
+  </data>
+  <data name="MessagesWaitingToSend" xml:space="preserve">
+    <value>Messages waiting to send</value>
+  </data>
+  <data name="WhosHere" xml:space="preserve">
+    <value>Who's Here ({0})</value>
+  </data>
+  <data name="Reconnecting" xml:space="preserve">
+    <value>RECONNECTING…</value>
+  </data>
+  <data name="Disconnected" xml:space="preserve">
+    <value>DISCONNECTED</value>
+  </data>
+  <data name="MessageFailed" xml:space="preserve">
+    <value>(failed)</value>
+  </data>
+  <data name="MessagePending" xml:space="preserve">
+    <value>…</value>
+  </data>
+  
+  <!-- Login / OTP -->
+  <data name="User" xml:space="preserve">
+    <value>User</value>
+  </data>
+  <data name="LoadingUsers" xml:space="preserve">
+    <value>Loading users...</value>
+  </data>
+  <data name="SelectUser" xml:space="preserve">
+    <value>Select user...</value>
+  </data>
+  <data name="PickUserForOtp" xml:space="preserve">
+    <value>Pick a user to receive the OTP (email &amp; mobile).</value>
+  </data>
+  <data name="SendCode" xml:space="preserve">
+    <value>Send code</value>
+  </data>
+  <data name="Code" xml:space="preserve">
+    <value>Code</value>
+  </data>
+  <data name="SixDigitCode" xml:space="preserve">
+    <value>6-digit code</value>
+  </data>
+  <data name="CodeExpires" xml:space="preserve">
+    <value>Code expires in 5 minutes.</value>
+  </data>
+  <data name="Resend" xml:space="preserve">
+    <value>Resend</value>
+  </data>
+  <data name="Verify" xml:space="preserve">
+    <value>Verify</value>
+  </data>
+  <data name="SendingCode" xml:space="preserve">
+    <value>Sending code</value>
+  </data>
+  <data name="SentToEmailAndMobile" xml:space="preserve">
+    <value>Sent to email &amp; mobile</value>
+  </data>
+  <data name="FailedToSend" xml:space="preserve">
+    <value>Failed to send</value>
+  </data>
+  
+  <!-- Date/Time -->
+  <data name="Today" xml:space="preserve">
+    <value>Today</value>
+  </data>
+  <data name="Yesterday" xml:space="preserve">
+    <value>Yesterday</value>
+  </data>
+  <data name="AM" xml:space="preserve">
+    <value>AM</value>
+  </data>
+  <data name="PM" xml:space="preserve">
+    <value>PM</value>
+  </data>
+  
+  <!-- Error Messages -->
+  <data name="ErrorOccurred" xml:space="preserve">
+    <value>An error occurred while processing your request.</value>
+  </data>
+  <data name="RequestId" xml:space="preserve">
+    <value>Request ID:</value>
+  </data>
+  <data name="DevelopmentMode" xml:space="preserve">
+    <value>Development Mode</value>
+  </data>
+  <data name="DevelopmentModeWarning" xml:space="preserve">
+    <value>Swapping to the Development environment displays detailed information about the error that occurred. The Development environment shouldn't be enabled for deployed applications. It can result in displaying sensitive information from exceptions to end users. For local debugging, enable the Development environment by setting the ASPNETCORE_ENVIRONMENT environment variable to Development and restarting the app.</value>
+  </data>
+  
+  <!-- JavaScript Error Messages -->
+  <data name="FailedToLoadUsers" xml:space="preserve">
+    <value>Failed to load users</value>
+  </data>
+  <data name="UserSelectionRequired" xml:space="preserve">
+    <value>User selection is required</value>
+  </data>
+  <data name="PleaseWaitSeconds" xml:space="preserve">
+    <value>Please wait {0} seconds before resending</value>
+  </data>
+  <data name="FailedToSendCode" xml:space="preserve">
+    <value>Failed to send code</value>
+  </data>
+  <data name="ErrorSendingCode" xml:space="preserve">
+    <value>Error sending code</value>
+  </data>
+  <data name="UserAndCodeRequired" xml:space="preserve">
+    <value>User and code are required</value>
+  </data>
+  <data name="InvalidVerificationCode" xml:space="preserve">
+    <value>Invalid verification code</value>
+  </data>
+  <data name="VerificationFailed" xml:space="preserve">
+    <value>Verification failed. Please try again.</value>
+  </data>
+  <data name="LoginSuccessful" xml:space="preserve">
+    <value>Login successful! Redirecting...</value>
+  </data>
+  <data name="SessionExpired" xml:space="preserve">
+    <value>Session expired. Please refresh.</value>
+  </data>
+  <data name="SendingTooQuickly" xml:space="preserve">
+    <value>You are sending messages too quickly</value>
+  </data>
+  
+  <!-- Server-Side Error Messages -->
+  <data name="ErrorJoinRoomNameRequired" xml:space="preserve">
+    <value>You failed to join the chat room! Room name is required.</value>
+  </data>
+  <data name="ErrorNotAuthorizedRoom" xml:space="preserve">
+    <value>You are not authorized for this room.</value>
+  </data>
+  <data name="ErrorUserProfileNotFound" xml:space="preserve">
+    <value>User profile not found.</value>
+  </data>
+  <data name="ErrorJoinRoom" xml:space="preserve">
+    <value>You failed to join the chat room! {0}</value>
+  </data>
+  <data name="ErrorNotInRoom" xml:space="preserve">
+    <value>You are not in a room.</value>
+  </data>
+  
+  <!-- OTP Email/SMS Templates -->
+  <data name="EmailSubjectVerificationCode" xml:space="preserve">
+    <value>Your verification code</value>
+  </data>
+  <data name="EmailSubjectNewMessage" xml:space="preserve">
+    <value>New message</value>
+  </data>
+  <data name="EmailBodyVerificationCode" xml:space="preserve">
+    <value>Your verification code is: {0}</value>
+  </data>
+  <data name="SmsBodyVerificationCode" xml:space="preserve">
+    <value>Code: {0}</value>
+  </data>
+  
+  <!-- Validation Messages -->
+  <data name="ValidationRoomNameLength" xml:space="preserve">
+    <value>The {0} must be at least {2} and at max {1} characters long.</value>
+  </data>
+  <data name="ValidationRoomNamePattern" xml:space="preserve">
+    <value>Characters allowed: letters, numbers, and one space between words.</value>
+  </data>
+</root>

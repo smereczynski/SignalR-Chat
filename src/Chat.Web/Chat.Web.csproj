@@ -22,6 +22,9 @@
   <PackageReference Include="Isopoh.Cryptography.Argon2" Version="2.0.0" />
     <PackageReference Include="Azure.Communication.Email" Version="1.0.0" />
     <PackageReference Include="Azure.Communication.Sms" Version="1.0.1" />
+    <!-- Localization -->
+    <PackageReference Include="Microsoft.Extensions.Localization" Version="9.0.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Localization" Version="2.2.0" />
     <!-- Observability -->
     <PackageReference Include="Serilog.AspNetCore" Version="8.0.1" />
     <PackageReference Include="Serilog.Sinks.Console" Version="5.0.1" />
