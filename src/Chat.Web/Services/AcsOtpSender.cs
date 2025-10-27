@@ -60,8 +60,8 @@ namespace Chat.Web.Services
                 if (string.IsNullOrWhiteSpace(_options.EmailFrom))
                     throw new InvalidOperationException("AcsOptions.EmailFrom is required to send email OTP.");
 
-                var subject = isNotification ? _localizer["EmailSubjectNewMessage"] : _localizer["EmailSubjectVerificationCode"];
-                var body = isNotification ? code : _localizer["EmailBodyVerificationCode", code];
+                var subject = isNotification ? _localizer["EmailSubjectNewMessage"].Value : _localizer["EmailSubjectVerificationCode"].Value;
+                var body = isNotification ? code : _localizer["EmailBodyVerificationCode", code].Value;
                 // Do not block on provider end-to-end completion; start send and return, with retries
                 try
                 {
@@ -86,7 +86,7 @@ namespace Chat.Web.Services
                 if (string.IsNullOrWhiteSpace(_options.SmsFrom))
                     throw new InvalidOperationException("AcsOptions.SmsFrom is required to send SMS OTP.");
 
-                var body = isNotification ? code : _localizer["SmsBodyVerificationCode", code];
+                var body = isNotification ? code : _localizer["SmsBodyVerificationCode", code].Value;
                 try
                 {
                     await RetryHelper.ExecuteAsync(

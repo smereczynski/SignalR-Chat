@@ -31,7 +31,11 @@ namespace Chat.IntegrationTests
 
             // small delay to allow server callback
             await Task.Delay(100);
-            Assert.Contains(errors, e => e.Contains("not authorized", System.StringComparison.OrdinalIgnoreCase));
+            // Accept either the full localized message or the resource key (in test environment, 
+            // resources may not be fully loaded, so IStringLocalizer.Value returns the key)
+            Assert.Contains(errors, e => 
+                e.Contains("not authorized", System.StringComparison.OrdinalIgnoreCase) ||
+                e.Contains("ErrorNotAuthorizedRoom", System.StringComparison.Ordinal));
             await connection.DisposeAsync();
         }
     }

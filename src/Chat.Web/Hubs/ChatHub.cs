@@ -69,9 +69,9 @@ namespace Chat.Web.Hubs
             activity?.SetTag("chat.room", roomName);
             if (string.IsNullOrWhiteSpace(roomName))
             {
-                _logger.LogWarning("Join called with empty room by {User}", IdentityName);
-                await Clients.Caller.SendAsync("onError", _localizer["ErrorJoinRoomNameRequired"]);
-                activity?.SetStatus(ActivityStatusCode.Error, "empty room");
+                _logger.LogWarning("Join called with empty roomName by {User}", IdentityName);
+                await Clients.Caller.SendAsync("onError", _localizer["ErrorJoinRoomNameRequired"].Value);
+                activity?.SetStatus(ActivityStatusCode.Error, "invalid roomName");
                 activity?.Dispose();
                 return;
             }
@@ -83,14 +83,14 @@ namespace Chat.Web.Hubs
                 if (!hasAny)
                 {
                     _logger.LogWarning("Unauthorized room join attempt (no fixed rooms) {User} => {Room} correlation={CorrelationId}", IdentityName, roomName, Context.ConnectionId);
-                    await Clients.Caller.SendAsync("onError", _localizer["ErrorNotAuthorizedRoom"]);
+                    await Clients.Caller.SendAsync("onError", _localizer["ErrorNotAuthorizedRoom"].Value);
                     activity?.SetStatus(ActivityStatusCode.Error, "room unauthorized none");
                     return;
                 }
                 if (!profile.FixedRooms.Contains(roomName))
                 {
                     _logger.LogWarning("Unauthorized room join attempt (not in fixed list) {User} => {Room} allowed={AllowedRooms} correlation={CorrelationId}", IdentityName, roomName, string.Join(',', profile.FixedRooms), Context.ConnectionId);
-                    await Clients.Caller.SendAsync("onError", _localizer["ErrorNotAuthorizedRoom"]);
+                    await Clients.Caller.SendAsync("onError", _localizer["ErrorNotAuthorizedRoom"].Value);
                     activity?.SetStatus(ActivityStatusCode.Error, "room unauthorized");
                     return;
                 }
@@ -102,7 +102,7 @@ namespace Chat.Web.Hubs
                 if (user == null)
                 {
                     _logger.LogWarning("Join called but UserProfile not in Context for {User}", IdentityName);
-                    await Clients.Caller.SendAsync("onError", _localizer["ErrorUserProfileNotFound"]);
+                    await Clients.Caller.SendAsync("onError", _localizer["ErrorUserProfileNotFound"].Value);
                     return;
                 }
                 
@@ -148,7 +148,7 @@ namespace Chat.Web.Hubs
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Join failed for user {User} room {Room}", IdentityName, roomName);
-                await Clients.Caller.SendAsync("onError", _localizer["ErrorJoinRoom", ex.Message]);
+                await Clients.Caller.SendAsync("onError", _localizer["ErrorJoinRoom", ex.Message].Value);
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
             }
             finally
@@ -259,7 +259,7 @@ namespace Chat.Web.Hubs
             catch (Exception ex)
             {
                 _logger.LogError(ex, "OnConnected failure {User}", IdentityName);
-                await Clients.Caller.SendAsync("onError", _localizer["ErrorOccurred"]);
+                await Clients.Caller.SendAsync("onError", _localizer["ErrorOccurred"].Value);
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
             }
             await base.OnConnectedAsync();
@@ -359,7 +359,7 @@ namespace Chat.Web.Hubs
             {
                 _logger.LogWarning("SendMessage denied (no room) user={User}", IdentityName);
                 activity?.SetStatus(ActivityStatusCode.Error, "no_room");
-                await Clients.Caller.SendAsync("onError", _localizer["ErrorNotInRoom"]);
+                await Clients.Caller.SendAsync("onError", _localizer["ErrorNotInRoom"].Value);
                 return;
             }
             
@@ -368,7 +368,7 @@ namespace Chat.Web.Hubs
             {
                 _logger.LogWarning("SendMessage unauthorized user={User} room={Room}", IdentityName, currentRoom);
                 activity?.SetStatus(ActivityStatusCode.Error, "unauthorized");
-                await Clients.Caller.SendAsync("onError", _localizer["ErrorNotAuthorizedRoom"]);
+                await Clients.Caller.SendAsync("onError", _localizer["ErrorNotAuthorizedRoom"].Value);
                 return;
             }
             var room = _rooms.GetByName(currentRoom);
@@ -376,7 +376,7 @@ namespace Chat.Web.Hubs
             {
                 _logger.LogWarning("SendMessage room missing user={User} room={Room}", IdentityName, currentRoom);
                 activity?.SetStatus(ActivityStatusCode.Error, "room_missing");
-                await Clients.Caller.SendAsync("onError", _localizer["ErrorOccurred"]);
+                await Clients.Caller.SendAsync("onError", _localizer["ErrorOccurred"].Value);
                 return;
             }
             // Basic sanitization (strip tags)
@@ -398,7 +398,7 @@ namespace Chat.Web.Hubs
             {
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                 _logger.LogError(ex, "SendMessage persistence failed user={User} room={Room}", IdentityName, room.Name);
-                await Clients.Caller.SendAsync("onError", _localizer["ErrorOccurred"]);
+                await Clients.Caller.SendAsync("onError", _localizer["ErrorOccurred"].Value);
                 return;
             }
             var vm = new ViewModels.MessageViewModel
@@ -441,7 +441,7 @@ namespace Chat.Web.Hubs
                 _logger.LogWarning("MarkRead rate limit exceeded for user {User}, messageId={MessageId}", IdentityName, messageId);
                 _metrics.IncMarkReadRateLimitViolation(IdentityName);
                 activity?.SetStatus(ActivityStatusCode.Error, "rate_limit_exceeded");
-                await Clients.Caller.SendAsync("onError", _localizer["ErrorRateLimitExceeded"]);
+                await Clients.Caller.SendAsync("onError", _localizer["ErrorRateLimitExceeded"].Value);
                 return;
             }
             
