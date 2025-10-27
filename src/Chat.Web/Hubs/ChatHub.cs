@@ -11,6 +11,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Chat.Web.Observability;
 using System.Diagnostics;
+using Microsoft.Extensions.Localization;
 
 namespace Chat.Web.Hubs
 {
@@ -32,6 +33,7 @@ namespace Chat.Web.Hubs
         private readonly Services.IInProcessMetrics _metrics;
         private readonly Services.IMarkReadRateLimiter _markReadRateLimiter;
         private readonly Services.IPresenceTracker _presenceTracker;
+        private readonly IStringLocalizer<Resources.SharedResources> _localizer;
 
         /// <summary>
         /// Creates a new Hub instance.
@@ -43,7 +45,8 @@ namespace Chat.Web.Hubs
             Services.IInProcessMetrics metrics,
             Services.UnreadNotificationScheduler unreadScheduler,
             Services.IMarkReadRateLimiter markReadRateLimiter,
-            Services.IPresenceTracker presenceTracker)
+            Services.IPresenceTracker presenceTracker,
+            IStringLocalizer<Resources.SharedResources> localizer)
         {
             _users = users;
             _messages = messages;
@@ -53,6 +56,7 @@ namespace Chat.Web.Hubs
             _unreadScheduler = unreadScheduler;
             _markReadRateLimiter = markReadRateLimiter;
             _presenceTracker = presenceTracker;
+            _localizer = localizer;
         }
 
         /// <summary>
@@ -66,7 +70,7 @@ namespace Chat.Web.Hubs
             if (string.IsNullOrWhiteSpace(roomName))
             {
                 _logger.LogWarning("Join called with empty room by {User}", IdentityName);
-                await Clients.Caller.SendAsync("onError", "You failed to join the chat room! Room name is required.");
+                await Clients.Caller.SendAsync("onError", _localizer["ErrorJoinRoomNameRequired"]);
                 activity?.SetStatus(ActivityStatusCode.Error, "empty room");
                 activity?.Dispose();
                 return;
@@ -79,14 +83,14 @@ namespace Chat.Web.Hubs
                 if (!hasAny)
                 {
                     _logger.LogWarning("Unauthorized room join attempt (no fixed rooms) {User} => {Room} correlation={CorrelationId}", IdentityName, roomName, Context.ConnectionId);
-                    await Clients.Caller.SendAsync("onError", "You are not authorized for this room.");
+                    await Clients.Caller.SendAsync("onError", _localizer["ErrorNotAuthorizedRoom"]);
                     activity?.SetStatus(ActivityStatusCode.Error, "room unauthorized none");
                     return;
                 }
                 if (!profile.FixedRooms.Contains(roomName))
                 {
                     _logger.LogWarning("Unauthorized room join attempt (not in fixed list) {User} => {Room} allowed={AllowedRooms} correlation={CorrelationId}", IdentityName, roomName, string.Join(',', profile.FixedRooms), Context.ConnectionId);
-                    await Clients.Caller.SendAsync("onError", "You are not authorized for this room.");
+                    await Clients.Caller.SendAsync("onError", _localizer["ErrorNotAuthorizedRoom"]);
                     activity?.SetStatus(ActivityStatusCode.Error, "room unauthorized");
                     return;
                 }
@@ -98,7 +102,7 @@ namespace Chat.Web.Hubs
                 if (user == null)
                 {
                     _logger.LogWarning("Join called but UserProfile not in Context for {User}", IdentityName);
-                    await Clients.Caller.SendAsync("onError", "User profile not found.");
+                    await Clients.Caller.SendAsync("onError", _localizer["ErrorUserProfileNotFound"]);
                     return;
                 }
                 
@@ -144,7 +148,7 @@ namespace Chat.Web.Hubs
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Join failed for user {User} room {Room}", IdentityName, roomName);
-                await Clients.Caller.SendAsync("onError", "You failed to join the chat room!" + ex.Message);
+                await Clients.Caller.SendAsync("onError", _localizer["ErrorJoinRoom", ex.Message]);
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
             }
             finally
@@ -255,7 +259,7 @@ namespace Chat.Web.Hubs
             catch (Exception ex)
             {
                 _logger.LogError(ex, "OnConnected failure {User}", IdentityName);
-                await Clients.Caller.SendAsync("onError", "OnConnected:" + ex.Message);
+                await Clients.Caller.SendAsync("onError", _localizer["ErrorOccurred"]);
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
             }
             await base.OnConnectedAsync();
@@ -355,7 +359,7 @@ namespace Chat.Web.Hubs
             {
                 _logger.LogWarning("SendMessage denied (no room) user={User}", IdentityName);
                 activity?.SetStatus(ActivityStatusCode.Error, "no_room");
-                await Clients.Caller.SendAsync("onError", "You are not in a room.");
+                await Clients.Caller.SendAsync("onError", _localizer["ErrorNotInRoom"]);
                 return;
             }
             
@@ -364,7 +368,7 @@ namespace Chat.Web.Hubs
             {
                 _logger.LogWarning("SendMessage unauthorized user={User} room={Room}", IdentityName, currentRoom);
                 activity?.SetStatus(ActivityStatusCode.Error, "unauthorized");
-                await Clients.Caller.SendAsync("onError", "Not authorized for this room.");
+                await Clients.Caller.SendAsync("onError", _localizer["ErrorNotAuthorizedRoom"]);
                 return;
             }
             var room = _rooms.GetByName(currentRoom);
@@ -372,7 +376,7 @@ namespace Chat.Web.Hubs
             {
                 _logger.LogWarning("SendMessage room missing user={User} room={Room}", IdentityName, currentRoom);
                 activity?.SetStatus(ActivityStatusCode.Error, "room_missing");
-                await Clients.Caller.SendAsync("onError", "Room no longer exists.");
+                await Clients.Caller.SendAsync("onError", _localizer["ErrorOccurred"]);
                 return;
             }
             // Basic sanitization (strip tags)
@@ -394,7 +398,7 @@ namespace Chat.Web.Hubs
             {
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                 _logger.LogError(ex, "SendMessage persistence failed user={User} room={Room}", IdentityName, room.Name);
-                await Clients.Caller.SendAsync("onError", "Failed to persist message.");
+                await Clients.Caller.SendAsync("onError", _localizer["ErrorOccurred"]);
                 return;
             }
             var vm = new ViewModels.MessageViewModel
@@ -437,7 +441,7 @@ namespace Chat.Web.Hubs
                 _logger.LogWarning("MarkRead rate limit exceeded for user {User}, messageId={MessageId}", IdentityName, messageId);
                 _metrics.IncMarkReadRateLimitViolation(IdentityName);
                 activity?.SetStatus(ActivityStatusCode.Error, "rate_limit_exceeded");
-                await Clients.Caller.SendAsync("onError", "Rate limit exceeded. Please slow down.");
+                await Clients.Caller.SendAsync("onError", _localizer["ErrorRateLimitExceeded"]);
                 return;
             }
             

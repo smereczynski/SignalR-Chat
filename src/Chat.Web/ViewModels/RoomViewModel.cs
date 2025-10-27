@@ -11,8 +11,8 @@ namespace Chat.Web.ViewModels
 
         [Required]
     // Minimum length lowered from 5 -> 2 to allow seeded short room names like "ops".
-    [StringLength(100, ErrorMessage = "The {0} must be at least {2} and at max {1} characters long.", MinimumLength = 2)]
-        [RegularExpression(@"^\w+( \w+)*$", ErrorMessage = "Characters allowed: letters, numbers, and one space between words.")]
+    [StringLength(100, ErrorMessageResourceName = "ValidationRoomNameLength", ErrorMessageResourceType = typeof(Resources.SharedResources), MinimumLength = 2)]
+        [RegularExpression(@"^\w+( \w+)*$", ErrorMessageResourceName = "ValidationRoomNamePattern", ErrorMessageResourceType = typeof(Resources.SharedResources))]
         public string Name { get; set; }
 
     // Admin field removed
