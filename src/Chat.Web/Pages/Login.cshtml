@@ -1,48 +1,49 @@
 @page "/login"
 @model Chat.Web.Pages.LoginModel
+@inject Microsoft.Extensions.Localization.IStringLocalizer<Chat.Web.Resources.SharedResources> Localizer
 
 <div class="container py-5">
   <div class="row justify-content-center">
     <div class="col-sm-10 col-md-7 col-lg-5">
       <div class="card shadow-sm">
         <div class="card-body">
-          <h5 class="card-title mb-3">Sign in</h5>
+          <h5 class="card-title mb-3">@Localizer["SignIn"]</h5>
           <div id="otpContainer" data-otp-timeout-ms="8000" data-otp-retry-cooldown-ms="5000" data-otp-resend-delay-ms="60000">
             <div id="otp-step1">
               <div class="mb-2">
-                <label for="otpUserName" class="form-label">User</label>
+                <label for="otpUserName" class="form-label">@Localizer["User"]</label>
                 <select class="form-select" id="otpUserName">
-                  <option value="" selected disabled>Loading users...</option>
+                  <option value="" selected disabled>@Localizer["LoadingUsers"]</option>
                 </select>
-                <div class="form-text">Pick a user to receive the OTP (email & mobile).</div>
+                <div class="form-text">@Localizer["PickUserForOtp"]</div>
               </div>
-              <button type="button" class="btn btn-primary" id="btn-send-otp">Send code</button>
+              <button type="button" class="btn btn-primary" id="btn-send-otp">@Localizer["SendCode"]</button>
             </div>
 
             <div id="otp-step2" class="d-none">
               <div class="mb-2">
-                <label for="otpCode" class="form-label">Code</label>
-                <input type="text" class="form-control" id="otpCode" placeholder="6-digit code" />
+                <label for="otpCode" class="form-label">@Localizer["Code"]</label>
+                <input type="text" class="form-control" id="otpCode" placeholder="@Localizer["SixDigitCode"]" />
                 <div class="form-text">
-                  Code expires in 5 minutes. <button type="button" id="btn-resend-otp" class="btn btn-link p-0 align-baseline" disabled>Resend</button>
+                  @Localizer["CodeExpires"] <button type="button" id="btn-resend-otp" class="btn btn-link p-0 align-baseline" disabled>@Localizer["Resend"]</button>
                 </div>
               </div>
-              <button type="button" class="btn btn-primary" id="btn-verify-otp">Verify</button>
+              <button type="button" class="btn btn-primary" id="btn-verify-otp">@Localizer["Verify"]</button>
             </div>
 
             <div id="otpSendingIndicator" class="mt-2 small d-none fade-soft">
               <div data-state="sending" class="d-flex align-items-center">
-                <div class="spinner-border spinner-border-sm me-2" role="status"><span class="visually-hidden">Sending...</span></div>
-                <span>Sending code (<span id="otpSendCountdown">0</span>s)...</span>
+                <div class="spinner-border spinner-border-sm me-2" role="status"><span class="visually-hidden">@Localizer["SendingCode"]</span></div>
+                <span>@Localizer["SendingCode"] (<span id="otpSendCountdown">0</span>s)...</span>
               </div>
               <div data-state="success" class="d-flex align-items-center text-success d-none">
                 <span class="me-2">✔</span>
-                <span>Sent to email & mobile</span>
+                <span>@Localizer["SentToEmailAndMobile"]</span>
               </div>
               <div data-state="error" class="d-flex align-items-center text-danger d-none">
                 <span class="me-2">⚠</span>
-                <span class="me-2">Failed to send</span>
-                <a href="#" id="otpRetryLink" class="disabled-link" data-cooldown-left="0">Retry</a>
+                <span class="me-2">@Localizer["FailedToSend"]</span>
+                <a href="#" id="otpRetryLink" class="disabled-link" data-cooldown-left="0">@Localizer["Retry"]</a>
                 <span class="ms-2 text-muted small" id="otpRetryCountdown"></span>
               </div>
             </div>
