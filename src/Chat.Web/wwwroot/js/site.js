@@ -29,6 +29,34 @@
     };
 })();
 
+// Load localized strings for JavaScript
+(function(){
+    window.i18n = {}; // Initialize immediately
+    fetch('/api/localization/strings', { credentials: 'same-origin' })
+        .then(r => r.ok ? r.json() : {})
+        .then(strings => { 
+            window.i18n = strings;
+            document.dispatchEvent(new Event('i18n-loaded'));
+        })
+        .catch(() => { 
+            // Fallback to English defaults if localization API fails
+            window.i18n = {
+                Loading: 'Loading…',
+                Error: 'Error',
+                Retry: 'Retry',
+                FailedToLoadUsers: 'Failed to load users',
+                UserSelectionRequired: 'User selection is required',
+                FailedToSendCode: 'Failed to send code',
+                ErrorSendingCode: 'Error sending code',
+                UserAndCodeRequired: 'User and code are required',
+                InvalidVerificationCode: 'Invalid verification code',
+                VerificationFailed: 'Verification failed',
+                SendingTooQuickly: 'You are sending messages too quickly',
+                SelectUser: 'Select user...'
+            };
+        });
+})();
+
 document.addEventListener('DOMContentLoaded', () => {
     appLogger.info('site.js init (vanilla)');
 
@@ -139,13 +167,13 @@ document.addEventListener('DOMContentLoaded', () => {
         if (flow.verifyInFlight) return; // prevent double-submit
         const userName = (document.getElementById('otpUserName')?.value || '').trim();
         const code = (document.getElementById('otpCode')?.value || '').trim();
-        if (!userName || !code) { setOtpError('User and code are required'); return; }
+        if (!userName || !code) { setOtpError(window.i18n.UserAndCodeRequired || 'User and code are required'); return; }
         const verifyBtn = document.getElementById('btn-verify-otp');
         if (verifyBtn) verifyBtn.disabled = true;
         flow.verifyInFlight = true;
         const verifyStart = performance.now();
         postJson('/api/auth/verify', { userName, code })
-            .then(r => { if (!r.ok) throw new Error('Invalid code'); return r.json().catch(()=>({})); })
+            .then(r => { if (!r.ok) throw new Error(window.i18n.InvalidVerificationCode || 'Invalid code'); return r.json().catch(()=>({})); })
             .then(() => {
                 appLogger.info('OTP verify success', { user: userName });
                 if (flow.lastSendId) {
@@ -164,7 +192,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     appLogger.warn('chatApp.onAuthenticated not available');
                 }
             })
-            .catch(e2 => { appLogger.error('OTP verify failed', { user: userName, error: e2.message }); setOtpError(e2.message || 'Verification failed'); })
+            .catch(e2 => { appLogger.error('OTP verify failed', { user: userName, error: e2.message }); setOtpError(e2.message || window.i18n.VerificationFailed || 'Verification failed'); })
             .finally(() => { flow.verifyInFlight = false; if (verifyBtn) verifyBtn.disabled = false; });
     }
 
@@ -174,7 +202,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const isResend = !!options.resend;
         setOtpError(null);
         const userName = (document.getElementById('otpUserName')?.value || '').trim();
-        if (!userName) { setOtpError('User selection is required'); return; }
+        if (!userName) { setOtpError(window.i18n.UserSelectionRequired || 'User selection is required'); return; }
         window.__otpFlow = window.__otpFlow || {};
         const flow = window.__otpFlow;
         const sendBtn = document.getElementById('btn-send-otp');
@@ -259,7 +287,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }, timeoutMs);
 
         fetch('/api/auth/start', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ userName }), credentials:'same-origin', signal: controller.signal })
-            .then(r => { if (!r.ok) throw new Error('Failed to send code'); return r.json().catch(()=>({})); })
+            .then(r => { if (!r.ok) throw new Error(window.i18n.FailedToSendCode || 'Failed to send code'); return r.json().catch(()=>({})); })
             .then(() => {
                 if (flow.activeUser !== userName || controller.signal.aborted) return;
                 flow.lastSendCompletedTs = performance.now();
@@ -307,7 +335,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     appLogger.warn('OTP send aborted', { user: userName, durationMs: durMs, sendId });
                 } else {
                     appLogger.error('OTP send failed', { error: e2.message, user: userName, durationMs: durMs, sendId });
-                    setOtpError(e2.message || 'Error sending code');
+                    setOtpError(e2.message || window.i18n.ErrorSendingCode || 'Error sending code');
                 }
                 if (indicator) {
                     indicator.querySelectorAll('[data-state]')?.forEach(n=>n.classList.add('d-none'));
@@ -401,9 +429,10 @@ document.addEventListener('DOMContentLoaded', () => {
             const sel = document.getElementById('otpUserName');
             if (sel && sel.dataset.loaded !== 'true') {
                 fetch('/api/auth/users', { credentials: 'same-origin' })
-                    .then(r => { if (!r.ok) throw new Error('Failed to load users'); return r.json(); })
+                    .then(r => { if (!r.ok) throw new Error(window.i18n.FailedToLoadUsers || 'Failed to load users'); return r.json(); })
                     .then(users => {
-                        sel.innerHTML = '<option value="" disabled selected>Select user...</option>' + users.map(u => `<option value="${u.userName}">${u.fullName || u.userName}</option>`).join('');
+                        const placeholder = window.i18n.SelectUser || 'Select user...';
+                        sel.innerHTML = '<option value="" disabled selected>' + placeholder + '</option>' + users.map(u => `<option value="${u.userName}">${u.fullName || u.userName}</option>`).join('');
                         sel.dataset.loaded = 'true';
                     })
                     .catch(err => { setOtpError(err.message); });

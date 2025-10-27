@@ -98,7 +98,7 @@ if(window.__chatAppBooted){
       case 'reconnecting':
         els.roomHeader.classList.add('connection-state-reconnecting');
         if(els.joinedRoomTitle && state._baseRoomTitle){
-          els.joinedRoomTitle.textContent = state._baseRoomTitle + ' (RECONNECTING…)';
+          els.joinedRoomTitle.textContent = state._baseRoomTitle + ' (' + (window.i18n.Reconnecting || 'RECONNECTING…') + ')';
         }
         break;
       case 'disconnected':
@@ -107,7 +107,7 @@ if(window.__chatAppBooted){
           const base = state._baseRoomTitle || els.joinedRoomTitle.textContent || '';
           // Use explicit variation selector for broader rendering + fallback triangle if some fonts strip emoji style
           const warn = '\u26A0\uFE0F'; // ⚠️
-          els.joinedRoomTitle.textContent = base + ' (' + warn + ' DISCONNECTED)';
+          els.joinedRoomTitle.textContent = base + ' (' + warn + ' ' + (window.i18n.Disconnected || 'DISCONNECTED') + ')';
         }
         break;
     }
@@ -137,7 +137,37 @@ if(window.__chatAppBooted){
     if(state.joinedRoom && state.joinedRoom.name===r.name) a.classList.add('active');
     a.addEventListener('click',e=>{ e.preventDefault(); joinRoom(r.name); }); li.appendChild(a); els.roomsList.appendChild(li); }); }
   function renderUsers(){ if(!els.usersList) return; const term=state.filter.toLowerCase(); els.usersList.innerHTML=''; const filtered=state.users.filter(u=>!term|| (u.fullName||u.userName||'').toLowerCase().includes(term)); filtered.forEach(u=>{ const li=document.createElement('li'); li.dataset.username=u.userName; const wrap=document.createElement('div'); wrap.className='user'; if(!u.avatar){ const span=document.createElement('span'); span.className='avatar me-2 text-uppercase'; span.textContent=initialFrom(u.fullName, u.userName); wrap.appendChild(span);} else { const img=document.createElement('img'); img.className='avatar me-2'; img.src='/avatars/'+u.avatar; wrap.appendChild(img);} const info=document.createElement('div'); info.className='user-info'; const nameSpan=document.createElement('span'); nameSpan.className='name'; nameSpan.textContent=u.fullName || u.userName; info.appendChild(nameSpan); const deviceSpan=document.createElement('span'); deviceSpan.className='device'; deviceSpan.textContent=u.device || ''; info.appendChild(deviceSpan); wrap.appendChild(info); li.appendChild(wrap); els.usersList.appendChild(li); }); if(els.usersCount) els.usersCount.textContent=filtered.length; }
-  function formatDateParts(ts){ const date=new Date(ts); const now=new Date(); const diffDays=Math.round((date-now)/(1000*3600*24)); const day=date.getDate(); const month=date.getMonth()+1; const year=date.getFullYear(); let hours=date.getHours(); const minutes=('0'+date.getMinutes()).slice(-2); const ampm=hours>=12?'PM':'AM'; if(hours>12) hours=hours%12; const dateOnly=`${day}/${month}/${year}`; const timeOnly=`${hours}:${minutes} ${ampm}`; const full=`${dateOnly} ${timeOnly}`; let relative=dateOnly; if(diffDays===0) relative=`Today, ${timeOnly}`; else if(diffDays===-1) relative=`Yesterday, ${timeOnly}`; return {relative, full}; }
+  function formatDateParts(ts){ 
+    const date=new Date(ts); 
+    const now=new Date(); 
+    const diffDays=Math.round((date-now)/(1000*3600*24)); 
+    const day=date.getDate(); 
+    const month=date.getMonth()+1; 
+    const year=date.getFullYear(); 
+    const culture = document.documentElement.lang || 'en';
+    const use24Hour = !culture.startsWith('en'); // English uses 12-hour format
+    let hours=date.getHours(); 
+    const minutes=('0'+date.getMinutes()).slice(-2); 
+    let ampm=''; 
+    let timeHours = hours;
+    if (use24Hour) {
+      timeHours = ('0'+hours).slice(-2);
+    } else {
+      ampm = hours>=12 ? (window.i18n.PM || 'PM') : (window.i18n.AM || 'AM'); 
+      if(hours>12) hours=hours%12; 
+      if(hours===0) hours=12;
+      timeHours = hours;
+    }
+    const dateOnly=`${day}/${month}/${year}`; 
+    const timeOnly = use24Hour ? `${timeHours}:${minutes}` : `${timeHours}:${minutes} ${ampm}`;
+    const full=`${dateOnly} ${timeOnly}`; 
+    let relative=dateOnly; 
+    const today = window.i18n.Today || 'Today';
+    const yesterday = window.i18n.Yesterday || 'Yesterday';
+    if(diffDays===0) relative=`${today}, ${timeOnly}`; 
+    else if(diffDays===-1) relative=`${yesterday}, ${timeOnly}`; 
+    return {relative, full}; 
+  }
   function renderMessages(){
     if(!els.messagesList) return;
     els.messagesList.innerHTML='';
@@ -157,10 +187,10 @@ if(window.__chatAppBooted){
     const author=document.createElement('span'); author.className='author'; author.textContent=m.fromFullName||m.fromUserName; info.appendChild(author);
     const time=document.createElement('span'); time.className='timestamp'; const fp=formatDateParts(m.timestamp); time.textContent=fp.relative; time.dataset.bsTitle=fp.full; time.setAttribute('data-bs-toggle','tooltip'); info.appendChild(time);
     if(m.failed){
-      const status=document.createElement('span'); status.className='send-status ms-2 text-danger'; status.textContent='(failed)'; info.appendChild(status);
-      const retryBtn=document.createElement('button'); retryBtn.type='button'; retryBtn.className='btn btn-link p-0 ms-2 retry-send'; retryBtn.textContent='Retry'; retryBtn.addEventListener('click',()=> retrySend(m.correlationId)); info.appendChild(retryBtn);
+      const status=document.createElement('span'); status.className='send-status ms-2 text-danger'; status.textContent=window.i18n.MessageFailed || '(failed)'; info.appendChild(status);
+      const retryBtn=document.createElement('button'); retryBtn.type='button'; retryBtn.className='btn btn-link p-0 ms-2 retry-send'; retryBtn.textContent=window.i18n.Retry || 'Retry'; retryBtn.addEventListener('click',()=> retrySend(m.correlationId)); info.appendChild(retryBtn);
     } else if(m.pending){
-      const status=document.createElement('span'); status.className='send-status ms-2 text-muted'; status.textContent='…'; info.appendChild(status);
+      const status=document.createElement('span'); status.className='send-status ms-2 text-muted'; status.textContent=window.i18n.MessagePending || '…'; info.appendChild(status);
     }
     content.appendChild(info);
   const body=document.createElement('div'); body.className='content'; body.textContent=m.content; content.appendChild(body);
@@ -191,8 +221,8 @@ if(window.__chatAppBooted){
       if(info){ statusEl = document.createElement('span'); statusEl.className='send-status ms-2'; info.appendChild(statusEl); }
     }
     if(statusEl){
-      if(m.failed){ statusEl.textContent='(failed)'; statusEl.className='send-status ms-2 text-danger'; }
-      else if(m.pending){ statusEl.textContent='…'; statusEl.className='send-status ms-2 text-muted'; }
+      if(m.failed){ statusEl.textContent=window.i18n.MessageFailed || '(failed)'; statusEl.className='send-status ms-2 text-danger'; }
+      else if(m.pending){ statusEl.textContent=window.i18n.MessagePending || '…'; statusEl.className='send-status ms-2 text-muted'; }
       else { statusEl.remove(); }
     }
     // Retry button handling
@@ -200,7 +230,7 @@ if(window.__chatAppBooted){
     if(m.failed){
       if(!retryBtn){
         const info = node.querySelector('.message-info');
-        if(info){ retryBtn=document.createElement('button'); retryBtn.type='button'; retryBtn.className='btn btn-link p-0 ms-2 retry-send'; retryBtn.textContent='Retry'; retryBtn.addEventListener('click',()=> retrySend(m.correlationId)); info.appendChild(retryBtn); }
+        if(info){ retryBtn=document.createElement('button'); retryBtn.type='button'; retryBtn.className='btn btn-link p-0 ms-2 retry-send'; retryBtn.textContent=window.i18n.Retry || 'Retry'; retryBtn.addEventListener('click',()=> retrySend(m.correlationId)); info.appendChild(retryBtn); }
       }
     } else if(retryBtn){ retryBtn.remove(); }
     node.dataset.cid = m.correlationId || '';
@@ -962,7 +992,7 @@ if(window.__chatAppBooted){
         return;
       }
       // After grace window with confirmed unauth
-      showError('Not signed in.');
+      showError(window.i18n.SessionExpired || 'Session expired. Please refresh.');
       return;
     }
     // If a join is in progress (or scheduled) queue silently
