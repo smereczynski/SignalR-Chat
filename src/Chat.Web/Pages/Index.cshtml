@@ -1,5 +1,6 @@
 ﻿@page
 @model IndexModel
+@inject Microsoft.Extensions.Localization.IStringLocalizer<Chat.Web.Resources.SharedResources> Localizer
 
 @{
     var isAuth = User?.Identity?.IsAuthenticated == true;
@@ -8,15 +9,15 @@
 <div class="container py-5">
   <div class="row justify-content-center">
     <div class="col-md-8 text-center">
-      <h1 class="mb-3">SignalR Chat</h1>
-  <p class="text-muted">Real-time chat application.</p>
+      <h1 class="mb-3">@Localizer["AppTitle"]</h1>
+  <p class="text-muted">@Localizer["AppDescription"]</p>
       @if (isAuth)
       {
-          <a class="btn btn-primary" href="/chat">Go to Chat</a>
+          <a class="btn btn-primary" href="/chat">@Localizer["GoToChat"]</a>
       }
       else
       {
-          <a class="btn btn-primary" href="/login?ReturnUrl=%2Fchat">Sign in to continue</a>
+          <a class="btn btn-primary" href="/login?ReturnUrl=%2Fchat">@Localizer["SignInToContinue"]</a>
       }
     </div>
   </div>
