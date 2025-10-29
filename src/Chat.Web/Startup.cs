@@ -27,6 +27,7 @@ using Microsoft.AspNetCore.Authentication;
 using System.Security.Claims;
 using System.Text.Encodings.Web;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Localization;
 // OpenTelemetry instrumentation extension namespaces (ensure packages installed: OpenTelemetry.Instrumentation.AspNetCore, OpenTelemetry.Exporter.OpenTelemetryProtocol)
 using System.Diagnostics;
 #if OPENTELEMETRY_INSTRUMENTATION
@@ -245,24 +246,65 @@ namespace Chat.Web
                     .AddCheck<Chat.Web.Health.RedisHealthCheck>("redis", tags: new[] { "ready" }, timeout: TimeSpan.FromSeconds(3))
                     .AddCheck<Chat.Web.Health.CosmosHealthCheck>("cosmos", tags: new[] { "ready" }, timeout: TimeSpan.FromSeconds(5));
             }
-            // Prefer ACS sender if configured, otherwise console
-            var acsConn = Configuration["Acs:ConnectionString"];            
-            if (!string.IsNullOrWhiteSpace(acsConn))
-            {
-                var acsOptions = new AcsOptions
-                {
-                    ConnectionString = acsConn,
-                    EmailFrom = Configuration["Acs:EmailFrom"],
-                    SmsFrom = Configuration["Acs:SmsFrom"]
-                };
-                services.AddSingleton<IOtpSender>(sp => new AcsOtpSender(acsOptions, sp.GetRequiredService<ILogger<AcsOtpSender>>()));
-                // Include ACS in health checks if present (config check only)
-                services.AddHealthChecks().AddCheck("acs-config", () => HealthCheckResult.Healthy("configured"), tags: new[] { "ready" });
-            }
-            else
+            
+            // OTP sender: always use console mock in test mode, otherwise prefer ACS if configured
+            if (inMemoryTest)
             {
                 services.AddSingleton<IOtpSender, ConsoleOtpSender>();
             }
+            else
+            {
+                var acsConn = Configuration["Acs:ConnectionString"];            
+                if (!string.IsNullOrWhiteSpace(acsConn))
+                {
+                    var acsOptions = new AcsOptions
+                    {
+                        ConnectionString = acsConn,
+                        EmailFrom = Configuration["Acs:EmailFrom"],
+                        SmsFrom = Configuration["Acs:SmsFrom"]
+                    };
+                    services.AddSingleton<IOtpSender>(sp => new AcsOtpSender(
+                        acsOptions, 
+                        sp.GetRequiredService<ILogger<AcsOtpSender>>(),
+                        sp.GetRequiredService<IStringLocalizer<Resources.SharedResources>>()));
+                    // Include ACS in health checks if present (config check only)
+                    services.AddHealthChecks().AddCheck("acs-config", () => HealthCheckResult.Healthy("configured"), tags: new[] { "ready" });
+                }
+                else
+                {
+                    services.AddSingleton<IOtpSender, ConsoleOtpSender>();
+                }
+            }
+
+            // Localization configuration
+            services.AddLocalization(); // Don't set ResourcesPath - resources are in namespace path
+            services.Configure<RequestLocalizationOptions>(options =>
+            {
+                var supportedCultures = new[]
+                {
+                    new System.Globalization.CultureInfo("en"), // English (default)
+                    new System.Globalization.CultureInfo("pl-PL"), // Poland
+                    new System.Globalization.CultureInfo("de-DE"), // Germany
+                    new System.Globalization.CultureInfo("cs-CZ"), // Czech Republic
+                    new System.Globalization.CultureInfo("sk-SK"), // Slovakia
+                    new System.Globalization.CultureInfo("uk-UA"), // Ukraine
+                    new System.Globalization.CultureInfo("be-BY"), // Belarus
+                    new System.Globalization.CultureInfo("lt-LT"), // Lithuania
+                    new System.Globalization.CultureInfo("ru-RU")  // Russia
+                };
+                
+                options.DefaultRequestCulture = new Microsoft.AspNetCore.Localization.RequestCulture("en");
+                options.SupportedCultures = supportedCultures;
+                options.SupportedUICultures = supportedCultures;
+                
+                // Priority: Cookie > Accept-Language > Default
+                options.RequestCultureProviders = new List<Microsoft.AspNetCore.Localization.IRequestCultureProvider>
+                {
+                    new Microsoft.AspNetCore.Localization.CookieRequestCultureProvider(),
+                    new Microsoft.AspNetCore.Localization.AcceptLanguageHeaderRequestCultureProvider()
+                };
+            });
+
             services.AddRazorPages();
             services.AddControllers();
             services.AddSingleton<Services.IInProcessMetrics, Services.InProcessMetrics>();
@@ -396,6 +438,9 @@ namespace Chat.Web
 
             app.UseHttpsRedirection();
             app.UseStaticFiles();
+
+            // Localization middleware (must be before UseRouting)
+            app.UseRequestLocalization();
 
             app.UseRouting();
 

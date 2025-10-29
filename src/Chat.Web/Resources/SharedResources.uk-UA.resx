@@ -1,0 +1,207 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <!-- Application -->
+  <data name="AppTitle" xml:space="preserve">
+    <value>SignalR Чат</value>
+  </data>
+  <data name="AppDescription" xml:space="preserve">
+    <value>Чат-додаток у реальному часі.</value>
+  </data>
+  
+  <!-- Common UI -->
+  <data name="Loading" xml:space="preserve">
+    <value>Завантаження…</value>
+  </data>
+  <data name="Error" xml:space="preserve">
+    <value>Помилка</value>
+  </data>
+  <data name="Retry" xml:space="preserve">
+    <value>Спробувати ще раз</value>
+  </data>
+  <data name="Search" xml:space="preserve">
+    <value>Пошук</value>
+  </data>
+  <data name="GoToChat" xml:space="preserve">
+    <value>Перейти до чату</value>
+  </data>
+  <data name="SignInToContinue" xml:space="preserve">
+    <value>Увійдіть, щоб продовжити</value>
+  </data>
+  <data name="SignIn" xml:space="preserve">
+    <value>Увійти</value>
+  </data>
+  
+  <!-- Chat Room -->
+  <data name="ChatRooms" xml:space="preserve">
+    <value>Чат-кімнати</value>
+  </data>
+  <data name="SelectRoomToJoin" xml:space="preserve">
+    <value>Будь ласка, оберіть кімнату!</value>
+  </data>
+  <data name="NoMessages" xml:space="preserve">
+    <value>Повідомлень немає.</value>
+  </data>
+  <data name="MessageInputPlaceholder" xml:space="preserve">
+    <value>Що у вас на думці?</value>
+  </data>
+  <data name="MessagesWaitingToSend" xml:space="preserve">
+    <value>Повідомлення очікують відправки</value>
+  </data>
+  <data name="WhosHere" xml:space="preserve">
+    <value>Хто тут ({0})</value>
+  </data>
+  <data name="Reconnecting" xml:space="preserve">
+    <value>ПЕРЕПІДКЛЮЧЕННЯ…</value>
+  </data>
+  <data name="Disconnected" xml:space="preserve">
+    <value>ВІДКЛЮЧЕНО</value>
+  </data>
+  <data name="MessageFailed" xml:space="preserve">
+    <value>(не вдалося)</value>
+  </data>
+  <data name="MessagePending" xml:space="preserve">
+    <value>…</value>
+  </data>
+  
+  <!-- Authentication -->
+  <data name="User" xml:space="preserve">
+    <value>Користувач</value>
+  </data>
+  <data name="LoadingUsers" xml:space="preserve">
+    <value>Завантаження користувачів...</value>
+  </data>
+  <data name="SelectUser" xml:space="preserve">
+    <value>Оберіть користувача...</value>
+  </data>
+  <data name="PickUserForOtp" xml:space="preserve">
+    <value>Оберіть користувача для отримання коду (електронна пошта та SMS).</value>
+  </data>
+  <data name="SendCode" xml:space="preserve">
+    <value>Надіслати код</value>
+  </data>
+  <data name="Code" xml:space="preserve">
+    <value>Код</value>
+  </data>
+  <data name="SixDigitCode" xml:space="preserve">
+    <value>6-значний код</value>
+  </data>
+  <data name="CodeExpires" xml:space="preserve">
+    <value>Код дійсний протягом 5 хвилин.</value>
+  </data>
+  <data name="Resend" xml:space="preserve">
+    <value>Надіслати повторно</value>
+  </data>
+  <data name="Verify" xml:space="preserve">
+    <value>Підтвердити</value>
+  </data>
+  <data name="SendingCode" xml:space="preserve">
+    <value>Надсилання коду</value>
+  </data>
+  <data name="SentToEmailAndMobile" xml:space="preserve">
+    <value>Надіслано на пошту та телефон</value>
+  </data>
+  <data name="FailedToSend" xml:space="preserve">
+    <value>Не вдалося надіслати</value>
+  </data>
+  
+  <!-- Date/Time -->
+  <data name="Today" xml:space="preserve">
+    <value>Сьогодні</value>
+  </data>
+  <data name="Yesterday" xml:space="preserve">
+    <value>Вчора</value>
+  </data>
+  <data name="AM" xml:space="preserve">
+    <value>дп</value>
+  </data>
+  <data name="PM" xml:space="preserve">
+    <value>пп</value>
+  </data>
+  
+  <!-- Error Messages -->
+  <data name="ErrorOccurred" xml:space="preserve">
+    <value>Під час обробки вашого запиту сталася помилка.</value>
+  </data>
+  <data name="RequestId" xml:space="preserve">
+    <value>ID запиту:</value>
+  </data>
+  <data name="DevelopmentMode" xml:space="preserve">
+    <value>Режим розробки</value>
+  </data>
+  <data name="DevelopmentModeWarning" xml:space="preserve">
+    <value>Перемикання на середовище розробки відображає детальну інформацію про помилки. Середовище розробки не повинно бути увімкнено для розгорнутих додатків, оскільки це може призвести до розкриття конфіденційної інформації кінцевим користувачам. Для локального налагодження встановіть змінну середовища ASPNETCORE_ENVIRONMENT на Development та перезапустіть додаток.</value>
+  </data>
+  <data name="FailedToLoadUsers" xml:space="preserve">
+    <value>Не вдалося завантажити користувачів</value>
+  </data>
+  <data name="UserSelectionRequired" xml:space="preserve">
+    <value>Потрібно обрати користувача</value>
+  </data>
+  <data name="PleaseWaitSeconds" xml:space="preserve">
+    <value>Будь ласка, зачекайте {0} секунд перед повторною відправкою</value>
+  </data>
+  <data name="FailedToSendCode" xml:space="preserve">
+    <value>Не вдалося надіслати код</value>
+  </data>
+  <data name="ErrorSendingCode" xml:space="preserve">
+    <value>Помилка надсилання коду</value>
+  </data>
+  <data name="UserAndCodeRequired" xml:space="preserve">
+    <value>Користувач і код обов'язкові</value>
+  </data>
+  <data name="InvalidVerificationCode" xml:space="preserve">
+    <value>Недійсний код підтвердження</value>
+  </data>
+  <data name="VerificationFailed" xml:space="preserve">
+    <value>Не вдалося підтвердити. Будь ласка, спробуйте ще раз.</value>
+  </data>
+  <data name="LoginSuccessful" xml:space="preserve">
+    <value>Успішний вхід! Перенаправлення...</value>
+  </data>
+  <data name="SessionExpired" xml:space="preserve">
+    <value>Сесія завершилася. Будь ласка, оновіть сторінку.</value>
+  </data>
+  <data name="SendingTooQuickly" xml:space="preserve">
+    <value>Ви надсилаєте повідомлення занадто швидко</value>
+  </data>
+  <data name="ErrorJoinRoomNameRequired" xml:space="preserve">
+    <value>Не вдалося приєднатися до кімнати! Необхідна назва кімнати.</value>
+  </data>
+  <data name="ErrorNotAuthorizedRoom" xml:space="preserve">
+    <value>У вас немає доступу до цієї кімнати.</value>
+  </data>
+  <data name="ErrorUserProfileNotFound" xml:space="preserve">
+    <value>Профіль користувача не знайдено.</value>
+  </data>
+  <data name="ErrorJoinRoom" xml:space="preserve">
+    <value>Не вдалося приєднатися до кімнати! {0}</value>
+  </data>
+  <data name="ErrorNotInRoom" xml:space="preserve">
+    <value>Ви не перебуваєте в кімнаті.</value>
+  </data>
+  <data name="ErrorRateLimitExceeded" xml:space="preserve">
+    <value>Перевищено ліміт запитів. Будь ласка, сповільніться.</value>
+  </data>
+  
+  <!-- Email/SMS Templates -->
+  <data name="EmailSubjectVerificationCode" xml:space="preserve">
+    <value>Ваш код підтвердження</value>
+  </data>
+  <data name="EmailSubjectNewMessage" xml:space="preserve">
+    <value>Нове повідомлення</value>
+  </data>
+  <data name="EmailBodyVerificationCode" xml:space="preserve">
+    <value>Ваш код підтвердження: {0}</value>
+  </data>
+  <data name="SmsBodyVerificationCode" xml:space="preserve">
+    <value>Код: {0}</value>
+  </data>
+  
+  <!-- Validation Messages -->
+  <data name="ValidationRoomNameLength" xml:space="preserve">
+    <value>{0} повинно мати щонайменше {2} і максимум {1} символів.</value>
+  </data>
+  <data name="ValidationRoomNamePattern" xml:space="preserve">
+    <value>Дозволені символи: літери, цифри та один пробіл між словами.</value>
+  </data>
+</root>

@@ -102,7 +102,9 @@ namespace Chat.IntegrationTests
             var errorMessages = new List<string>();
             connection.On<string>("onError", (msg) =>
             {
-                if (msg.Contains("Rate limit", StringComparison.OrdinalIgnoreCase))
+                // Accept either the full localized message or the resource key
+                if (msg.Contains("Rate limit", StringComparison.OrdinalIgnoreCase) ||
+                    msg.Contains("ErrorRateLimitExceeded", StringComparison.Ordinal))
                 {
                     errorCount++;
                     errorMessages.Add(msg);
@@ -125,7 +127,11 @@ namespace Chat.IntegrationTests
             // Assert
             Assert.True(errorCount >= 1, $"Expected at least 1 rate limit error, got {errorCount}");
             _output.WriteLine($"Total rate limit errors: {errorCount}");
-            Assert.All(errorMessages, msg => Assert.Contains("Rate limit", msg, StringComparison.OrdinalIgnoreCase));
+            Assert.All(errorMessages, msg => 
+                Assert.True(
+                    msg.Contains("Rate limit", StringComparison.OrdinalIgnoreCase) ||
+                    msg.Contains("ErrorRateLimitExceeded", StringComparison.Ordinal),
+                    $"Expected rate limit error message, got: {msg}"));
 
             // Cleanup
             await connection.StopAsync();
@@ -162,7 +168,9 @@ namespace Chat.IntegrationTests
             int errorCount = 0;
             connection.On<string>("onError", (msg) =>
             {
-                if (msg.Contains("Rate limit", StringComparison.OrdinalIgnoreCase))
+                // Accept either the full localized message or the resource key
+                if (msg.Contains("Rate limit", StringComparison.OrdinalIgnoreCase) ||
+                    msg.Contains("ErrorRateLimitExceeded", StringComparison.Ordinal))
                 {
                     errorCount++;
                 }
@@ -239,8 +247,16 @@ namespace Chat.IntegrationTests
                 .Build();
 
             int errors1 = 0, errors2 = 0;
-            connection1.On<string>("onError", msg => { if (msg.Contains("Rate limit")) errors1++; });
-            connection2.On<string>("onError", msg => { if (msg.Contains("Rate limit")) errors2++; });
+            connection1.On<string>("onError", msg => { 
+                if (msg.Contains("Rate limit", StringComparison.OrdinalIgnoreCase) || 
+                    msg.Contains("ErrorRateLimitExceeded", StringComparison.Ordinal)) 
+                    errors1++; 
+            });
+            connection2.On<string>("onError", msg => { 
+                if (msg.Contains("Rate limit", StringComparison.OrdinalIgnoreCase) || 
+                    msg.Contains("ErrorRateLimitExceeded", StringComparison.Ordinal)) 
+                    errors2++; 
+            });
 
             await connection1.StartAsync();
             await connection2.StartAsync();

@@ -4,7 +4,7 @@
 		{
 			"label": "test",
 			"type": "shell",
-			"command": "dotnet test --no-build --nologo",
+			"command": "dotnet test src/Chat.sln --no-build --nologo",
 			"group": "test",
 			"problemMatcher": [
 				"$msCompile"
@@ -59,6 +59,20 @@
 				"panel": "shared"
 			},
 			"detail": "Compile the .NET solution."
+		},
+		{
+			"label": "clean build (translations)",
+			"type": "shell",
+			"command": "rm -rf src/Chat.Web/bin src/Chat.Web/obj && dotnet build ./src/Chat.sln --nologo",
+			"group": "build",
+			"problemMatcher": [
+				"$msCompile"
+			],
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared"
+			},
+			"detail": "Clean bin/obj folders and rebuild - use after translation (.resx) changes."
 		},
 		{
 			"label": "build all",
