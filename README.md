@@ -9,6 +9,10 @@ The project intentionally keeps scope tight: fixed public rooms, text messages o
 ## Implemented Features (Current State)
 * Multi-room chat (fixed rooms: `general`, `ops`, `random`)
 * Text messages only (immutable after send)
+* Multi-language support: 9 locales with natural translations (en, pl-PL, de-DE, cs-CZ, sk-SK, uk-UA, be-BY, lt-LT, ru-RU)
+  * Culture resolution via cookie preference or Accept-Language header
+  * Client-side translations via REST API endpoint
+  * Culture switcher UI on login page
 * Optimistic send with client correlation IDs and reconciliation
 * Single ack-timeout per message (deduped by correlationId to avoid duplicate retries)
 * Incremental pagination (newest batch first; fetch older on upward scroll)
@@ -42,6 +46,7 @@ Rooms are static; there is no runtime CRUD. Rooms and initial users must be prov
 **Persistence**: Azure Cosmos DB with custom repository pattern (or in-memory repositories for testing)  
 **OTP / Cache**: Redis (or in-memory fallback) storing short-lived OTP codes (`otp:{user}`)  
 **Auth Flow**: Request code → store in OTP store → user enters code → cookie issued → hub connects  
+**Localization**: ASP.NET Core Localization with 9 supported markets; culture via Cookie > Accept-Language; API endpoint for client translations  
 **Observability**: OpenTelemetry (trace + metric + log providers) with exporter priority (Azure Monitor > OTLP > Console) and domain counters  
 Serilog OTLP sink is enabled only when `OTel__OtlpEndpoint` is set to avoid startup issues in environments without an OTLP endpoint.  
 **Frontend**: Source JS in `wwwroot/js/` referenced directly by pages (`site.js`, `chat.js`, `login.js`). Minified bundles in `wwwroot/js/dist/` are optional and not required for development—pages do not reference `dist` by default.
@@ -231,6 +236,121 @@ The application tracks user presence across multiple instances using a hybrid ap
 * **Distributed snapshot**: Redis hash (`presence:users`) stores user presence for cross-instance consistency
 * **Interfaces**: `IPresenceTracker` with `RedisPresenceTracker` (production) and `InMemoryPresenceTracker` (testing)
 * **Endpoints**: `GET /api/health/chat/presence` (authenticated) returns per-room user presence
+
+## Localization
+The application supports **9 markets** with natural, idiomatic translations:
+
+### Supported Cultures
+| Culture | Language | Notes |
+|---------|----------|-------|
+| `en` | English | Default/fallback |
+| `pl-PL` | Polish | |
+| `de-DE` | German | Formal style |
+| `cs-CZ` | Czech | Informal friendly |
+| `sk-SK` | Slovak | |
+| `uk-UA` | Ukrainian | Cyrillic, modern Ukrainian |
+| `be-BY` | Belarusian | Cyrillic, proper Belarusian |
+| `lt-LT` | Lithuanian | Baltic language, Latin script |
+| `ru-RU` | Russian | Cyrillic, standard contemporary |
+
+### Features
+* **Culture Resolution**: Cookie preference → Accept-Language header → Default (en)
+* **Client API**: `GET /api/localization/strings` returns JSON with 60+ translated strings
+* **Resource Files**: `SharedResources.[locale].resx` with comprehensive translations
+* **Culture Switcher**: UI component on login page for explicit culture selection
+* **Coverage**: Application UI, chat interface, authentication, errors, validation, notifications
+* **Translation Quality**: Natural, idiomatic translations (not literal machine translations)
+
+### Client Integration
+JavaScript code fetches translations on page load and populates `window.i18n` object:
+```javascript
+const response = await fetch('/api/localization/strings');
+window.i18n = await response.json();
+// Usage: window.i18n.Loading, window.i18n.Error, etc.
+```
+
+Razor pages use `IStringLocalizer<SharedResources>`:
+```csharp
+@inject IStringLocalizer<SharedResources> Localizer
+@Localizer["AppTitle"]
+```
+
+### Testing
+Comprehensive test coverage with 55 tests across all 9 locales:
+* Basic English localization tests (10 tests)
+* Multi-locale tests (45 tests = 5 test categories × 9 locales)
+  * App translations verification
+  * UI strings validation
+  * Authentication strings checking
+  * Complete key existence validation (60+ keys per locale)
+  * Parameterized string formatting
+
+All 55 tests passing ✅
+
+## Testing
+The project includes comprehensive test coverage across three test assemblies:
+
+### Test Summary
+* **Total Tests**: 109 tests
+* **Status**: All passing ✅
+* **Test Projects**:
+  - `Chat.Tests` (80 tests): Unit tests including localization (55 tests), OTP hashing, configuration guards, unread notifications
+  - `Chat.DataSeed.Tests` (10 tests): Data seeding validation
+  - `Chat.IntegrationTests` (19 tests): End-to-end integration tests including OTP flow, rate limiting, room authorization, hub lifecycle
+
+### Key Test Categories
+1. **Localization Tests** (55 tests in Chat.Tests)
+   - English default culture tests (10)
+   - Multi-locale comprehensive tests (45 = 5 categories × 9 locales)
+   - Covers all 60+ resource keys across 9 cultures
+   - Validates translation quality and completeness
+
+2. **Integration Tests** (19 tests in Chat.IntegrationTests)
+   - `OtpAuthFlowTests`: Full OTP authentication workflow
+   - `RoomAuthorizationTests`: Room access control validation
+   - `RoomJoinPositiveTests`: Successful room join scenarios
+   - `ChatHubLifecycleTests`: SignalR hub connection/disconnection
+   - `RateLimitingTests`: OTP endpoint rate limiting
+   - `MarkReadRateLimitingTests`: Read receipt rate limiting
+   - `ImmediatePostAfterLoginTests`: REST fallback (feature-flagged)
+
+3. **Unit Tests** (25 tests in Chat.Tests, excluding localization)
+   - `OtpHasherTests`: Argon2id hashing, salt, pepper verification
+   - `ConfigurationGuardsTests`: Required configuration validation
+   - `UnreadNotificationSchedulerTests`: Delayed notification logic
+   - `UrlIsLocalUrlTests`: Redirect validation
+
+4. **Data Tests** (10 tests in Chat.DataSeed.Tests)
+   - Bootstrap data seeding validation
+   - User/Room/Message seed data integrity
+
+### Running Tests
+```bash
+# Run all tests
+dotnet test src/Chat.sln --nologo
+
+# Run specific test project
+dotnet test tests/Chat.Tests/Chat.Tests.csproj --nologo
+
+# Run localization tests only
+dotnet test src/Chat.sln --filter "FullyQualifiedName~LocalizationTests" --nologo
+
+# Run integration tests only
+dotnet test tests/Chat.IntegrationTests/Chat.IntegrationTests.csproj --nologo
+```
+
+### VS Code Task
+Use the `test` task defined in `.vscode/tasks.json`:
+```bash
+# Via VS Code: Tasks: Run Task → test
+# Or use the task runner
+```
+
+### Test Configuration
+- Integration tests use `CustomWebApplicationFactory` with in-memory repositories
+- `Testing:InMemory=true` flag enables in-memory OTP store and repositories
+- No external dependencies required (Redis/Cosmos mocked)
+- Tests run in isolation with separate DI containers
 
 ## Future Enhancements (Not Implemented)
 * Typing indicators

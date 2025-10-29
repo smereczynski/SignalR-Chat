@@ -134,9 +134,10 @@ sequenceDiagram
 - Persistence: Azure Cosmos DB with custom repository pattern; in-memory repositories when Testing:InMemory mode enabled
 - OTP store: Redis in normal mode, in-memory in Testing:InMemory
 - Auth: Cookie authentication after OTP verification (dedicated `/login` page)
+- Localization: ASP.NET Core Localization with 9 supported markets (en, pl-PL, de-DE, cs-CZ, sk-SK, uk-UA, be-BY, lt-LT, ru-RU); culture resolution via Cookie > Accept-Language header; API endpoint (`/api/localization/strings`) provides client-side translations
 - Observability: OpenTelemetry (traces, metrics, logs) with exporter auto-selection
- - SignalR transport: In-process by default; Azure SignalR is automatically added when not in Testing:InMemory mode
- - Read receipts: Client marks messages as read in two ways: (1) on reaching timeline bottom (existing), and (2) after join/reconnect by scanning the viewport for visible, non-self messages and invoking `markRead` per id (debounced, idempotent). This ensures historical messages seen on reconnect are recorded as read.
+- SignalR transport: In-process by default; Azure SignalR is automatically added when not in Testing:InMemory mode
+- Read receipts: Client marks messages as read in two ways: (1) on reaching timeline bottom (existing), and (2) after join/reconnect by scanning the viewport for visible, non-self messages and invoking `markRead` per id (debounced, idempotent). This ensures historical messages seen on reconnect are recorded as read.
 
 ## OTP authentication and hashing
 
@@ -211,6 +212,135 @@ When Cosmos DB repositories are used, the messages container's `DefaultTimeToLiv
   - `-1` → TTL enabled but items never expire by default (Cosmos semantics)
   - `> 0` seconds → items expire after the configured lifetime
 - Reconciliation: The application reads the current container properties and updates `DefaultTimeToLive` when it differs from the configured value, including clearing it when disabled. This ensures drift correction when config changes between deployments.
+
+## Localization
+
+### Goals
+- Support multiple markets with natural, idiomatic translations
+- Enable culture-specific user experiences without code changes
+- Provide client-side access to localized strings
+- Allow culture selection via cookie or Accept-Language header
+
+### Supported Markets (9 total)
+The application supports the following cultures with complete translations:
+
+| Culture Code | Language | Region | Notes |
+|--------------|----------|--------|-------|
+| `en` | English | Default | Fallback culture |
+| `pl-PL` | Polish | Poland | |
+| `de-DE` | German | Germany | Formal style |
+| `cs-CZ` | Czech | Czech Republic | Informal friendly |
+| `sk-SK` | Slovak | Slovakia | |
+| `uk-UA` | Ukrainian | Ukraine | Modern Ukrainian, Cyrillic |
+| `be-BY` | Belarusian | Belarus | Proper Belarusian, Cyrillic |
+| `lt-LT` | Lithuanian | Lithuania | Baltic language, Latin script |
+| `ru-RU` | Russian | Russia | Standard contemporary Russian, Cyrillic |
+
+### Components
+
+**Resource Files** (`src/Chat.Web/Resources/`)
+- `SharedResources.resx` - English (default/fallback)
+- `SharedResources.[locale].resx` - Translated resources for each supported culture
+- Contains 60+ strings covering:
+  - Application common (Loading, Error, Retry, Search)
+  - Chat interface (ChatRooms, MessageInputPlaceholder, Reconnecting)
+  - Authentication/OTP (SendCode, Verify, SixDigitCode)
+  - Date/Time (Today, Yesterday, AM/PM)
+  - Error messages (40+ error/validation strings)
+  - Email/SMS templates
+  - Validation messages
+
+**LocalizationController** (`src/Chat.Web/Controllers/LocalizationController.cs`)
+- REST endpoint: `GET /api/localization/strings`
+- Returns JSON object with all client-needed translations for current culture
+- Response cached (1 hour) with variance on `Cookie` and `Accept-Language` headers
+- Used by JavaScript to populate `window.i18n` object
+
+**Startup Configuration** (`src/Chat.Web/Startup.cs`)
+```csharp
+services.AddLocalization(); // Resources resolved from namespace path
+services.Configure<RequestLocalizationOptions>(options =>
+{
+    var supportedCultures = new[] { /* 9 cultures */ };
+    options.DefaultRequestCulture = new RequestCulture("en");
+    options.SupportedCultures = supportedCultures;
+    options.SupportedUICultures = supportedCultures;
+    
+    // Priority: Cookie > Accept-Language > Default
+    options.RequestCultureProviders = new List<IRequestCultureProvider>
+    {
+        new CookieRequestCultureProvider(),
+        new AcceptLanguageHeaderRequestCultureProvider()
+    };
+});
+```
+
+**Culture Resolution Priority**
+1. **Cookie** (`CookieRequestCultureProvider`) - Explicit user preference stored in `.AspNetCore.Culture` cookie
+2. **Accept-Language Header** (`AcceptLanguageHeaderRequestCultureProvider`) - Browser language preference
+3. **Default** - Falls back to `en` if no match found
+
+### Client Integration
+
+**JavaScript Initialization** (`wwwroot/js/login.js`)
+```javascript
+// Fetch translations for current culture
+const response = await fetch('/api/localization/strings');
+const translations = await response.json();
+window.i18n = translations;
+
+// Use in UI
+document.querySelector('.loading').textContent = window.i18n.Loading;
+```
+
+**Culture Switcher**
+- UI component on login page allows culture selection
+- Sets `.AspNetCore.Culture` cookie with format: `c=CULTURE|uic=CULTURE`
+- Page reload applies new culture across all resources
+
+**Razor Page Usage**
+```csharp
+@inject IStringLocalizer<SharedResources> Localizer
+
+<h1>@Localizer["AppTitle"]</h1>
+<p>@Localizer["AppDescription"]</p>
+```
+
+### Translation Approach
+All translations focus on natural, idiomatic language rather than literal machine translations:
+- **German**: Formal business style ("Sie" form throughout)
+- **Czech/Slovak**: Informal friendly tone appropriate for chat
+- **Ukrainian**: Modern Ukrainian avoiding Russianisms
+- **Belarusian**: Proper Belarusian, distinct from Russian
+- **Lithuanian**: Natural Baltic phrasing with proper diacritics
+
+Examples:
+- "What's on your mind?" (message placeholder)
+  - German: "Was möchten Sie mitteilen?" (formal)
+  - Czech: "Co vás napadá?" (friendly)
+  - Polish: "Co Ci chodzi po głowie?" (idiomatic)
+  - Ukrainian: "Що у вас на думці?" (natural)
+
+### Testing
+Comprehensive localization test coverage (`tests/Chat.Tests/LocalizationTests.cs`):
+- 55 total tests covering all 9 markets
+- Tests per locale:
+  - App translations (AppTitle, AppDescription, Loading)
+  - UI strings (Error, ChatRooms, SignInToContinue)
+  - Authentication strings (SendCode, Verify, SixDigitCode)
+  - All 60+ required keys validation
+  - Parameterized string formatting (e.g., "Who's Here ({0})")
+- Culture-specific test execution using `CultureInfo.CurrentCulture` and `CultureInfo.CurrentUICulture`
+- Verifies actual `.resx` file contents match expected translations
+
+Test results: **55/55 passing** ✅
+
+### Future Enhancements
+- User preference persistence (database-backed culture choice)
+- Additional markets as needed
+- RTL (right-to-left) layout support for Arabic/Hebrew
+- Pluralization rules for count-based strings
+- Date/time format localization
 # Architecture
 
 This section captures core components and runtime flows beyond OTP specifics.
@@ -236,10 +366,13 @@ This section captures core components and runtime flows beyond OTP specifics.
 | Client | `chat.js` | Connection lifecycle (connect/join/reconnect), outbox queue, optimistic sends, reconciling broadcasts, telemetry emission. |
 | Client | Read receipts UI | Debounced mark-as-read when timeline bottom is reached and after join/reconnect by scanning visible messages; updates per-message ReadBy badges. |
 | Client | `site.js` | General UI behaviors (sidebar toggles, OTP modal workflow, tooltips, message actions UI). |
+| Client | `login.js` | OTP authentication flow on `/login` page; culture switcher; localization initialization. |
 | Real-time | `ChatHub` | Single entry-point for sending messages and joining rooms. Normalizes routing, enriches tracing, broadcasts canonical message DTOs. Uses Context.Items for per-connection state (user, room). |
 | Presence | `IPresenceTracker` / `RedisPresenceTracker` | Tracks user presence across instances using Context.Items (local) + Redis hash (distributed snapshot). |
 | Background | `UnreadNotificationScheduler` | Schedules per-message delayed unread checks; sends notifications to recipients excluding sender/readers. |
 | Services | `NotificationSender` / `AcsOtpSender` | Formats notification payloads and delivers them via email/SMS; enforces notification subject/body contract while preserving OTP formatting. |
+| Localization | `LocalizationController` | API endpoint (`/api/localization/strings`) providing JSON translations for current culture; cached with `Accept-Language` header variance. |
+| Localization | `SharedResources` | Resource files (`SharedResources.[locale].resx`) containing 60+ translated strings for 9 supported markets. |
 | Auth | Auth Controllers / OTP API | `start` (generate/store OTP in Redis), `verify` (validate OTP, issue auth cookie), `logout`. |
 | Data | `ApplicationDbContext` & EF migrations | Stores Users, Rooms, Messages. |
 | OTP Store | `RedisOtpStore` | Wrapper over StackExchange.Redis for code set/get/delete with TTL. |
