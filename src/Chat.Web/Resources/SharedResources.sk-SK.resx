@@ -1,0 +1,207 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <!-- Application -->
+  <data name="AppTitle" xml:space="preserve">
+    <value>SignalR Chat</value>
+  </data>
+  <data name="AppDescription" xml:space="preserve">
+    <value>Chatovacia aplikácia v reálnom čase.</value>
+  </data>
+  
+  <!-- Common UI -->
+  <data name="Loading" xml:space="preserve">
+    <value>Načítava sa…</value>
+  </data>
+  <data name="Error" xml:space="preserve">
+    <value>Chyba</value>
+  </data>
+  <data name="Retry" xml:space="preserve">
+    <value>Skúsiť znova</value>
+  </data>
+  <data name="Search" xml:space="preserve">
+    <value>Hľadať</value>
+  </data>
+  <data name="GoToChat" xml:space="preserve">
+    <value>Prejsť na chat</value>
+  </data>
+  <data name="SignInToContinue" xml:space="preserve">
+    <value>Prihláste sa a pokračujte</value>
+  </data>
+  <data name="SignIn" xml:space="preserve">
+    <value>Prihlásiť sa</value>
+  </data>
+  
+  <!-- Chat Room -->
+  <data name="ChatRooms" xml:space="preserve">
+    <value>Chatovacie miestnosti</value>
+  </data>
+  <data name="SelectRoomToJoin" xml:space="preserve">
+    <value>Prosím vyberte miestnosť!</value>
+  </data>
+  <data name="NoMessages" xml:space="preserve">
+    <value>Žiadne správy.</value>
+  </data>
+  <data name="MessageInputPlaceholder" xml:space="preserve">
+    <value>Čo vás napadá?</value>
+  </data>
+  <data name="MessagesWaitingToSend" xml:space="preserve">
+    <value>Správy čakajúce na odoslanie</value>
+  </data>
+  <data name="WhosHere" xml:space="preserve">
+    <value>Kto je tu ({0})</value>
+  </data>
+  <data name="Reconnecting" xml:space="preserve">
+    <value>PRIPÁJANIE…</value>
+  </data>
+  <data name="Disconnected" xml:space="preserve">
+    <value>ODPOJENÉ</value>
+  </data>
+  <data name="MessageFailed" xml:space="preserve">
+    <value>(nepodarilo sa)</value>
+  </data>
+  <data name="MessagePending" xml:space="preserve">
+    <value>…</value>
+  </data>
+  
+  <!-- Authentication -->
+  <data name="User" xml:space="preserve">
+    <value>Používateľ</value>
+  </data>
+  <data name="LoadingUsers" xml:space="preserve">
+    <value>Načítavanie používateľov...</value>
+  </data>
+  <data name="SelectUser" xml:space="preserve">
+    <value>Vyberte používateľa...</value>
+  </data>
+  <data name="PickUserForOtp" xml:space="preserve">
+    <value>Vyberte používateľa pre získanie kódu (email a SMS).</value>
+  </data>
+  <data name="SendCode" xml:space="preserve">
+    <value>Odoslať kód</value>
+  </data>
+  <data name="Code" xml:space="preserve">
+    <value>Kód</value>
+  </data>
+  <data name="SixDigitCode" xml:space="preserve">
+    <value>6-miestny kód</value>
+  </data>
+  <data name="CodeExpires" xml:space="preserve">
+    <value>Kód vyprší za 5 minút.</value>
+  </data>
+  <data name="Resend" xml:space="preserve">
+    <value>Odoslať znova</value>
+  </data>
+  <data name="Verify" xml:space="preserve">
+    <value>Overiť</value>
+  </data>
+  <data name="SendingCode" xml:space="preserve">
+    <value>Odesiela sa kód</value>
+  </data>
+  <data name="SentToEmailAndMobile" xml:space="preserve">
+    <value>Odoslané na email a mobil</value>
+  </data>
+  <data name="FailedToSend" xml:space="preserve">
+    <value>Odoslanie zlyhalo</value>
+  </data>
+  
+  <!-- Date/Time -->
+  <data name="Today" xml:space="preserve">
+    <value>Dnes</value>
+  </data>
+  <data name="Yesterday" xml:space="preserve">
+    <value>Včera</value>
+  </data>
+  <data name="AM" xml:space="preserve">
+    <value>dop.</value>
+  </data>
+  <data name="PM" xml:space="preserve">
+    <value>pop.</value>
+  </data>
+  
+  <!-- Error Messages -->
+  <data name="ErrorOccurred" xml:space="preserve">
+    <value>Pri spracovaní vašej požiadavky došlo k chybe.</value>
+  </data>
+  <data name="RequestId" xml:space="preserve">
+    <value>ID požiadavky:</value>
+  </data>
+  <data name="DevelopmentMode" xml:space="preserve">
+    <value>Vývojový režim</value>
+  </data>
+  <data name="DevelopmentModeWarning" xml:space="preserve">
+    <value>Prepnutie do vývojového prostredia zobrazí podrobné informácie o chybách. Vývojové prostredie by nemalo byť povolené v produkčných aplikáciách, pretože môže koncovým používateľom odhaliť citlivé informácie. Pre lokálne ladenie nastavte premennú prostredia ASPNETCORE_ENVIRONMENT na Development a reštartujte aplikáciu.</value>
+  </data>
+  <data name="FailedToLoadUsers" xml:space="preserve">
+    <value>Nepodarilo sa načítať používateľov</value>
+  </data>
+  <data name="UserSelectionRequired" xml:space="preserve">
+    <value>Je nutné vybrať používateľa</value>
+  </data>
+  <data name="PleaseWaitSeconds" xml:space="preserve">
+    <value>Počkajte prosím {0} sekúnd pred opätovným odoslaním</value>
+  </data>
+  <data name="FailedToSendCode" xml:space="preserve">
+    <value>Nepodarilo sa odoslať kód</value>
+  </data>
+  <data name="ErrorSendingCode" xml:space="preserve">
+    <value>Chyba pri odosielaní kódu</value>
+  </data>
+  <data name="UserAndCodeRequired" xml:space="preserve">
+    <value>Používateľ a kód sú povinné</value>
+  </data>
+  <data name="InvalidVerificationCode" xml:space="preserve">
+    <value>Neplatný overovací kód</value>
+  </data>
+  <data name="VerificationFailed" xml:space="preserve">
+    <value>Overenie zlyhalo. Skúste to prosím znova.</value>
+  </data>
+  <data name="LoginSuccessful" xml:space="preserve">
+    <value>Prihlásenie úspešné! Presmerovanie...</value>
+  </data>
+  <data name="SessionExpired" xml:space="preserve">
+    <value>Relácia vypršala. Obnovte prosím stránku.</value>
+  </data>
+  <data name="SendingTooQuickly" xml:space="preserve">
+    <value>Posielate správy príliš rýchlo</value>
+  </data>
+  <data name="ErrorJoinRoomNameRequired" xml:space="preserve">
+    <value>Nepodarilo sa vstúpiť do miestnosti! Názov miestnosti je povinný.</value>
+  </data>
+  <data name="ErrorNotAuthorizedRoom" xml:space="preserve">
+    <value>Nemáte oprávnenie k tejto miestnosti.</value>
+  </data>
+  <data name="ErrorUserProfileNotFound" xml:space="preserve">
+    <value>Používateľský profil nenájdený.</value>
+  </data>
+  <data name="ErrorJoinRoom" xml:space="preserve">
+    <value>Nepodarilo sa vstúpiť do miestnosti! {0}</value>
+  </data>
+  <data name="ErrorNotInRoom" xml:space="preserve">
+    <value>Nie ste v žiadnej miestnosti.</value>
+  </data>
+  <data name="ErrorRateLimitExceeded" xml:space="preserve">
+    <value>Prekročený limit požiadaviek. Spomaľte prosím.</value>
+  </data>
+  
+  <!-- Email/SMS Templates -->
+  <data name="EmailSubjectVerificationCode" xml:space="preserve">
+    <value>Váš overovací kód</value>
+  </data>
+  <data name="EmailSubjectNewMessage" xml:space="preserve">
+    <value>Nová správa</value>
+  </data>
+  <data name="EmailBodyVerificationCode" xml:space="preserve">
+    <value>Váš overovací kód je: {0}</value>
+  </data>
+  <data name="SmsBodyVerificationCode" xml:space="preserve">
+    <value>Kód: {0}</value>
+  </data>
+  
+  <!-- Validation Messages -->
+  <data name="ValidationRoomNameLength" xml:space="preserve">
+    <value>{0} musí mať minimálne {2} a maximálne {1} znakov.</value>
+  </data>
+  <data name="ValidationRoomNamePattern" xml:space="preserve">
+    <value>Povolené znaky: písmená, číslice a jedna medzera medzi slovami.</value>
+  </data>
+</root>

@@ -1,0 +1,207 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <!-- Application -->
+  <data name="AppTitle" xml:space="preserve">
+    <value>SignalR Chat</value>
+  </data>
+  <data name="AppDescription" xml:space="preserve">
+    <value>Echtzeit-Chat-Anwendung.</value>
+  </data>
+  
+  <!-- Common UI -->
+  <data name="Loading" xml:space="preserve">
+    <value>Wird geladen…</value>
+  </data>
+  <data name="Error" xml:space="preserve">
+    <value>Fehler</value>
+  </data>
+  <data name="Retry" xml:space="preserve">
+    <value>Erneut versuchen</value>
+  </data>
+  <data name="Search" xml:space="preserve">
+    <value>Suchen</value>
+  </data>
+  <data name="GoToChat" xml:space="preserve">
+    <value>Zum Chat</value>
+  </data>
+  <data name="SignInToContinue" xml:space="preserve">
+    <value>Anmelden, um fortzufahren</value>
+  </data>
+  <data name="SignIn" xml:space="preserve">
+    <value>Anmelden</value>
+  </data>
+  
+  <!-- Chat Room -->
+  <data name="ChatRooms" xml:space="preserve">
+    <value>Chaträume</value>
+  </data>
+  <data name="SelectRoomToJoin" xml:space="preserve">
+    <value>Bitte wählen Sie einen Raum aus!</value>
+  </data>
+  <data name="NoMessages" xml:space="preserve">
+    <value>Keine Nachrichten vorhanden.</value>
+  </data>
+  <data name="MessageInputPlaceholder" xml:space="preserve">
+    <value>Was möchten Sie mitteilen?</value>
+  </data>
+  <data name="MessagesWaitingToSend" xml:space="preserve">
+    <value>Nachrichten werden gesendet</value>
+  </data>
+  <data name="WhosHere" xml:space="preserve">
+    <value>Anwesend ({0})</value>
+  </data>
+  <data name="Reconnecting" xml:space="preserve">
+    <value>VERBINDUNG WIRD WIEDERHERGESTELLT…</value>
+  </data>
+  <data name="Disconnected" xml:space="preserve">
+    <value>VERBINDUNG GETRENNT</value>
+  </data>
+  <data name="MessageFailed" xml:space="preserve">
+    <value>(fehlgeschlagen)</value>
+  </data>
+  <data name="MessagePending" xml:space="preserve">
+    <value>…</value>
+  </data>
+  
+  <!-- Authentication -->
+  <data name="User" xml:space="preserve">
+    <value>Benutzer</value>
+  </data>
+  <data name="LoadingUsers" xml:space="preserve">
+    <value>Benutzer werden geladen...</value>
+  </data>
+  <data name="SelectUser" xml:space="preserve">
+    <value>Benutzer auswählen...</value>
+  </data>
+  <data name="PickUserForOtp" xml:space="preserve">
+    <value>Wählen Sie einen Benutzer aus, um einen Code zu erhalten (E-Mail und SMS).</value>
+  </data>
+  <data name="SendCode" xml:space="preserve">
+    <value>Code senden</value>
+  </data>
+  <data name="Code" xml:space="preserve">
+    <value>Code</value>
+  </data>
+  <data name="SixDigitCode" xml:space="preserve">
+    <value>6-stelliger Code</value>
+  </data>
+  <data name="CodeExpires" xml:space="preserve">
+    <value>Code läuft in 5 Minuten ab.</value>
+  </data>
+  <data name="Resend" xml:space="preserve">
+    <value>Erneut senden</value>
+  </data>
+  <data name="Verify" xml:space="preserve">
+    <value>Bestätigen</value>
+  </data>
+  <data name="SendingCode" xml:space="preserve">
+    <value>Code wird gesendet</value>
+  </data>
+  <data name="SentToEmailAndMobile" xml:space="preserve">
+    <value>Per E-Mail und SMS verschickt</value>
+  </data>
+  <data name="FailedToSend" xml:space="preserve">
+    <value>Senden fehlgeschlagen</value>
+  </data>
+  
+  <!-- Date/Time -->
+  <data name="Today" xml:space="preserve">
+    <value>Heute</value>
+  </data>
+  <data name="Yesterday" xml:space="preserve">
+    <value>Gestern</value>
+  </data>
+  <data name="AM" xml:space="preserve">
+    <value>vormittags</value>
+  </data>
+  <data name="PM" xml:space="preserve">
+    <value>nachmittags</value>
+  </data>
+  
+  <!-- Error Messages -->
+  <data name="ErrorOccurred" xml:space="preserve">
+    <value>Bei der Verarbeitung Ihrer Anfrage ist ein Fehler aufgetreten.</value>
+  </data>
+  <data name="RequestId" xml:space="preserve">
+    <value>Anfrage-ID:</value>
+  </data>
+  <data name="DevelopmentMode" xml:space="preserve">
+    <value>Entwicklungsmodus</value>
+  </data>
+  <data name="DevelopmentModeWarning" xml:space="preserve">
+    <value>Die Aktivierung der Entwicklungsumgebung zeigt detaillierte Fehlerinformationen an. Diese sollte nicht in produktiven Anwendungen aktiviert sein, da sensible Informationen für Endbenutzer sichtbar werden können. Für lokales Debugging setzen Sie die Umgebungsvariable ASPNETCORE_ENVIRONMENT auf Development und starten Sie die Anwendung neu.</value>
+  </data>
+  <data name="FailedToLoadUsers" xml:space="preserve">
+    <value>Benutzer konnten nicht geladen werden</value>
+  </data>
+  <data name="UserSelectionRequired" xml:space="preserve">
+    <value>Bitte wählen Sie einen Benutzer aus</value>
+  </data>
+  <data name="PleaseWaitSeconds" xml:space="preserve">
+    <value>Bitte warten Sie {0} Sekunden, bevor Sie den Code erneut anfordern</value>
+  </data>
+  <data name="FailedToSendCode" xml:space="preserve">
+    <value>Code konnte nicht gesendet werden</value>
+  </data>
+  <data name="ErrorSendingCode" xml:space="preserve">
+    <value>Fehler beim Senden des Codes</value>
+  </data>
+  <data name="UserAndCodeRequired" xml:space="preserve">
+    <value>Benutzer und Code sind erforderlich</value>
+  </data>
+  <data name="InvalidVerificationCode" xml:space="preserve">
+    <value>Ungültiger Bestätigungscode</value>
+  </data>
+  <data name="VerificationFailed" xml:space="preserve">
+    <value>Bestätigung fehlgeschlagen. Bitte versuchen Sie es erneut.</value>
+  </data>
+  <data name="LoginSuccessful" xml:space="preserve">
+    <value>Anmeldung erfolgreich! Sie werden weitergeleitet...</value>
+  </data>
+  <data name="SessionExpired" xml:space="preserve">
+    <value>Sitzung abgelaufen. Bitte laden Sie die Seite neu.</value>
+  </data>
+  <data name="SendingTooQuickly" xml:space="preserve">
+    <value>Sie senden Nachrichten zu schnell</value>
+  </data>
+  <data name="ErrorJoinRoomNameRequired" xml:space="preserve">
+    <value>Raum konnte nicht betreten werden! Raumname ist erforderlich.</value>
+  </data>
+  <data name="ErrorNotAuthorizedRoom" xml:space="preserve">
+    <value>Sie haben keine Berechtigung für diesen Raum.</value>
+  </data>
+  <data name="ErrorUserProfileNotFound" xml:space="preserve">
+    <value>Benutzerprofil nicht gefunden.</value>
+  </data>
+  <data name="ErrorJoinRoom" xml:space="preserve">
+    <value>Raum konnte nicht betreten werden! {0}</value>
+  </data>
+  <data name="ErrorNotInRoom" xml:space="preserve">
+    <value>Sie befinden sich nicht in einem Raum.</value>
+  </data>
+  <data name="ErrorRateLimitExceeded" xml:space="preserve">
+    <value>Anfragelimit überschritten. Bitte verlangsamen Sie.</value>
+  </data>
+  
+  <!-- Email/SMS Templates -->
+  <data name="EmailSubjectVerificationCode" xml:space="preserve">
+    <value>Ihr Bestätigungscode</value>
+  </data>
+  <data name="EmailSubjectNewMessage" xml:space="preserve">
+    <value>Neue Nachricht</value>
+  </data>
+  <data name="EmailBodyVerificationCode" xml:space="preserve">
+    <value>Ihr Bestätigungscode lautet: {0}</value>
+  </data>
+  <data name="SmsBodyVerificationCode" xml:space="preserve">
+    <value>Code: {0}</value>
+  </data>
+  
+  <!-- Validation Messages -->
+  <data name="ValidationRoomNameLength" xml:space="preserve">
+    <value>{0} muss mindestens {2} und maximal {1} Zeichen lang sein.</value>
+  </data>
+  <data name="ValidationRoomNamePattern" xml:space="preserve">
+    <value>Erlaubte Zeichen: Buchstaben, Zahlen und ein Leerzeichen zwischen Wörtern.</value>
+  </data>
+</root>
