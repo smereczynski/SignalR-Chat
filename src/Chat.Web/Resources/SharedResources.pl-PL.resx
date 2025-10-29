@@ -242,6 +242,9 @@
   <data name="ErrorNotInRoom" xml:space="preserve">
     <value>Nie jesteś w pokoju.</value>
   </data>
+  <data name="ErrorRateLimitExceeded" xml:space="preserve">
+    <value>Przekroczono limit żądań. Zwolnij tempo.</value>
+  </data>
   
   <!-- OTP Email/SMS Templates -->
   <data name="EmailSubjectVerificationCode" xml:space="preserve">

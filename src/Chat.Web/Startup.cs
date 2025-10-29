@@ -277,7 +277,7 @@ namespace Chat.Web
             }
 
             // Localization configuration
-            services.AddLocalization(options => options.ResourcesPath = "Resources");
+            services.AddLocalization(); // Don't set ResourcesPath - resources are in namespace path
             services.Configure<RequestLocalizationOptions>(options =>
             {
                 var supportedCultures = new[]
