@@ -250,7 +250,8 @@ namespace Chat.Web
             // OTP sender: always use console mock in test mode, otherwise prefer ACS if configured
             if (inMemoryTest)
             {
-                services.AddSingleton<IOtpSender, ConsoleOtpSender>();
+                services.AddSingleton<IOtpSender>(sp => new ConsoleOtpSender(
+                    sp.GetRequiredService<IStringLocalizer<Resources.SharedResources>>()));
             }
             else
             {
@@ -272,7 +273,8 @@ namespace Chat.Web
                 }
                 else
                 {
-                    services.AddSingleton<IOtpSender, ConsoleOtpSender>();
+                    services.AddSingleton<IOtpSender>(sp => new ConsoleOtpSender(
+                        sp.GetRequiredService<IStringLocalizer<Resources.SharedResources>>()));
                 }
             }
 
