@@ -1,0 +1,207 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <!-- Application -->
+  <data name="AppTitle" xml:space="preserve">
+    <value>SignalR pokalbiai</value>
+  </data>
+  <data name="AppDescription" xml:space="preserve">
+    <value>Pokalbių programa realiuoju laiku.</value>
+  </data>
+  
+  <!-- Common UI -->
+  <data name="Loading" xml:space="preserve">
+    <value>Įkeliama…</value>
+  </data>
+  <data name="Error" xml:space="preserve">
+    <value>Klaida</value>
+  </data>
+  <data name="Retry" xml:space="preserve">
+    <value>Bandyti dar kartą</value>
+  </data>
+  <data name="Search" xml:space="preserve">
+    <value>Ieškoti</value>
+  </data>
+  <data name="GoToChat" xml:space="preserve">
+    <value>Eiti į pokalbius</value>
+  </data>
+  <data name="SignInToContinue" xml:space="preserve">
+    <value>Prisijunkite, kad tęstumėte</value>
+  </data>
+  <data name="SignIn" xml:space="preserve">
+    <value>Prisijungti</value>
+  </data>
+  
+  <!-- Chat Room -->
+  <data name="ChatRooms" xml:space="preserve">
+    <value>Pokalbių kambariai</value>
+  </data>
+  <data name="SelectRoomToJoin" xml:space="preserve">
+    <value>Pasirinkite kambarį!</value>
+  </data>
+  <data name="NoMessages" xml:space="preserve">
+    <value>Žinučių nėra.</value>
+  </data>
+  <data name="MessageInputPlaceholder" xml:space="preserve">
+    <value>Ką galvojate?</value>
+  </data>
+  <data name="MessagesWaitingToSend" xml:space="preserve">
+    <value>Žinutės laukia išsiuntimo</value>
+  </data>
+  <data name="WhosHere" xml:space="preserve">
+    <value>Kas čia ({0})</value>
+  </data>
+  <data name="Reconnecting" xml:space="preserve">
+    <value>JUNGIAMASI IŠ NAUJO…</value>
+  </data>
+  <data name="Disconnected" xml:space="preserve">
+    <value>ATSIJUNGTA</value>
+  </data>
+  <data name="MessageFailed" xml:space="preserve">
+    <value>(nepavyko)</value>
+  </data>
+  <data name="MessagePending" xml:space="preserve">
+    <value>…</value>
+  </data>
+  
+  <!-- Authentication -->
+  <data name="User" xml:space="preserve">
+    <value>Vartotojas</value>
+  </data>
+  <data name="LoadingUsers" xml:space="preserve">
+    <value>Įkeliami vartotojai...</value>
+  </data>
+  <data name="SelectUser" xml:space="preserve">
+    <value>Pasirinkite vartotoją...</value>
+  </data>
+  <data name="PickUserForOtp" xml:space="preserve">
+    <value>Pasirinkite vartotoją kodui gauti (el. paštas ir SMS).</value>
+  </data>
+  <data name="SendCode" xml:space="preserve">
+    <value>Siųsti kodą</value>
+  </data>
+  <data name="Code" xml:space="preserve">
+    <value>Kodas</value>
+  </data>
+  <data name="SixDigitCode" xml:space="preserve">
+    <value>6 skaitmenų kodas</value>
+  </data>
+  <data name="CodeExpires" xml:space="preserve">
+    <value>Kodas galioja 5 minutes.</value>
+  </data>
+  <data name="Resend" xml:space="preserve">
+    <value>Siųsti dar kartą</value>
+  </data>
+  <data name="Verify" xml:space="preserve">
+    <value>Patvirtinti</value>
+  </data>
+  <data name="SendingCode" xml:space="preserve">
+    <value>Siunčiamas kodas</value>
+  </data>
+  <data name="SentToEmailAndMobile" xml:space="preserve">
+    <value>Išsiųsta el. paštu ir SMS</value>
+  </data>
+  <data name="FailedToSend" xml:space="preserve">
+    <value>Nepavyko išsiųsti</value>
+  </data>
+  
+  <!-- Date/Time -->
+  <data name="Today" xml:space="preserve">
+    <value>Šiandien</value>
+  </data>
+  <data name="Yesterday" xml:space="preserve">
+    <value>Vakar</value>
+  </data>
+  <data name="AM" xml:space="preserve">
+    <value>priešpiet</value>
+  </data>
+  <data name="PM" xml:space="preserve">
+    <value>popiet</value>
+  </data>
+  
+  <!-- Error Messages -->
+  <data name="ErrorOccurred" xml:space="preserve">
+    <value>Apdorojant jūsų užklausą įvyko klaida.</value>
+  </data>
+  <data name="RequestId" xml:space="preserve">
+    <value>Užklausos ID:</value>
+  </data>
+  <data name="DevelopmentMode" xml:space="preserve">
+    <value>Kūrimo režimas</value>
+  </data>
+  <data name="DevelopmentModeWarning" xml:space="preserve">
+    <value>Perjungimas į kūrimo aplinką rodo išsamią klaidų informaciją. Kūrimo aplinka neturėtų būti įjungta diegtose programose, nes tai gali atskleisti konfidencialią informaciją galutiniams vartotojams. Vietiniam derinimui nustatykite aplinkos kintamąjį ASPNETCORE_ENVIRONMENT į Development ir paleiskite programą iš naujo.</value>
+  </data>
+  <data name="FailedToLoadUsers" xml:space="preserve">
+    <value>Nepavyko įkelti vartotojų</value>
+  </data>
+  <data name="UserSelectionRequired" xml:space="preserve">
+    <value>Reikia pasirinkti vartotoją</value>
+  </data>
+  <data name="PleaseWaitSeconds" xml:space="preserve">
+    <value>Palaukite {0} sekundžių prieš siunčiant dar kartą</value>
+  </data>
+  <data name="FailedToSendCode" xml:space="preserve">
+    <value>Nepavyko išsiųsti kodo</value>
+  </data>
+  <data name="ErrorSendingCode" xml:space="preserve">
+    <value>Klaida siunčiant kodą</value>
+  </data>
+  <data name="UserAndCodeRequired" xml:space="preserve">
+    <value>Vartotojas ir kodas yra privalomi</value>
+  </data>
+  <data name="InvalidVerificationCode" xml:space="preserve">
+    <value>Neteisingas patvirtinimo kodas</value>
+  </data>
+  <data name="VerificationFailed" xml:space="preserve">
+    <value>Patvirtinimas nepavyko. Bandykite dar kartą.</value>
+  </data>
+  <data name="LoginSuccessful" xml:space="preserve">
+    <value>Prisijungimas sėkmingas! Peradresuojama...</value>
+  </data>
+  <data name="SessionExpired" xml:space="preserve">
+    <value>Sesija baigėsi. Prašome atnaujinti puslapį.</value>
+  </data>
+  <data name="SendingTooQuickly" xml:space="preserve">
+    <value>Siunčiate žinutes per greitai</value>
+  </data>
+  <data name="ErrorJoinRoomNameRequired" xml:space="preserve">
+    <value>Nepavyko prisijungti prie kambario! Reikalingas kambario pavadinimas.</value>
+  </data>
+  <data name="ErrorNotAuthorizedRoom" xml:space="preserve">
+    <value>Neturite prieigos prie šio kambario.</value>
+  </data>
+  <data name="ErrorUserProfileNotFound" xml:space="preserve">
+    <value>Vartotojo profilis nerastas.</value>
+  </data>
+  <data name="ErrorJoinRoom" xml:space="preserve">
+    <value>Nepavyko prisijungti prie kambario! {0}</value>
+  </data>
+  <data name="ErrorNotInRoom" xml:space="preserve">
+    <value>Nesate kambaryje.</value>
+  </data>
+  <data name="ErrorRateLimitExceeded" xml:space="preserve">
+    <value>Viršytas užklausų limitas. Prašome sulėtinti.</value>
+  </data>
+  
+  <!-- Email/SMS Templates -->
+  <data name="EmailSubjectVerificationCode" xml:space="preserve">
+    <value>Jūsų patvirtinimo kodas</value>
+  </data>
+  <data name="EmailSubjectNewMessage" xml:space="preserve">
+    <value>Nauja žinutė</value>
+  </data>
+  <data name="EmailBodyVerificationCode" xml:space="preserve">
+    <value>Jūsų patvirtinimo kodas: {0}</value>
+  </data>
+  <data name="SmsBodyVerificationCode" xml:space="preserve">
+    <value>Kodas: {0}</value>
+  </data>
+  
+  <!-- Validation Messages -->
+  <data name="ValidationRoomNameLength" xml:space="preserve">
+    <value>{0} turi būti bent {2} ir ne daugiau kaip {1} simbolių.</value>
+  </data>
+  <data name="ValidationRoomNamePattern" xml:space="preserve">
+    <value>Leidžiami simboliai: raidės, skaičiai ir vienas tarpas tarp žodžių.</value>
+  </data>
+</root>
