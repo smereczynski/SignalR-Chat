@@ -149,7 +149,7 @@ if(window.__chatAppBooted){
     let hours=date.getHours(); 
     const minutes=('0'+date.getMinutes()).slice(-2); 
     let ampm=''; 
-    let timeHours = hours;
+    let timeHours;
     if (use24Hour) {
       timeHours = ('0'+hours).slice(-2);
     } else {
