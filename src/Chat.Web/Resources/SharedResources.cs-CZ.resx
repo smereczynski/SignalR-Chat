@@ -48,7 +48,7 @@
     <value>Zprávy čekající na odeslání</value>
   </data>
   <data name="WhosHere" xml:space="preserve">
-    <value>Kdo je tady</value>
+    <value>Kdo je tady ({0})</value>
   </data>
   <data name="Reconnecting" xml:space="preserve">
     <value>PŘIPOJOVÁNÍ…</value>
@@ -214,5 +214,13 @@
   </data>
   <data name="Logout" xml:space="preserve">
     <value>Odhlásit se</value>
+  </data>
+  
+  <!-- Message Status -->
+  <data name="Delivered" xml:space="preserve">
+    <value>Doručeno</value>
+  </data>
+  <data name="ReadBy" xml:space="preserve">
+    <value>Přečteno uživatelem</value>
   </data>
 </root>

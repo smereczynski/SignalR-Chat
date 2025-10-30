@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Localization System**: Complete internationalization fixes for 9 supported languages (en, pl-PL, de-DE, cs-CZ, sk-SK, uk-UA, be-BY, lt-LT, ru-RU)
+  - Fixed case sensitivity issues in client-side translation keys (changed from PascalCase to camelCase to match API JSON serialization)
+  - Resolved login page translation failures where SelectUser and 8 other keys always showed English regardless of selected language
+  - Fixed login page redirect issue by removing site.js interference and inlining i18n loader directly in Login.cshtml
+  - Implemented language picker with flag icon (🌐) in profile section, replacing old dropdown in upper-right corner
+  - Added language selection modal with all 9 language options, native language names, and active language highlighting
+  - Fixed "Who's Here" user counter display to use parameterized translation string with dynamic count formatting
+  - Removed unused search functionality from users list (container, CSS, and API endpoint)
+  - Translated message read receipts ("Delivered" and "Read by") for all 9 languages
+  - Added translations for language picker UI: ChangeLanguage, SelectLanguage, Logout
+  - Fixed parameterized string tests by restoring `{0}` placeholder in WhosHere translations and updating UI to format count dynamically
+
 ## [0.9.2] - 2025-10-24
 
 ### Fixed

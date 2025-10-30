@@ -75,7 +75,11 @@ namespace Chat.Web.Controllers
                 VerificationFailed = _localizer["VerificationFailed"].Value,
                 LoginSuccessful = _localizer["LoginSuccessful"].Value,
                 SessionExpired = _localizer["SessionExpired"].Value,
-                SendingTooQuickly = _localizer["SendingTooQuickly"].Value
+                SendingTooQuickly = _localizer["SendingTooQuickly"].Value,
+                
+                // Message Status
+                Delivered = _localizer["Delivered"].Value,
+                ReadBy = _localizer["ReadBy"].Value
             });
         }
     }
