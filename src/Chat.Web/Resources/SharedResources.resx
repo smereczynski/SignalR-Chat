@@ -267,4 +267,23 @@
   <data name="ValidationRoomNamePattern" xml:space="preserve">
     <value>Characters allowed: letters, numbers, and one space between words.</value>
   </data>
+  
+  <!-- Language Selection -->
+  <data name="ChangeLanguage" xml:space="preserve">
+    <value>Change language</value>
+  </data>
+  <data name="SelectLanguage" xml:space="preserve">
+    <value>Select Language</value>
+  </data>
+  <data name="Logout" xml:space="preserve">
+    <value>Logout</value>
+  </data>
+  
+  <!-- Message Status -->
+  <data name="Delivered" xml:space="preserve">
+    <value>Delivered</value>
+  </data>
+  <data name="ReadBy" xml:space="preserve">
+    <value>Read by</value>
+  </data>
 </root>

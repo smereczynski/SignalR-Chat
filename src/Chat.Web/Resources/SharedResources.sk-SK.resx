@@ -204,4 +204,23 @@
   <data name="ValidationRoomNamePattern" xml:space="preserve">
     <value>Povolené znaky: písmená, číslice a jedna medzera medzi slovami.</value>
   </data>
+  
+  <!-- Language Selection -->
+  <data name="ChangeLanguage" xml:space="preserve">
+    <value>Zmeniť jazyk</value>
+  </data>
+  <data name="SelectLanguage" xml:space="preserve">
+    <value>Vybrať jazyk</value>
+  </data>
+  <data name="Logout" xml:space="preserve">
+    <value>Odhlásiť sa</value>
+  </data>
+  
+  <!-- Message Status -->
+  <data name="Delivered" xml:space="preserve">
+    <value>Doručené</value>
+  </data>
+  <data name="ReadBy" xml:space="preserve">
+    <value>Prečítané používateľom</value>
+  </data>
 </root>
