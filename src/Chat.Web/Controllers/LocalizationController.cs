@@ -31,7 +31,6 @@ namespace Chat.Web.Controllers
                 Loading = _localizer["Loading"].Value,
                 Error = _localizer["Error"].Value,
                 Retry = _localizer["Retry"].Value,
-                Search = _localizer["Search"].Value,
                 
                 // Chat Interface
                 ChatRooms = _localizer["ChatRooms"].Value,

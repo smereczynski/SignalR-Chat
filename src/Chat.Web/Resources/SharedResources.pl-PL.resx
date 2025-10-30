@@ -107,7 +107,7 @@
     <value>Wiadomości oczekujące na wysłanie</value>
   </data>
   <data name="WhosHere" xml:space="preserve">
-    <value>Kto tu jest ({0})</value>
+    <value>Kto tu jest</value>
   </data>
   <data name="Reconnecting" xml:space="preserve">
     <value>PONOWNE ŁĄCZENIE…</value>
@@ -266,5 +266,16 @@
   </data>
   <data name="ValidationRoomNamePattern" xml:space="preserve">
     <value>Dozwolone znaki: litery, cyfry i jedna spacja między słowami.</value>
+  </data>
+  
+  <!-- Language Selection -->
+  <data name="ChangeLanguage" xml:space="preserve">
+    <value>Zmień język</value>
+  </data>
+  <data name="SelectLanguage" xml:space="preserve">
+    <value>Wybierz język</value>
+  </data>
+  <data name="Logout" xml:space="preserve">
+    <value>Wyloguj</value>
   </data>
 </root>

@@ -48,7 +48,7 @@
     <value>Žinutės laukia išsiuntimo</value>
   </data>
   <data name="WhosHere" xml:space="preserve">
-    <value>Kas čia ({0})</value>
+    <value>Kas čia</value>
   </data>
   <data name="Reconnecting" xml:space="preserve">
     <value>JUNGIAMASI IŠ NAUJO…</value>
@@ -203,5 +203,16 @@
   </data>
   <data name="ValidationRoomNamePattern" xml:space="preserve">
     <value>Leidžiami simboliai: raidės, skaičiai ir vienas tarpas tarp žodžių.</value>
+  </data>
+  
+  <!-- Language Selection -->
+  <data name="ChangeLanguage" xml:space="preserve">
+    <value>Pakeisti kalbą</value>
+  </data>
+  <data name="SelectLanguage" xml:space="preserve">
+    <value>Pasirinkti kalbą</value>
+  </data>
+  <data name="Logout" xml:space="preserve">
+    <value>Atsijungti</value>
   </data>
 </root>
