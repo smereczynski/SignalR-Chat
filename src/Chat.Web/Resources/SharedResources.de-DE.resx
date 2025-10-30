@@ -204,4 +204,23 @@
   <data name="ValidationRoomNamePattern" xml:space="preserve">
     <value>Erlaubte Zeichen: Buchstaben, Zahlen und ein Leerzeichen zwischen Wörtern.</value>
   </data>
+  
+  <!-- Language Selection -->
+  <data name="ChangeLanguage" xml:space="preserve">
+    <value>Sprache ändern</value>
+  </data>
+  <data name="SelectLanguage" xml:space="preserve">
+    <value>Sprache auswählen</value>
+  </data>
+  <data name="Logout" xml:space="preserve">
+    <value>Abmelden</value>
+  </data>
+  
+  <!-- Message Status -->
+  <data name="Delivered" xml:space="preserve">
+    <value>Zugestellt</value>
+  </data>
+  <data name="ReadBy" xml:space="preserve">
+    <value>Gelesen von</value>
+  </data>
 </root>

@@ -71,10 +71,25 @@
   text-overflow: ellipsis;
   max-width: 180px;
 }
+.sidebar .profile .btn-language,
 .sidebar .profile .btn-sign-out {
   background: none;
   border: none;
   display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+.sidebar .profile .btn-language:hover,
+.sidebar .profile .btn-sign-out:hover {
+  opacity: 0.8;
+}
+.sidebar .profile .btn-language .flag-icon,
+.sidebar .profile .btn-sign-out .flag-icon {
+  font-size: 20px;
+  line-height: 1;
 }
 
 .main-content {
@@ -240,27 +255,6 @@
   text-overflow: ellipsis;
 }
 
-.search-container {
-  margin: 20px 10px;
-  margin-bottom: 30px;
-}
-.search-container input {
-  width: 100%;
-  background: #f5f5f5;
-  font-size: 14px;
-  text-indent: 25px;
-  padding: 7px 10px;
-  border: none;
-  border-radius: 5px;
-  outline: none;
-}
-.search-container svg {
-  position: absolute;
-  left: 10px;
-  top: 50%;
-  transform: translateY(-50%);
-}
-
 .auth-container {
   background: #f5f5f5;
   padding: 20px;
@@ -390,6 +384,24 @@ form .btn {
 .modal-footer {
   padding-top: 0.5rem;
   border-top: none;
+}
+
+#languageModal .language-list .list-group-item {
+  cursor: pointer;
+  border-radius: 0.25rem;
+  margin-bottom: 0.25rem;
+  border: 1px solid #dee2e6;
+}
+#languageModal .language-list .list-group-item:hover {
+  background-color: #f8f9fa;
+}
+#languageModal .language-list .list-group-item.active {
+  background-color: #0d6efd;
+  border-color: #0d6efd;
+  color: white;
+}
+#languageModal .language-list .list-group-item .flag-icon {
+  font-size: 1.25rem;
 }
 
 .dropdown-menu {

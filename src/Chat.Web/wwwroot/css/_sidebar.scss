@@ -88,10 +88,25 @@ $text-color: rgba(white, 0.85);
             max-width: 180px;
         }
 
+        .btn-language,
         .btn-sign-out {
             background: none;
             border: none;
             display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 4px;
+            cursor: pointer;
+            transition: opacity 0.2s;
+
+            &:hover {
+                opacity: 0.8;
+            }
+
+            .flag-icon {
+                font-size: 20px;
+                line-height: 1;
+            }
         }
     }
 }

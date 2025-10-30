@@ -69,7 +69,7 @@ if(window.__chatAppBooted){
     els.btnLogout = document.getElementById('btn-logout');
   els.roomsNoSelection = document.querySelector('[data-role="no-room-selected"]');
   els.roomsPanel = document.querySelector('[data-role="room-panel"]');
-  els.usersCount = document.getElementById('users-count');
+  els.usersHeader = document.getElementById('users-header');
   els.queueBadge = document.getElementById('queue-badge');
   els.roomHeader = document.querySelector('.main-content[data-role="room-panel"] .header');
   }
@@ -136,7 +136,7 @@ if(window.__chatAppBooted){
     if(state.pendingJoin === r.name && (!state.joinedRoom || state.joinedRoom.name!==r.name)) a.classList.add('joining');
     if(state.joinedRoom && state.joinedRoom.name===r.name) a.classList.add('active');
     a.addEventListener('click',e=>{ e.preventDefault(); joinRoom(r.name); }); li.appendChild(a); els.roomsList.appendChild(li); }); }
-  function renderUsers(){ if(!els.usersList) return; const term=state.filter.toLowerCase(); els.usersList.innerHTML=''; const filtered=state.users.filter(u=>!term|| (u.fullName||u.userName||'').toLowerCase().includes(term)); filtered.forEach(u=>{ const li=document.createElement('li'); li.dataset.username=u.userName; const wrap=document.createElement('div'); wrap.className='user'; if(!u.avatar){ const span=document.createElement('span'); span.className='avatar me-2 text-uppercase'; span.textContent=initialFrom(u.fullName, u.userName); wrap.appendChild(span);} else { const img=document.createElement('img'); img.className='avatar me-2'; img.src='/avatars/'+u.avatar; wrap.appendChild(img);} const info=document.createElement('div'); info.className='user-info'; const nameSpan=document.createElement('span'); nameSpan.className='name'; nameSpan.textContent=u.fullName || u.userName; info.appendChild(nameSpan); const deviceSpan=document.createElement('span'); deviceSpan.className='device'; deviceSpan.textContent=u.device || ''; info.appendChild(deviceSpan); wrap.appendChild(info); li.appendChild(wrap); els.usersList.appendChild(li); }); if(els.usersCount) els.usersCount.textContent=filtered.length; }
+  function renderUsers(){ if(!els.usersList) return; const term=state.filter.toLowerCase(); els.usersList.innerHTML=''; const filtered=state.users.filter(u=>!term|| (u.fullName||u.userName||'').toLowerCase().includes(term)); filtered.forEach(u=>{ const li=document.createElement('li'); li.dataset.username=u.userName; const wrap=document.createElement('div'); wrap.className='user'; if(!u.avatar){ const span=document.createElement('span'); span.className='avatar me-2 text-uppercase'; span.textContent=initialFrom(u.fullName, u.userName); wrap.appendChild(span);} else { const img=document.createElement('img'); img.className='avatar me-2'; img.src='/avatars/'+u.avatar; wrap.appendChild(img);} const info=document.createElement('div'); info.className='user-info'; const nameSpan=document.createElement('span'); nameSpan.className='name'; nameSpan.textContent=u.fullName || u.userName; info.appendChild(nameSpan); const deviceSpan=document.createElement('span'); deviceSpan.className='device'; deviceSpan.textContent=u.device || ''; info.appendChild(deviceSpan); wrap.appendChild(info); li.appendChild(wrap); els.usersList.appendChild(li); }); if(els.usersHeader && window.i18n?.whosHere) { const template = window.i18n.whosHere; els.usersHeader.textContent = template.replace('{0}', filtered.length); } }
   function formatDateParts(ts){ 
     const date=new Date(ts); 
     const now=new Date(); 
@@ -249,8 +249,8 @@ if(window.__chatAppBooted){
     // Show label for sender: 'Delivered' when nobody else read; otherwise list readers (excluding self)
     const selfName = (state.profile && state.profile.userName || '').toLowerCase();
     const others = readers.filter(u => u && u.toLowerCase() !== selfName);
-    if(others.length === 0){ rrEl.textContent = 'Delivered'; return; }
-    rrEl.textContent = 'Read by ' + others.join(', ');
+    if(others.length === 0){ rrEl.textContent = window.i18n?.delivered || 'Delivered'; return; }
+    rrEl.textContent = (window.i18n?.readBy || 'Read by') + ' ' + others.join(', ');
   }
   function finalizeMessageRender(){
     const noInfo=document.querySelector('.no-messages-info'); if(noInfo) noInfo.classList.toggle('d-none', state.messages.length>0);

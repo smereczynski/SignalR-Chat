@@ -204,4 +204,23 @@
   <data name="ValidationRoomNamePattern" xml:space="preserve">
     <value>Дозволені символи: літери, цифри та один пробіл між словами.</value>
   </data>
+  
+  <!-- Language Selection -->
+  <data name="ChangeLanguage" xml:space="preserve">
+    <value>Змінити мову</value>
+  </data>
+  <data name="SelectLanguage" xml:space="preserve">
+    <value>Вибрати мову</value>
+  </data>
+  <data name="Logout" xml:space="preserve">
+    <value>Вийти</value>
+  </data>
+  
+  <!-- Message Status -->
+  <data name="Delivered" xml:space="preserve">
+    <value>Доставлено</value>
+  </data>
+  <data name="ReadBy" xml:space="preserve">
+    <value>Прочитано</value>
+  </data>
 </root>
