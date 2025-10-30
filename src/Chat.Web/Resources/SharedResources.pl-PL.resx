@@ -107,7 +107,7 @@
     <value>Wiadomości oczekujące na wysłanie</value>
   </data>
   <data name="WhosHere" xml:space="preserve">
-    <value>Kto tu jest</value>
+    <value>Kto tu jest ({0})</value>
   </data>
   <data name="Reconnecting" xml:space="preserve">
     <value>PONOWNE ŁĄCZENIE…</value>
@@ -277,5 +277,13 @@
   </data>
   <data name="Logout" xml:space="preserve">
     <value>Wyloguj</value>
+  </data>
+  
+  <!-- Message Status -->
+  <data name="Delivered" xml:space="preserve">
+    <value>Doręczono</value>
+  </data>
+  <data name="ReadBy" xml:space="preserve">
+    <value>Przeczytane przez</value>
   </data>
 </root>

@@ -48,7 +48,7 @@
     <value>Паведамленні чакаюць адпраўкі</value>
   </data>
   <data name="WhosHere" xml:space="preserve">
-    <value>Хто тут</value>
+    <value>Хто тут ({0})</value>
   </data>
   <data name="Reconnecting" xml:space="preserve">
     <value>ПЕРАПАДКЛЮЧЭННЕ…</value>
@@ -214,5 +214,13 @@
   </data>
   <data name="Logout" xml:space="preserve">
     <value>Выйсці</value>
+  </data>
+  
+  <!-- Message Status -->
+  <data name="Delivered" xml:space="preserve">
+    <value>Дастаўлена</value>
+  </data>
+  <data name="ReadBy" xml:space="preserve">
+    <value>Прачытана</value>
   </data>
 </root>

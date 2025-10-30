@@ -107,7 +107,7 @@
     <value>Messages waiting to send</value>
   </data>
   <data name="WhosHere" xml:space="preserve">
-    <value>Who's Here</value>
+    <value>Who's Here ({0})</value>
   </data>
   <data name="Reconnecting" xml:space="preserve">
     <value>RECONNECTING…</value>
@@ -277,5 +277,13 @@
   </data>
   <data name="Logout" xml:space="preserve">
     <value>Logout</value>
+  </data>
+  
+  <!-- Message Status -->
+  <data name="Delivered" xml:space="preserve">
+    <value>Delivered</value>
+  </data>
+  <data name="ReadBy" xml:space="preserve">
+    <value>Read by</value>
   </data>
 </root>
