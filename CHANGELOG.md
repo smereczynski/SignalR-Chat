@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.3] - 2025-10-30
+
 ### Added
 - **Login Page Language Picker**: Added language selection UI to login page for consistent UX across the application
   - Flag icon button in login card header showing current language
@@ -156,4 +158,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `SeedingTests.cs`: Tests for automatic seeding (no longer applicable)
 - Placeholder `appsettings.json`: Removed to avoid committing secrets (use environment-specific files)
 
+[0.9.3]: https://github.com/smereczynski/SignalR-Chat/compare/v0.9.2...v0.9.3
+[0.9.2]: https://github.com/smereczynski/SignalR-Chat/compare/v0.9.0...v0.9.2
 [0.9.0]: https://github.com/smereczynski/SignalR-Chat/releases/tag/v0.9.0
