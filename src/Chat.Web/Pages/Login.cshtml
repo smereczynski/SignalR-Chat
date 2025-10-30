@@ -7,7 +7,12 @@
     <div class="col-sm-10 col-md-7 col-lg-5">
       <div class="card shadow-sm">
         <div class="card-body">
-          <h5 class="card-title mb-3">@Localizer["SignIn"]</h5>
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="card-title mb-0">@Localizer["SignIn"]</h5>
+            <button type="button" id="btn-language-login" class="btn btn-sm btn-outline-secondary" title="@Localizer["ChangeLanguage"]" data-bs-toggle="modal" data-bs-target="#languageModal">
+              <span id="currentLanguageFlag" class="flag-icon">🌐</span>
+            </button>
+          </div>
           <div id="otpContainer" data-otp-timeout-ms="8000" data-otp-retry-cooldown-ms="5000" data-otp-resend-delay-ms="60000">
             <div id="otp-step1">
               <div class="mb-2">
@@ -56,6 +61,49 @@
   </div>
 </div>
 
+<!-- Language Selection Modal -->
+<div class="modal fade" id="languageModal" tabindex="-1" aria-labelledby="languageModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="languageModalLabel">@Localizer["SelectLanguage"]</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="list-group language-list">
+                    <button type="button" class="list-group-item list-group-item-action" data-culture="en" data-flag="🇬🇧">
+                        <span class="flag-icon me-2">🇬🇧</span> English
+                    </button>
+                    <button type="button" class="list-group-item list-group-item-action" data-culture="pl-PL" data-flag="🇵🇱">
+                        <span class="flag-icon me-2">🇵🇱</span> Polski
+                    </button>
+                    <button type="button" class="list-group-item list-group-item-action" data-culture="de-DE" data-flag="🇩🇪">
+                        <span class="flag-icon me-2">🇩🇪</span> Deutsch
+                    </button>
+                    <button type="button" class="list-group-item list-group-item-action" data-culture="cs-CZ" data-flag="🇨🇿">
+                        <span class="flag-icon me-2">🇨🇿</span> Čeština
+                    </button>
+                    <button type="button" class="list-group-item list-group-item-action" data-culture="sk-SK" data-flag="🇸🇰">
+                        <span class="flag-icon me-2">🇸🇰</span> Slovenčina
+                    </button>
+                    <button type="button" class="list-group-item list-group-item-action" data-culture="uk-UA" data-flag="🇺🇦">
+                        <span class="flag-icon me-2">🇺🇦</span> Українська
+                    </button>
+                    <button type="button" class="list-group-item list-group-item-action" data-culture="be-BY" data-flag="🇧🇾">
+                        <span class="flag-icon me-2">🇧🇾</span> Беларуская
+                    </button>
+                    <button type="button" class="list-group-item list-group-item-action" data-culture="lt-LT" data-flag="🇱🇹">
+                        <span class="flag-icon me-2">🇱🇹</span> Lietuvių
+                    </button>
+                    <button type="button" class="list-group-item list-group-item-action" data-culture="ru-RU" data-flag="🇷🇺">
+                        <span class="flag-icon me-2">🇷🇺</span> Русский
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 @section Scripts {
   <script src="~/lib/bootstrap/js/bootstrap.bundle.min.js"></script>
   <script>
@@ -93,6 +141,86 @@
             sentToEmailAndMobile: 'Sent to email and mobile'
           };
         });
+    })();
+    
+    // Language switching functionality for login page
+    (function(){
+      const languageModal = document.getElementById('languageModal');
+      if (!languageModal) return;
+      
+      // Map of culture codes to flag emojis
+      const cultureFlags = {
+        'en': '🇬🇧',
+        'pl-PL': '🇵🇱',
+        'de-DE': '🇩🇪',
+        'cs-CZ': '🇨🇿',
+        'sk-SK': '🇸🇰',
+        'uk-UA': '🇺🇦',
+        'be-BY': '🇧🇾',
+        'lt-LT': '🇱🇹',
+        'ru-RU': '🇷🇺'
+      };
+
+      // Get current language from HTML lang attribute
+      const currentLang = document.documentElement.lang || 'en';
+      
+      // Find matching culture based on language code
+      let currentCulture = 'en';
+      if (currentLang.length === 2) {
+        const match = Object.keys(cultureFlags).find(c => c.toLowerCase().startsWith(currentLang.toLowerCase()));
+        if (match) currentCulture = match;
+      } else {
+        currentCulture = currentLang;
+      }
+
+      // Set current language flag
+      const currentFlagEl = document.getElementById('currentLanguageFlag');
+      if (currentFlagEl && cultureFlags[currentCulture]) {
+        currentFlagEl.textContent = cultureFlags[currentCulture];
+      }
+
+      // Mark current language as active in modal
+      languageModal.addEventListener('show.bs.modal', function() {
+        const buttons = languageModal.querySelectorAll('.language-list button');
+        buttons.forEach(function(btn) {
+          const culture = btn.getAttribute('data-culture');
+          if (culture === currentCulture) {
+            btn.classList.add('active');
+          } else {
+            btn.classList.remove('active');
+          }
+        });
+      });
+
+      // Handle language selection
+      document.addEventListener('click', function(e) {
+        const langBtn = e.target.closest('#languageModal .language-list button');
+        if (langBtn) {
+          const culture = langBtn.getAttribute('data-culture');
+          
+          if (culture && culture !== currentCulture) {
+            // Create form and submit to change culture
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = '/Culture/Set';
+            
+            const cultureInput = document.createElement('input');
+            cultureInput.type = 'hidden';
+            cultureInput.name = 'culture';
+            cultureInput.value = culture;
+            form.appendChild(cultureInput);
+            
+            const returnUrlInput = document.createElement('input');
+            returnUrlInput.type = 'hidden';
+            returnUrlInput.name = 'returnUrl';
+            returnUrlInput.value = window.location.pathname + window.location.search;
+            form.appendChild(returnUrlInput);
+            
+            document.body.appendChild(form);
+            form.submit();
+          }
+        }
+      });
     })();
   </script>
   <environment include="Development">

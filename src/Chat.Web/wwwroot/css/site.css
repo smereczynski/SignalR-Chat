@@ -404,6 +404,10 @@ form .btn {
   font-size: 1.25rem;
 }
 
+#btn-language-login .flag-icon {
+  font-size: 1.25rem;
+}
+
 .dropdown-menu {
   border: 1px solid #dfdfdf;
 }
