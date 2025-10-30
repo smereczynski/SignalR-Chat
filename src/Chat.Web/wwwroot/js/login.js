@@ -14,6 +14,21 @@
 
   document.addEventListener('DOMContentLoaded', () => {
     const sel = document.getElementById('otpUserName');
+    
+    // Function to update placeholder with localized text
+    function updatePlaceholder() {
+      const sel = document.getElementById('otpUserName');
+      if (sel) {
+        const placeholder = sel.querySelector('option[data-i18n-key="SelectUser"]');
+        if (placeholder && window.i18n?.SelectUser) {
+          placeholder.textContent = window.i18n.SelectUser;
+        }
+      }
+    }
+    
+    // Listen for i18n-loaded event (may fire before or after user list loads)
+    document.addEventListener('i18n-loaded', updatePlaceholder);
+    
     if (sel && sel.dataset.loaded !== 'true') {
       fetch('/api/auth/users', { credentials: 'same-origin' })
         .then(r => { if (!r.ok) throw new Error(window.i18n?.FailedToLoadUsers || 'Failed to load users'); return r.json(); })
@@ -35,20 +50,11 @@
             sel.appendChild(opt);
           });
           sel.dataset.loaded = 'true';
+          // If i18n already loaded before users list, update now
+          updatePlaceholder();
         })
         .catch(err => setOtpError(err.message));
     }
-
-    // Update placeholder text when i18n is loaded
-    document.addEventListener('i18n-loaded', () => {
-      const sel = document.getElementById('otpUserName');
-      if (sel && sel.dataset.loaded === 'true') {
-        const placeholder = sel.querySelector('option[data-i18n-key="SelectUser"]');
-        if (placeholder && window.i18n?.SelectUser) {
-          placeholder.textContent = window.i18n.SelectUser;
-        }
-      }
-    });
 
     function startOtpSend(isResend){
       setOtpError(null);
