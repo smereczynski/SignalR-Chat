@@ -25,6 +25,7 @@
           placeholder.disabled = true;
           placeholder.selected = true;
           placeholder.textContent = window.i18n?.SelectUser || 'Select user...';
+          placeholder.dataset.i18nKey = 'SelectUser'; // Mark for translation update
           sel.appendChild(placeholder);
           // Append options using textContent to avoid HTML injection
           (users || []).forEach(u => {
@@ -37,6 +38,17 @@
         })
         .catch(err => setOtpError(err.message));
     }
+
+    // Update placeholder text when i18n is loaded
+    document.addEventListener('i18n-loaded', () => {
+      const sel = document.getElementById('otpUserName');
+      if (sel && sel.dataset.loaded === 'true') {
+        const placeholder = sel.querySelector('option[data-i18n-key="SelectUser"]');
+        if (placeholder && window.i18n?.SelectUser) {
+          placeholder.textContent = window.i18n.SelectUser;
+        }
+      }
+    });
 
     function startOtpSend(isResend){
       setOtpError(null);
