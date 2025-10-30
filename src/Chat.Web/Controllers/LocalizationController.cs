@@ -21,11 +21,11 @@ namespace Chat.Web.Controllers
         /// Returns all JavaScript-needed strings for the current culture.
         /// Used by client-side code to populate window.i18n object.
         /// </summary>
-        [HttpGet("strings")]
-        [ResponseCache(Duration = 3600, VaryByHeader = "Cookie,Accept-Language")]
-        public IActionResult GetStrings()
-        {
-            return Ok(new
+    [HttpGet("strings")]
+    [ResponseCache(Duration = 3600, VaryByHeader = "Cookie,Accept-Language")]
+    public IActionResult GetStrings()
+    {
+        return Ok(new
             {
                 // Application Common
                 Loading = _localizer["Loading"].Value,
