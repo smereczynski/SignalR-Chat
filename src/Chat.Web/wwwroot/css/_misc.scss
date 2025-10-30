@@ -112,6 +112,13 @@ form .btn {
     }
 }
 
+// Language button on login page
+#btn-language-login {
+    .flag-icon {
+        font-size: 1.25rem;
+    }
+}
+
 // Dropdowns
 $dropdown-border-color: #dfdfdf;
 .dropdown-menu {

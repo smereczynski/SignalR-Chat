@@ -7,12 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Login Page Language Picker**: Added language selection UI to login page for consistent UX across the application
+  - Flag icon button in login card header showing current language
+  - Language selection modal with all 9 supported languages (matching chat page implementation)
+  - Inline JavaScript for language switching without external dependencies
+  - Preserves ReturnUrl and query parameters when switching languages
+  - Active language highlighting and hover effects in modal
+
 ### Fixed
 - **Localization System**: Complete internationalization fixes for 9 supported languages (en, pl-PL, de-DE, cs-CZ, sk-SK, uk-UA, be-BY, lt-LT, ru-RU)
   - Fixed case sensitivity issues in client-side translation keys (changed from PascalCase to camelCase to match API JSON serialization)
   - Resolved login page translation failures where SelectUser and 8 other keys always showed English regardless of selected language
   - Fixed login page redirect issue by removing site.js interference and inlining i18n loader directly in Login.cshtml
-  - Implemented language picker with flag icon (🌐) in profile section, replacing old dropdown in upper-right corner
+  - Implemented language picker with flag icon in profile section, replacing old dropdown in upper-right corner
   - Added language selection modal with all 9 language options, native language names, and active language highlighting
   - Fixed "Who's Here" user counter display to use parameterized translation string with dynamic count formatting
   - Removed unused search functionality from users list (container, CSS, and API endpoint)
