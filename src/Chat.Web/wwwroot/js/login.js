@@ -16,7 +16,7 @@
     const sel = document.getElementById('otpUserName');
     if (sel && sel.dataset.loaded !== 'true') {
       fetch('/api/auth/users', { credentials: 'same-origin' })
-        .then(r => { if (!r.ok) throw new Error('Failed to load users'); return r.json(); })
+        .then(r => { if (!r.ok) throw new Error(window.i18n?.FailedToLoadUsers || 'Failed to load users'); return r.json(); })
         .then(users => {
           // Clear any existing content
           sel.innerHTML = '';
@@ -24,7 +24,7 @@
           placeholder.value = '';
           placeholder.disabled = true;
           placeholder.selected = true;
-          placeholder.textContent = 'Select user...';
+          placeholder.textContent = window.i18n?.SelectUser || 'Select user...';
           sel.appendChild(placeholder);
           // Append options using textContent to avoid HTML injection
           (users || []).forEach(u => {
@@ -41,7 +41,7 @@
     function startOtpSend(isResend){
       setOtpError(null);
       const userName = (document.getElementById('otpUserName')?.value || '').trim();
-      if (!userName) { setOtpError('User selection is required'); return; }
+      if (!userName) { setOtpError(window.i18n?.UserSelectionRequired || 'User selection is required'); return; }
       window.__otpFlow = window.__otpFlow || {};
       const flow = window.__otpFlow;
       const container = document.getElementById('otpContainer');
@@ -52,7 +52,8 @@
         const sinceFirst = Date.now() - (flow.firstSendAt || 0);
         if (sinceFirst < resendDelayMs) {
           const remainingSeconds = Math.ceil((resendDelayMs - sinceFirst) / 1000);
-          setOtpError(`Please wait ${remainingSeconds} seconds before resending`);
+          const message = window.i18n?.PleaseWaitSeconds?.replace('{0}', remainingSeconds) || `Please wait ${remainingSeconds} seconds before resending`;
+          setOtpError(message);
           return;
         }
       }
@@ -89,7 +90,7 @@
       flow.startTimeout = setTimeout(()=>{ if (!controller.signal.aborted){ try { controller.abort(); } catch(_){} } }, rawTimeoutMs);
 
       fetch('/api/auth/start', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ userName }), credentials:'same-origin', signal: controller.signal })
-        .then(r => { if (!r.ok) throw new Error('Failed to send code'); return r.json().catch(()=>({})); })
+        .then(r => { if (!r.ok) throw new Error(window.i18n?.FailedToSendCode || 'Failed to send code'); return r.json().catch(()=>({})); })
         .then(() => {
           if (flow.activeUser !== userName || controller.signal.aborted) return;
           flow.lastSendCompletedTs = performance.now();
@@ -108,7 +109,7 @@
         .catch(e2 => {
           const aborted = controller.signal.aborted;
           if (!aborted) {
-            setOtpError(e2.message || 'Error sending code');
+            setOtpError(e2.message || window.i18n?.ErrorSendingCode || 'Error sending code');
             if (indicator) {
               indicator.querySelectorAll('[data-state]')?.forEach(n=>n.classList.add('d-none'));
               indicator.querySelector('[data-state="error"]')?.classList.remove('d-none');
@@ -129,11 +130,11 @@
       window.__otpFlow = window.__otpFlow || {}; const flow = window.__otpFlow; if (flow.verifyInFlight) return;
       const userName = (document.getElementById('otpUserName')?.value || '').trim();
       const code = (document.getElementById('otpCode')?.value || '').trim();
-      if (!userName || !code) { setOtpError('User and code are required'); return; }
+      if (!userName || !code) { setOtpError(window.i18n?.UserAndCodeRequired || 'User and code are required'); return; }
       const btn = document.getElementById('btn-verify-otp'); if (btn) btn.disabled = true; flow.verifyInFlight = true;
       const returnUrl = (typeof window.__returnUrl === 'string' ? window.__returnUrl : '/chat');
       postJson('/api/auth/verify', { userName, code, returnUrl })
-        .then(r => { if (!r.ok) throw new Error('Invalid code'); return r.json().catch(()=>({})); })
+        .then(r => { if (!r.ok) throw new Error(window.i18n?.InvalidVerificationCode || 'Invalid code'); return r.json().catch(()=>({})); })
         .then(body => {
           const next = body && typeof body.nextUrl === 'string' ? body.nextUrl : '/chat';
           // As an extra safety net, client ensures it's an app-local path
@@ -143,7 +144,7 @@
             window.location.href = '/chat';
           }
         })
-        .catch(e2 => setOtpError(e2.message || 'Verification failed'))
+        .catch(e2 => setOtpError(e2.message || window.i18n?.VerificationFailed || 'Verification failed'))
         .finally(()=>{ flow.verifyInFlight = false; if (btn) btn.disabled = false; });
     }
 
