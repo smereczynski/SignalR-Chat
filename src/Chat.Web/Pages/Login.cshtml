@@ -67,13 +67,38 @@
       } catch(_){}
       return '/chat';
     })();
+    
+    // Load localized strings for JavaScript (inline version for login page)
+    (function(){
+      window.i18n = {}; // Initialize immediately
+      fetch('/api/localization/strings', { credentials: 'same-origin' })
+        .then(r => r.ok ? r.json() : {})
+        .then(strings => { 
+          window.i18n = strings;
+          document.dispatchEvent(new Event('i18n-loaded'));
+        })
+        .catch(() => { 
+          // Fallback to English defaults if localization API fails
+          window.i18n = {
+            selectUser: 'Select user...',
+            failedToLoadUsers: 'Failed to load users',
+            userSelectionRequired: 'User selection is required',
+            failedToSendCode: 'Failed to send code',
+            errorSendingCode: 'Error sending code',
+            userAndCodeRequired: 'User and code are required',
+            invalidVerificationCode: 'Invalid verification code',
+            verificationFailed: 'Verification failed. Please try again.',
+            pleaseWaitSeconds: 'Please wait {0} seconds before resending',
+            sendingCode: 'Sending code',
+            sentToEmailAndMobile: 'Sent to email and mobile'
+          };
+        });
+    })();
   </script>
   <environment include="Development">
-    <script src="~/js/site.js" asp-append-version="true"></script>
     <script src="~/js/login.js" asp-append-version="true"></script>
   </environment>
   <environment exclude="Development">
-    <script src="~/js/dist/site.js" asp-append-version="true"></script>
     <script src="~/js/dist/login.js" asp-append-version="true"></script>
   </environment>
 }

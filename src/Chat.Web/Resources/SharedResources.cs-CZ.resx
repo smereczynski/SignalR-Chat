@@ -48,7 +48,7 @@
     <value>Zprávy čekající na odeslání</value>
   </data>
   <data name="WhosHere" xml:space="preserve">
-    <value>Kdo je tady ({0})</value>
+    <value>Kdo je tady</value>
   </data>
   <data name="Reconnecting" xml:space="preserve">
     <value>PŘIPOJOVÁNÍ…</value>
@@ -203,5 +203,16 @@
   </data>
   <data name="ValidationRoomNamePattern" xml:space="preserve">
     <value>Povolené znaky: písmena, číslice a jedna mezera mezi slovy.</value>
+  </data>
+  
+  <!-- Language Selection -->
+  <data name="ChangeLanguage" xml:space="preserve">
+    <value>Změnit jazyk</value>
+  </data>
+  <data name="SelectLanguage" xml:space="preserve">
+    <value>Vybrat jazyk</value>
+  </data>
+  <data name="Logout" xml:space="preserve">
+    <value>Odhlásit se</value>
   </data>
 </root>

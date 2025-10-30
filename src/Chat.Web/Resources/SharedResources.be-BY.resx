@@ -48,7 +48,7 @@
     <value>Паведамленні чакаюць адпраўкі</value>
   </data>
   <data name="WhosHere" xml:space="preserve">
-    <value>Хто тут ({0})</value>
+    <value>Хто тут</value>
   </data>
   <data name="Reconnecting" xml:space="preserve">
     <value>ПЕРАПАДКЛЮЧЭННЕ…</value>
@@ -203,5 +203,16 @@
   </data>
   <data name="ValidationRoomNamePattern" xml:space="preserve">
     <value>Дазволеныя сімвалы: літары, лічбы і адзін прабел паміж словамі.</value>
+  </data>
+  
+  <!-- Language Selection -->
+  <data name="ChangeLanguage" xml:space="preserve">
+    <value>Змяніць мову</value>
+  </data>
+  <data name="SelectLanguage" xml:space="preserve">
+    <value>Выбраць мову</value>
+  </data>
+  <data name="Logout" xml:space="preserve">
+    <value>Выйсці</value>
   </data>
 </root>

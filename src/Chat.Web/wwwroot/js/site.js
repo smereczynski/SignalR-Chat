@@ -465,4 +465,85 @@ document.addEventListener('DOMContentLoaded', () => {
             const retryLink = document.getElementById('otpRetryLink'); if (retryLink) { retryLink.classList.add('disabled-link'); retryLink.dataset.cooldownLeft='0'; }
         });
     }
+
+    // Language switching functionality
+    const languageModal = document.getElementById('languageModal');
+    if (languageModal) {
+        // Map of culture codes to flag emojis
+        const cultureFlags = {
+            'en': '🇬🇧',
+            'pl-PL': '🇵🇱',
+            'de-DE': '🇩🇪',
+            'cs-CZ': '🇨🇿',
+            'sk-SK': '🇸🇰',
+            'uk-UA': '🇺🇦',
+            'be-BY': '🇧🇾',
+            'lt-LT': '🇱🇹',
+            'ru-RU': '🇷🇺'
+        };
+
+        // Get current language from HTML lang attribute
+        const currentLang = document.documentElement.lang || 'en';
+        
+        // Find matching culture based on language code
+        let currentCulture = 'en';
+        if (currentLang.length === 2) {
+            // Find culture that starts with the language code
+            const match = Object.keys(cultureFlags).find(c => c.toLowerCase().startsWith(currentLang.toLowerCase()));
+            if (match) currentCulture = match;
+        } else {
+            currentCulture = currentLang;
+        }
+
+        // Set current language flag
+        const currentFlagEl = document.getElementById('currentLanguageFlag');
+        if (currentFlagEl && cultureFlags[currentCulture]) {
+            currentFlagEl.textContent = cultureFlags[currentCulture];
+        }
+
+        // Mark current language as active in modal
+        on(languageModal, 'show.bs.modal', () => {
+            $$('#languageModal .language-list button').forEach(btn => {
+                const culture = btn.getAttribute('data-culture');
+                if (culture === currentCulture) {
+                    btn.classList.add('active');
+                } else {
+                    btn.classList.remove('active');
+                }
+            });
+        });
+
+        // Handle language selection
+        document.addEventListener('click', e => {
+            const langBtn = e.target.closest('#languageModal .language-list button');
+            if (langBtn) {
+                const culture = langBtn.getAttribute('data-culture');
+                const flag = langBtn.getAttribute('data-flag');
+                
+                if (culture && culture !== currentCulture) {
+                    appLogger.info('Changing language', { from: currentCulture, to: culture });
+                    
+                    // Create form and submit to change culture
+                    const form = document.createElement('form');
+                    form.method = 'POST';
+                    form.action = '/Culture/Set';
+                    
+                    const cultureInput = document.createElement('input');
+                    cultureInput.type = 'hidden';
+                    cultureInput.name = 'culture';
+                    cultureInput.value = culture;
+                    form.appendChild(cultureInput);
+                    
+                    const returnUrlInput = document.createElement('input');
+                    returnUrlInput.type = 'hidden';
+                    returnUrlInput.name = 'returnUrl';
+                    returnUrlInput.value = window.location.pathname + window.location.search;
+                    form.appendChild(returnUrlInput);
+                    
+                    document.body.appendChild(form);
+                    form.submit();
+                }
+            }
+        });
+    }
 });

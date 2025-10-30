@@ -48,7 +48,7 @@
     <value>Nachrichten werden gesendet</value>
   </data>
   <data name="WhosHere" xml:space="preserve">
-    <value>Anwesend ({0})</value>
+    <value>Anwesend</value>
   </data>
   <data name="Reconnecting" xml:space="preserve">
     <value>VERBINDUNG WIRD WIEDERHERGESTELLT…</value>
@@ -203,5 +203,16 @@
   </data>
   <data name="ValidationRoomNamePattern" xml:space="preserve">
     <value>Erlaubte Zeichen: Buchstaben, Zahlen und ein Leerzeichen zwischen Wörtern.</value>
+  </data>
+  
+  <!-- Language Selection -->
+  <data name="ChangeLanguage" xml:space="preserve">
+    <value>Sprache ändern</value>
+  </data>
+  <data name="SelectLanguage" xml:space="preserve">
+    <value>Sprache auswählen</value>
+  </data>
+  <data name="Logout" xml:space="preserve">
+    <value>Abmelden</value>
   </data>
 </root>

@@ -52,26 +52,3 @@
         }
     }
 }
-
-.search-container {
-    margin: 20px 10px;
-    margin-bottom: 30px;
-
-    input {
-        width: 100%;
-        background: $input-bg-color;
-        font-size: 14px;
-        text-indent: 25px;
-        padding: 7px 10px;
-        border: none;
-        border-radius: 5px;
-        outline: none;
-    }
-
-    svg {
-        position: absolute;
-        left: 10px;
-        top: 50%;
-        transform: translateY(-50%)
-    }
-}
