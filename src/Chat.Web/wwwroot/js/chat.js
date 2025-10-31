@@ -500,13 +500,35 @@ if(window.__chatAppBooted){
     // Prevent duplicate start attempts while hub is already in a non-Disconnected state.
     const currentState = hub.state && hub.state.toLowerCase ? hub.state.toLowerCase() : '';
     if(currentState && currentState !== 'disconnected'){
+      // Hub is already connecting/reconnecting - ensure visual state reflects this
+      if(currentState === 'connecting' || currentState === 'reconnecting'){
+        // Mark as reconnecting if not already tracked
+        if(!_connectionState.isReconnecting){
+          _connectionState = {
+            current: 'reconnecting',
+            lastUpdate: Date.now(),
+            isReconnecting: true,
+            reconnectSource: currentState === 'reconnecting' ? 'automatic' : 'manual'
+          };
+          applyConnectionVisual('reconnecting');
+        }
+      }
       // Avoid noisy reconnect attempt 0 inflation.
       log('warn','signalr.start.skip',{state: currentState});
       postTelemetry('hub.connect.skip',{state: currentState});
       return Promise.resolve();
     }
     log('info','signalr.start');
+    
+    // Mark as reconnecting before starting
+    _connectionState = {
+      current: 'reconnecting',
+      lastUpdate: Date.now(),
+      isReconnecting: true,
+      reconnectSource: 'manual'
+    };
     applyConnectionVisual('reconnecting'); // initial connecting state
+    
     const startedAt = performance.now();
     if(state.authStatus===AuthStatus.PROBING && !state.profile){
       // hub started before auth probe finished -> early start telemetry (once)
