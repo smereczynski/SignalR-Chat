@@ -48,7 +48,7 @@ namespace Chat.Web.Services
             var now = DateTimeOffset.UtcNow;
             if (now < _cooldownUntil)
             {
-                _logger?.LogWarning("Skipping ACS send for {User} due to cooldown until {Until}", userName, _cooldownUntil);
+                _logger?.LogWarning("Skipping ACS send for {User} due to cooldown until {Until}", SanitizeForLog(userName), _cooldownUntil);
                 return;
             }
 
@@ -76,7 +76,7 @@ namespace Chat.Web.Services
                 }
                 catch (Exception ex)
                 {
-                    _logger?.LogError(ex, "ACS email send failed for {User}", userName);
+                    _logger?.LogError(ex, "ACS email send failed for {User}", SanitizeForLog(userName));
                     ArmCooldown();
                     throw;
                 }
@@ -100,7 +100,7 @@ namespace Chat.Web.Services
                 }
                 catch (Exception ex)
                 {
-                    _logger?.LogError(ex, "ACS SMS send failed for {User}", userName);
+                    _logger?.LogError(ex, "ACS SMS send failed for {User}", SanitizeForLog(userName));
                     ArmCooldown();
                     throw;
                 }
@@ -110,6 +110,28 @@ namespace Chat.Web.Services
         private static bool IsEmail(string s)
         {
             return s.Contains("@");
+        }
+
+        /// <summary>
+        /// Sanitizes user input for safe logging by removing all ASCII control characters
+        /// (including newlines, carriage returns, tabs, etc) to prevent log forging attacks.
+        /// </summary>
+        private static string SanitizeForLog(string input)
+        {
+            if (string.IsNullOrEmpty(input))
+                return "[empty]";
+            // Remove all control chars (ASCII and Unicode), and trim spaces.
+            var sb = new System.Text.StringBuilder(input.Length);
+            foreach (var c in input)
+            {
+                if (!char.IsControl(c))
+                    sb.Append(c);
+            }
+            // Optionally, truncate to a safe length (e.g., 100 chars).
+            var sanitized = sb.ToString().Trim();
+            if (sanitized.Length > 100) sanitized = sanitized.Substring(0, 100) + "...";
+            // Delimit with square brackets so log entries are visually isolated.
+            return "[" + sanitized + "]";
         }
 
         private static void ArmCooldown()
