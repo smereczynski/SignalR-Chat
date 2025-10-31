@@ -113,14 +113,22 @@ namespace Chat.Web.Services
         }
 
         /// <summary>
-        /// Sanitizes user input for safe logging by removing newline characters to prevent log forging attacks.
+        /// Sanitizes user input for safe logging by removing all ASCII control characters
+        /// (including newlines, carriage returns, tabs, etc) to prevent log forging attacks.
         /// </summary>
         private static string SanitizeForLog(string input)
         {
             if (string.IsNullOrEmpty(input))
                 return input;
-            
-            return input.Replace("\r", "").Replace("\n", "").Replace(Environment.NewLine, "");
+            // Remove all ASCII control chars
+            var chars = input.ToCharArray();
+            var sb = new System.Text.StringBuilder(chars.Length);
+            foreach (var c in chars)
+            {
+                if (!char.IsControl(c))
+                    sb.Append(c);
+            }
+            return sb.ToString();
         }
 
         private static void ArmCooldown()
