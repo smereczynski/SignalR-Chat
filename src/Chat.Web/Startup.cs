@@ -145,12 +145,14 @@ namespace Chat.Web
         /// <summary>
         /// Constructs the startup instance (configuration injected by host).
         /// </summary>
-        public Startup(IConfiguration configuration)
+        public Startup(IConfiguration configuration, IWebHostEnvironment environment)
         {
             Configuration = configuration;
+            HostEnvironment = environment;
         }
 
         public IConfiguration Configuration { get; }
+        public IWebHostEnvironment HostEnvironment { get; }
 
         // This method gets called by the runtime. Use this method to add services to the container.
     /// <summary>
@@ -309,6 +311,18 @@ namespace Chat.Web
             services.AddRazorPages();
             services.AddControllers();
             services.AddSingleton<Services.IInProcessMetrics, Services.InProcessMetrics>();
+            
+            // HSTS configuration for production (1-year max-age, preload, includeSubDomains)
+            if (!HostEnvironment.IsDevelopment())
+            {
+                services.AddHsts(options =>
+                {
+                    options.Preload = true;
+                    options.IncludeSubDomains = true;
+                    options.MaxAge = TimeSpan.FromDays(365);
+                    options.ExcludedHosts.Clear(); // Remove localhost exclusion
+                });
+            }
             // Rate limiting for hub operations
             services.AddSingleton<Services.IMarkReadRateLimiter, Services.MarkReadRateLimiter>();
             // Notification plumbing

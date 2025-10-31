@@ -207,6 +207,14 @@ Implementation details:
 - `NotificationSender` constructs the notification payload; `AcsOtpSender` applies the email subject for notifications while preserving OTP-specific formatting for the authentication flow.
 
 ## Security Notes
+* **HTTP Strict Transport Security (HSTS)**: Production-ready HSTS configuration to protect against downgrade attacks:
+  - 1-year max-age (31536000 seconds) for extended protection window
+  - `Preload` directive enabled for HSTS preload list eligibility (https://hstspreload.org/)
+  - `IncludeSubDomains` enabled to protect all subdomains
+  - Only applied in Production environment (not in test mode)
+  - Expected header: `Strict-Transport-Security: max-age=31536000; includeSubDomains; preload`
+  - Mitigates first-visit vulnerability and man-in-the-middle attacks
+  - Certificate renewal must remain automated (Azure App Service handles this automatically)
 * **Content Security Policy (CSP)**: Comprehensive security headers implemented to protect against XSS attacks:
   - Nonce-based inline script security using cryptographically secure per-request nonces
   - Strict CSP directives: `default-src 'self'`, `script-src 'self' 'nonce-{nonce}'`, `style-src 'self' 'unsafe-inline'`, `connect-src 'self' wss: https:`

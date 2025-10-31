@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **HSTS Configuration**: Enhanced HTTP Strict Transport Security with production-ready settings (#64)
+  - 1-year max-age (31536000 seconds) for extended protection
+  - `Preload` directive enabled for HSTS preload list eligibility
+  - `IncludeSubDomains` enabled to protect all subdomains
+  - Only applied in Production environment (not in test mode)
+  - Expected header: `Strict-Transport-Security: max-age=31536000; includeSubDomains; preload`
+  - Mitigates first-visit vulnerability and extends protection window from 30 days to 1 year
 - **Content Security Policy (CSP) Headers**: Comprehensive security headers middleware to protect against XSS and other attacks
   - Content-Security-Policy with strict directives (script-src, style-src, connect-src, etc.)
   - Nonce-based inline script security for Login page
