@@ -209,7 +209,12 @@ namespace Chat.Web
             else
             {
                 // Cosmos required (fail fast if placeholder)
-                var cosmosConn = ConfigurationGuards.Require(Configuration["Cosmos:ConnectionString"], "Cosmos:ConnectionString");
+                // Azure App Service injects connection strings as CUSTOMCONNSTR_{name}
+                // Configuration binding automatically handles both formats
+                var cosmosConn = Configuration.GetConnectionString("Cosmos") 
+                    ?? Configuration["Cosmos:ConnectionString"];
+                cosmosConn = ConfigurationGuards.Require(cosmosConn, "Cosmos connection string");
+                
                 var cosmosOpts = new CosmosOptions
                 {
                     ConnectionString = cosmosConn,
@@ -234,7 +239,12 @@ namespace Chat.Web
                 services.AddSingleton<IMessagesRepository, CosmosMessagesRepository>();
 
                 // Redis OTP store (fail fast if placeholder)
-                var redisConn = ConfigurationGuards.Require(Configuration["Redis:ConnectionString"], "Redis:ConnectionString");
+                // Azure App Service injects connection strings as CUSTOMCONNSTR_{name}
+                // Configuration binding automatically handles both formats
+                var redisConn = Configuration.GetConnectionString("Redis") 
+                    ?? Configuration["Redis:ConnectionString"];
+                redisConn = ConfigurationGuards.Require(redisConn, "Redis connection string");
+                
                 // Configure Redis with shorter timeouts for multi-instance scenarios
                 var redisConfig = ConfigurationOptions.Parse(redisConn);
                 redisConfig.ConnectTimeout = 5000; // 5 seconds
@@ -257,7 +267,11 @@ namespace Chat.Web
             }
             else
             {
-                var acsConn = Configuration["Acs:ConnectionString"];            
+                // Azure App Service injects connection strings as CUSTOMCONNSTR_{name}
+                // Configuration binding automatically handles both formats
+                var acsConn = Configuration.GetConnectionString("ACS") 
+                    ?? Configuration["Acs:ConnectionString"];
+                    
                 if (!string.IsNullOrWhiteSpace(acsConn))
                 {
                     var acsOptions = new AcsOptions
@@ -389,12 +403,23 @@ namespace Chat.Web
             }
             else
             {
+                // Azure App Service injects connection strings as CUSTOMCONNSTR_{name}
+                // Explicitly configure Azure SignalR to read from Connection Strings section
+                var signalRConn = Configuration.GetConnectionString("SignalR") 
+                    ?? Configuration["Azure:SignalR:ConnectionString"];
+                
                 services.AddSignalR(o =>
                 {
                     o.ClientTimeoutInterval = TimeSpan.FromHours(12);
                     o.KeepAliveInterval = TimeSpan.FromSeconds(10);
                 })
-                .AddAzureSignalR();
+                .AddAzureSignalR(options =>
+                {
+                    if (!string.IsNullOrWhiteSpace(signalRConn))
+                    {
+                        options.ConnectionString = signalRConn;
+                    }
+                });
             }
             
             // Now that external dependencies (Cosmos client, Redis multiplexer) are registered, configure OpenTelemetry
