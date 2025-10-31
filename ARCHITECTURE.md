@@ -195,13 +195,14 @@ sequenceDiagram
 
 ### Security considerations
 - OTP hashing: Pepper is required for meaningful hashing; use a high-entropy Base64 value (>= 32 bytes) per environment. Keep `HashingEnabled=true` in all non-test environments. The stored format is versioned to allow future upgrades without breaking verification.
+- OTP attempt rate limiting: Per-user failed verification attempts are tracked in Redis (`otp_attempts:{userName}`) with atomic counters. After reaching the threshold (default: 5 attempts), verification requests are blocked for the TTL duration (5 minutes, synchronized with OTP expiry). This prevents brute-force attacks while allowing legitimate retries for typos. The implementation uses fail-open strategy on Redis errors to maintain availability.
 - Redirect validation: All redirect targets are validated server-side using `Url.IsLocalUrl`. The client uses server-issued `nextUrl` values for navigation after verification.
 - DOM XSS hardening: UI rendering avoids `innerHTML` when dealing with user-derived content; code uses `textContent` and element creation.
-- Rate limiting: OTP endpoints are protected by a fixed-window rate limiter (configurable).
+- Rate limiting: Multi-layer protection includes per-IP endpoint rate limiting (20 req/5s) and per-user OTP attempt limiting (5 attempts/5 min).
 - Log forging mitigation: `RequestTracingMiddleware` sanitizes request method and path before logging.
 
 ## Observability
-- Domain counters (Meter `Chat.Web`): `chat.otp.requests`, `chat.otp.verifications`, plus chat-centric metrics.
+- Domain counters (Meter `Chat.Web`): `chat.otp.requests`, `chat.otp.verifications`, `chat.otp.verifications.ratelimited`, plus chat-centric metrics.
 - OpenTelemetry exporters are chosen in priority order: Azure Monitor (Production) → OTLP → Console. Serilog OTLP sink is enabled only when `OTel__OtlpEndpoint` is present; otherwise logs remain on console.
 
 ## Cosmos messages retention (TTL)
@@ -391,12 +392,14 @@ Client read-marking is idempotent and safe across reconnects: the browser dedupl
 Azure SignalR is used when not running in Testing:InMemory mode; otherwise in-process SignalR is used. No Redis backplane is configured; multi-instance scale-out could use Redis backplane as an alternative.
 
 ## Redis Role
-Redis serves two purposes:
+Redis serves three purposes:
 1. **OTP storage**: Key pattern `otp:{userName}` with versioned Argon2id hash (format `OtpHash:v2:argon2id:...`) and TTL (default 300s)
-2. **Presence tracking**: Single hash key `presence:users` stores current user presence for cross-instance snapshot queries
+2. **OTP attempt rate limiting**: Key pattern `otp_attempts:{userName}` with atomic INCR counter and TTL (default 300s) to prevent brute-force attacks
+3. **Presence tracking**: Single hash key `presence:users` stores current user presence for cross-instance snapshot queries
 
 Operations:
 - OTP: set, get, remove via `RedisOtpStore` with retry + cooldown guards
+- OTP Attempts: atomic INCR with conditional EXPIRE (TTL set only on first attempt) via `RedisOtpStore`
 - Presence: HSET/HGET/HDEL via `RedisPresenceTracker` for distributed user state
 
 Potential future roles: SignalR backplane, rate limiting, hot message cache.
@@ -406,8 +409,14 @@ Potential future roles: SignalR backplane, rate limiting, hot message cache.
 1. Client POSTs `/api/auth/start` (generate + store OTP in Redis)
 2. User receives/displayed code out-of-band via ACS (email/SMS) when configured; otherwise written to console for local development
 3. Client POSTs `/api/auth/verify` with code
-4. Server validates, issues auth cookie
-5. Client opens SignalR connection and auto-joins a room; outbox flush begins
+   - Server checks failed attempt count (`otp_attempts:{userName}`)
+   - If count >= threshold (default: 5), request is blocked (401 Unauthorized)
+   - Server validates OTP hash
+   - On failure: increment attempt counter with TTL (5 minutes), return 401
+   - On success: issue auth cookie, clear attempt counter
+4. Client opens SignalR connection and auto-joins a room; outbox flush begins
+
+**Security**: Multi-layer rate limiting (per-IP endpoint limiting + per-user attempt limiting) with OpenTelemetry metrics (chat.otp.verifications.ratelimited) to prevent brute-force attacks.
 
 ### Auto-Join & Queue Flush
 - Determine target room (user default, only room, or first) then invoke hub join

@@ -23,6 +23,10 @@ The project intentionally keeps scope tight: fixed public rooms, text messages o
   * OTP code stored in Redis (or in-memory store under test flag)
   * Hashed storage by default (Argon2id + salt + pepper) with a versioned format
   * Console fallback delivery (ACS email/SMS supported only if configured)
+  * Per-user failed attempt rate limiting (default: 5 attempts per 5 minutes)
+    * Redis counter (`otp_attempts:{user}`) tracks failed verification attempts
+    * Automatic expiry synchronized with OTP TTL
+    * Defense-in-depth with endpoint rate limiting (20 req/5s per IP)
 * Connection & reconnect telemetry (duplicate start suppression + backoff attempts counter)
 * OpenTelemetry traces + metrics + logs; custom counters for chat domain events
 * Background-stable hub connection
@@ -49,8 +53,9 @@ Rooms are static; there is no runtime CRUD. Rooms and initial users must be prov
 **Runtime**: ASP.NET Core 9 (Razor Pages + Controllers + SignalR Hub)  
 **Real-time**: SignalR hub (Azure SignalR automatically added when not running in in-memory test mode)  
 **Persistence**: Azure Cosmos DB with custom repository pattern (or in-memory repositories for testing)  
-**OTP / Cache**: Redis (or in-memory fallback) storing short-lived OTP codes (`otp:{user}`)  
+**OTP / Cache**: Redis (or in-memory fallback) storing short-lived OTP codes (`otp:{user}`) and failed attempt counters (`otp_attempts:{user}`)  
 **Auth Flow**: Request code → store in OTP store → user enters code → cookie issued → hub connects  
+**Security**: Multi-layer rate limiting (endpoint: 20 req/5s per IP, user: 5 failed attempts per 5 minutes), Argon2id OTP hashing, CSP headers  
 **Localization**: ASP.NET Core Localization with 9 supported markets; culture via Cookie > Accept-Language; API endpoint for client translations  
 **Observability**: OpenTelemetry (trace + metric + log providers) with exporter priority (Azure Monitor > OTLP > Console) and domain counters  
 Serilog OTLP sink is enabled only when `OTel__OtlpEndpoint` is set to avoid startup issues in environments without an OTLP endpoint.  
@@ -90,10 +95,10 @@ The app uses standard ASP.NET Core configuration with environment-specific overr
 * **`appsettings.Production.json`**: Production-ready settings with stricter rate limits, Azure Monitor telemetry integration, and production-grade security policies.
 
 Key configuration sections:
-* `Otp`: OTP hashing parameters (Argon2id memory, iterations, parallelism), TTL, hashing toggle
+* `Otp`: OTP hashing parameters (Argon2id memory, iterations, parallelism), TTL, hashing toggle, failed attempt limit (MaxAttempts)
 * `RateLimiting`: Per-endpoint rate limits (OTP request/verify, MarkRead operations)
 * `Cosmos`: Connection strings, database/container names, messages TTL
-* `Redis`: Connection string for OTP storage and caching
+* `Redis`: Connection string for OTP storage, attempt counters, and caching
 * `AzureSignalR`: Connection string (auto-added when not in test mode)
 * `Acs`: Azure Communication Services for email/SMS delivery
 * `Notifications`: Unread message notification delays and channels
@@ -208,9 +213,21 @@ Implementation details:
   - WebSocket (wss:) and HTTPS explicitly allowed for SignalR real-time communication
   - Additional security headers: `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`
   - Implementation: `SecurityHeadersMiddleware` generates unique nonces and applies headers to all responses
-* OTP codes are stored hashed by default (Argon2id + salt + pepper). To support legacy/testing scenarios, plaintext storage can be toggled with `Otp:HashingEnabled=false`.
-* Provide a high-entropy Base64 pepper via `Otp__Pepper` in each environment. Keep this secret out of source control.
-* Rate limiting applied to auth/OTP endpoints via fixed window limiter (configurable limits).
+* **OTP Security**:
+  - OTP codes are stored hashed by default (Argon2id + salt + pepper). To support legacy/testing scenarios, plaintext storage can be toggled with `Otp:HashingEnabled=false`.
+  - Provide a high-entropy Base64 pepper via `Otp__Pepper` in each environment. Keep this secret out of source control.
+  - **Failed Attempt Rate Limiting**: Per-user counter tracks failed verification attempts
+    - Default threshold: 5 attempts per 5 minutes (configurable via `Otp__MaxAttempts`)
+    - Redis key pattern: `otp_attempts:{user}` with atomic INCR operations
+    - Automatic expiry synchronized with OTP TTL (5 minutes)
+    - Counter increments only on verification failure, not on success
+    - Safe fallback on Redis errors (fail-open for availability)
+    - Generic 401 responses prevent username enumeration
+    - OpenTelemetry metric: `chat.otp.verifications.ratelimited`
+* **Rate Limiting**: Multi-layer protection
+  - Endpoint-level: 20 requests per 5 seconds per IP (prevents request flooding/DDoS)
+  - User-level: 5 failed OTP attempts per 5 minutes (prevents brute-force attacks)
+  - Applied to auth/OTP endpoints via fixed window limiter (configurable limits)
 * Redirect safety: server validates `ReturnUrl` with `Url.IsLocalUrl` and responds with a server-issued `nextUrl`; the client uses that value. Client also performs a basic path check as a secondary guard.
 * DOM XSS hardening: client code avoids `innerHTML` when rendering user-controlled content (uses `textContent` and element creation).
 * Log forging mitigation: request method and path are sanitized before logging in `RequestTracingMiddleware`.
@@ -302,12 +319,12 @@ All 55 tests passing ✅
 The project includes comprehensive test coverage across four test assemblies:
 
 ### Test Summary
-* **Total Tests**: 116 tests
+* **Total Tests**: 117 tests
 * **Status**: All passing ✅
 * **Test Projects**:
   - `Chat.Tests` (80 tests): Unit tests including localization (55 tests), OTP hashing, configuration guards, unread notifications
   - `Chat.DataSeed.Tests` (10 tests): Data seeding validation
-  - `Chat.IntegrationTests` (19 tests): End-to-end integration tests including OTP flow, rate limiting, room authorization, hub lifecycle
+  - `Chat.IntegrationTests` (20 tests): End-to-end integration tests including OTP flow, rate limiting, room authorization, hub lifecycle
   - `Chat.Web.Tests` (7 tests): Web-specific tests including security headers (CSP) and health endpoints
 
 ### Key Test Categories
@@ -317,8 +334,12 @@ The project includes comprehensive test coverage across four test assemblies:
    - Covers all 60+ resource keys across 9 cultures
    - Validates translation quality and completeness
 
-2. **Integration Tests** (19 tests in Chat.IntegrationTests)
+2. **Integration Tests** (20 tests in Chat.IntegrationTests)
    - `OtpAuthFlowTests`: Full OTP authentication workflow
+   - `OtpAttemptLimitingTests`: Per-user failed attempt rate limiting (3 tests)
+     - Validates blocking after N failed attempts
+     - Ensures attempts within limit are allowed
+     - Verifies counter increments only on failure
    - `RoomAuthorizationTests`: Room access control validation
    - `RoomJoinPositiveTests`: Successful room join scenarios
    - `ChatHubLifecycleTests`: SignalR hub connection/disconnection
