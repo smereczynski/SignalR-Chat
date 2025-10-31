@@ -713,7 +713,9 @@ if(window.__chatAppBooted){
     log('warn','hub.reconnecting', {message: err && err.message}); 
     applyConnectionVisual('reconnecting'); 
   });
-  c.onclose(()=> { 
+  c.onclose((err)=> { 
+    log('warn','hub.onclose', {message: err && err.message}); 
+    
     // Only set disconnected if not actively reconnecting (manual reconnect will handle state)
     if(!_connectionState.isReconnecting){
       _connectionState = {
@@ -722,6 +724,13 @@ if(window.__chatAppBooted){
         isReconnecting: false,
         reconnectSource: null
       };
+      
+      // If connection closed with an error, trigger manual reconnection
+      // This handles cases where backend is down and automatic reconnect doesn't kick in
+      if(err){
+        log('warn','hub.onclose.error.triggering.reconnect',{msg: (err.message||'').slice(0,120)});
+        scheduleReconnect(err);
+      }
     }
     applyConnectionVisual(_connectionState.current); 
     // Clear presence list when fully disconnected to avoid showing stale users.
@@ -833,6 +842,9 @@ if(window.__chatAppBooted){
           renderRooms();
           postTelemetry('room.join.fail',{room:roomName, attempts:attempt, msg: msg.slice(0,200)});
           showError('Join failed: '+msg);
+          // If join failed after retries, the backend may be down - trigger manual reconnect
+          log('warn','room.join.failed.triggering.reconnect',{room:roomName, msg: msg.slice(0,120)});
+          scheduleReconnect(err);
         }
       });
     }
@@ -862,6 +874,10 @@ if(window.__chatAppBooted){
     }));
     state.users=normalized;
     renderUsers();
+  }).catch(err=>{
+    log('warn','loadUsers.failed',{msg: err && err.message});
+    // Backend may be down - trigger reconnect after a short delay
+    setTimeout(()=> scheduleReconnect(err), 1000);
   }); }
   /**
    * Loads most recent page of messages for joined room (resets pagination state).
@@ -989,6 +1005,9 @@ if(window.__chatAppBooted){
         clearAckTimeout(correlationId);
         postTelemetry('send.invoke.fail',{cid:correlationId, msg:msg});
         if(record){ if(!updateMessageDom(record)) renderMessages(); else finalizeMessageRender(); }
+        // If SendMessage fails, backend may be down - trigger reconnect after short delay
+        log('warn','sendMessage.failed.triggering.reconnect',{msg: msg.slice(0,120)});
+        setTimeout(()=> scheduleReconnect(err), 500);
         throw err;
       });
     // Schedule optimistic acknowledgement timeout (30s)

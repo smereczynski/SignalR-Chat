@@ -6,11 +6,12 @@ using Xunit;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
 using System.Collections.Generic;
+using Microsoft.AspNetCore.Hosting;
 
 namespace Chat.Web.Tests
 {
     /// <summary>
-    /// Tests for SecurityHeadersMiddleware and Content Security Policy implementation.
+    /// Tests for SecurityHeadersMiddleware, Content Security Policy, and HSTS implementation.
     /// Verifies that all required security headers are present on responses.
     /// </summary>
     public class SecurityHeadersTests : IClassFixture<WebApplicationFactory<Startup>>
@@ -143,6 +144,57 @@ namespace Chat.Web.Tests
             if (nonceEnd == -1 || nonceEnd <= nonceStart)
                 return string.Empty;
             return cspHeader.Substring(nonceStart, nonceEnd - nonceStart);
+        }
+
+        // Note: We only test Development mode here because HSTS is configured to only apply
+        // in non-Development environments (Production, Staging, etc.). Testing Production mode
+        // would require mocking external dependencies (Cosmos DB, Redis) which is outside the
+        // scope of these unit tests. The configuration itself is verified in the code, and
+        // HSTS behavior in Production can be verified manually or via integration tests.
+
+        [Fact]
+        public async Task HSTS_ShouldNotBePresent_InDevelopmentMode()
+        {
+            // Arrange - Create factory with Development environment
+            var factory = _factory.WithWebHostBuilder(builder =>
+            {
+                builder.UseEnvironment("Development");
+                builder.ConfigureAppConfiguration((context, config) =>
+                {
+                    config.AddInMemoryCollection(new Dictionary<string, string?>
+                    {
+                        ["Testing:InMemory"] = "true"
+                    });
+                });
+            });
+            var client = factory.CreateClient(new WebApplicationFactoryClientOptions
+            {
+                AllowAutoRedirect = false
+            });
+
+            // Act
+            var response = await client.GetAsync("/login");
+
+            // Assert
+            Assert.False(response.Headers.Contains("Strict-Transport-Security"),
+                "HSTS header should NOT be present in Development environment");
+        }
+
+        [Fact]
+        public async Task HSTS_ShouldNotBePresent_InTestingInMemoryMode()
+        {
+            // Arrange - Testing:InMemory should behave like Development
+            var client = _factory.CreateClient(new WebApplicationFactoryClientOptions
+            {
+                AllowAutoRedirect = false
+            });
+
+            // Act
+            var response = await client.GetAsync("/login");
+
+            // Assert
+            Assert.False(response.Headers.Contains("Strict-Transport-Security"),
+                "HSTS header should NOT be present when Testing:InMemory=true (test mode)");
         }
     }
 }
