@@ -48,7 +48,7 @@ namespace Chat.Web.Services
             var now = DateTimeOffset.UtcNow;
             if (now < _cooldownUntil)
             {
-                _logger?.LogWarning("Skipping ACS send for {User} due to cooldown until {Until}", userName, _cooldownUntil);
+                _logger?.LogWarning("Skipping ACS send for {User} due to cooldown until {Until}", SanitizeForLog(userName), _cooldownUntil);
                 return;
             }
 
@@ -76,7 +76,7 @@ namespace Chat.Web.Services
                 }
                 catch (Exception ex)
                 {
-                    _logger?.LogError(ex, "ACS email send failed for {User}", userName);
+                    _logger?.LogError(ex, "ACS email send failed for {User}", SanitizeForLog(userName));
                     ArmCooldown();
                     throw;
                 }
@@ -100,7 +100,7 @@ namespace Chat.Web.Services
                 }
                 catch (Exception ex)
                 {
-                    _logger?.LogError(ex, "ACS SMS send failed for {User}", userName);
+                    _logger?.LogError(ex, "ACS SMS send failed for {User}", SanitizeForLog(userName));
                     ArmCooldown();
                     throw;
                 }
@@ -110,6 +110,17 @@ namespace Chat.Web.Services
         private static bool IsEmail(string s)
         {
             return s.Contains("@");
+        }
+
+        /// <summary>
+        /// Sanitizes user input for safe logging by removing newline characters to prevent log forging attacks.
+        /// </summary>
+        private static string SanitizeForLog(string input)
+        {
+            if (string.IsNullOrEmpty(input))
+                return input;
+            
+            return input.Replace("\r", "").Replace("\n", "").Replace(Environment.NewLine, "");
         }
 
         private static void ArmCooldown()
