@@ -37,6 +37,19 @@ if(window.__chatAppBooted){
   state._graceEnded = false;            // flag to ensure single grace end telemetry
   const els = {};
 
+  // ---------------- Connection State Tracking ----------------
+  // Explicit connection state tracking to handle all reconnection scenarios:
+  // - Scenario 1: App down, dependencies up (manual reconnect)
+  // - Scenario 2: Dependencies down, app up (automatic reconnect)
+  // - Scenario 3: Both down (hybrid reconnect)
+  // - Scenario 4: Network interruption (both types)
+  let _connectionState = {
+    current: 'disconnected',        // 'connected' | 'reconnecting' | 'disconnected'
+    lastUpdate: 0,                  // timestamp of last state change
+    isReconnecting: false,          // explicit reconnection flag
+    reconnectSource: null           // 'automatic' | 'manual' | null
+  };
+
   // Grace window helper (auth probe or transitional period)
   function isWithinAuthGrace(){
     return !!(state.authGraceUntil && Date.now() < state.authGraceUntil);
@@ -113,6 +126,18 @@ if(window.__chatAppBooted){
     }
   }
   function computeConnectionState(){
+    // Trust tracked reconnection state (within last 60 seconds to cover max exponential backoff)
+    const stateAge = Date.now() - _connectionState.lastUpdate;
+    if(_connectionState.isReconnecting && stateAge < 60000){
+      return 'reconnecting';  // Always show reconnecting during active attempts
+    }
+    
+    // Trust recent event-driven state (within last 5 seconds)
+    if(stateAge < 5000){
+      return _connectionState.current;
+    }
+    
+    // Fall back to polling hub.state for stale/missed events
     if(!hub) return 'disconnected';
     const stateStr = hub.state && hub.state.toLowerCase ? hub.state.toLowerCase() : '';
     if(stateStr==='connected') return 'connected';
@@ -488,7 +513,17 @@ if(window.__chatAppBooted){
       if(!state._hubStartedEarly){ postTelemetry('auth.hub.start.early',{}); state._hubStartedEarly=true; }
     }
     return hub.start().then(()=>{
-      reconnectAttempts=0; lastReconnectError=null; loadRooms();
+      reconnectAttempts=0; lastReconnectError=null;
+      
+      // Clear reconnecting state - connection successful
+      _connectionState = {
+        current: 'connected',
+        lastUpdate: Date.now(),
+        isReconnecting: false,
+        reconnectSource: null
+      };
+      
+      loadRooms();
       postTelemetry('hub.connected',{durationMs: Math.round(performance.now()-startedAt)});
   applyConnectionVisual('connected');
       // Fallback: if we already have a profile (from /api/auth/me) but still showing loading because getProfileInfo hasn't fired, hide loader.
@@ -522,6 +557,15 @@ if(window.__chatAppBooted){
   function scheduleReconnect(err){
     if(err) lastReconnectError=err;
     reconnectAttempts++;
+    
+    // Mark manual reconnection state
+    _connectionState = {
+      current: 'reconnecting',
+      lastUpdate: Date.now(),
+      isReconnecting: true,
+      reconnectSource: 'manual'
+    };
+    
     const delay=Math.min(1000*Math.pow(2,reconnectAttempts), maxBackoff);
   applyConnectionVisual('reconnecting');
     const {cat,msg}=classifyError(lastReconnectError);
@@ -614,6 +658,14 @@ if(window.__chatAppBooted){
     // On successful re-connect, request a fresh user list for the current room.
     // This compensates for any missed join/leave events during the disconnected interval.
     c.onreconnected(connectionId => {
+      // Clear reconnecting state - automatic reconnect successful
+      _connectionState = {
+        current: 'connected',
+        lastUpdate: Date.now(),
+        isReconnecting: false,
+        reconnectSource: null
+      };
+      
       try {
         if(state.joinedRoom){
           // Snapshot unsent local messages for this room before the forced reload wipes the list
@@ -627,9 +679,29 @@ if(window.__chatAppBooted){
       } catch(_){ }
       applyConnectionVisual('connected');
     });
-  c.onreconnecting(err => { log('warn','hub.reconnecting', {message: err && err.message}); applyConnectionVisual('reconnecting'); });
+  c.onreconnecting(err => { 
+    // Mark automatic reconnection state
+    _connectionState = {
+      current: 'reconnecting',
+      lastUpdate: Date.now(),
+      isReconnecting: true,
+      reconnectSource: 'automatic'
+    };
+    
+    log('warn','hub.reconnecting', {message: err && err.message}); 
+    applyConnectionVisual('reconnecting'); 
+  });
   c.onclose(()=> { 
-    applyConnectionVisual('disconnected'); 
+    // Only set disconnected if not actively reconnecting (manual reconnect will handle state)
+    if(!_connectionState.isReconnecting){
+      _connectionState = {
+        current: 'disconnected',
+        lastUpdate: Date.now(),
+        isReconnecting: false,
+        reconnectSource: null
+      };
+    }
+    applyConnectionVisual(_connectionState.current); 
     // Clear presence list when fully disconnected to avoid showing stale users.
     state.users = [];
     renderUsers();
