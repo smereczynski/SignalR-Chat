@@ -132,7 +132,7 @@ namespace Chat.Web.Controllers
         {
             var user = _users.GetByUserName(req.UserName);
             // WORKAROUND: ContentResult to avoid PipeWriter UnflushedBytes issue in test harness.
-            if (user == null || user.Enabled == false) 
+            if (user == null || !user.Enabled) 
                 return new ContentResult { Content = "", ContentType = "text/plain", StatusCode = 401 };
             
             // Check if user has exceeded maximum verification attempts
