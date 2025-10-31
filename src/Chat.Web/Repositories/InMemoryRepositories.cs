@@ -84,6 +84,8 @@ namespace Chat.Web.Repositories
     public class InMemoryOtpStore : IOtpStore
     {
         private readonly ConcurrentDictionary<string, (string Code, DateTime Exp)> _codes = new();
+        private readonly ConcurrentDictionary<string, (int Count, DateTime Exp)> _attempts = new();
+        
         public Task SetAsync(string userName, string code, TimeSpan ttl)
         {
             _codes[userName] = (code, DateTime.UtcNow.Add(ttl));
@@ -101,6 +103,28 @@ namespace Chat.Web.Repositories
         {
             _codes.TryRemove(userName, out _);
             return Task.CompletedTask;
+        }
+        
+        public Task<int> IncrementAttemptsAsync(string userName, TimeSpan ttl)
+        {
+            var expiry = DateTime.UtcNow.Add(ttl);
+            var count = _attempts.AddOrUpdate(
+                userName,
+                _ => (1, expiry),
+                (_, existing) => existing.Exp > DateTime.UtcNow 
+                    ? (existing.Count + 1, existing.Exp) 
+                    : (1, expiry)
+            ).Count;
+            return Task.FromResult(count);
+        }
+        
+        public Task<int> GetAttemptsAsync(string userName)
+        {
+            if (_attempts.TryGetValue(userName, out var entry) && entry.Exp > DateTime.UtcNow)
+            {
+                return Task.FromResult(entry.Count);
+            }
+            return Task.FromResult(0);
         }
     }
 }
