@@ -6,6 +6,7 @@ using Xunit;
 
 namespace Chat.IntegrationTests
 {
+    [Collection("Sequential")]
     public class RateLimitingTests : IClassFixture<CustomWebApplicationFactory>
     {
         private readonly CustomWebApplicationFactory _factory;

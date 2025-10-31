@@ -7,6 +7,7 @@ using Xunit;
 
 namespace Chat.IntegrationTests
 {
+    [Collection("Sequential")]
     public class OtpAuthFlowTests : IClassFixture<CustomWebApplicationFactory>
     {
         private readonly CustomWebApplicationFactory _factory;
