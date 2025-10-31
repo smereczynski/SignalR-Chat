@@ -1,0 +1,348 @@
+#!/bin/bash
+# Azure CLI Script to migrate connection strings from App Settings to Connection Strings
+# This script migrates Azure SignalR, Cosmos DB, Redis, and ACS connection strings
+# to the dedicated Connection Strings section in Azure App Service
+#
+# Usage: 
+#   ./migrate-connection-strings.azcli <resource-group> <app-service-name>
+#
+# Example:
+#   ./migrate-connection-strings.azcli rg-signalr-chat-dev signalr-chat-dev-app
+#
+# Prerequisites:
+#   - Azure CLI installed and logged in (az login)
+#   - Appropriate permissions on the resource group
+
+set -e
+
+# Color output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Function to print colored output
+print_info() {
+    echo -e "${BLUE}[INFO]${NC} $1"
+}
+
+print_success() {
+    echo -e "${GREEN}[SUCCESS]${NC} $1"
+}
+
+print_warning() {
+    echo -e "${YELLOW}[WARNING]${NC} $1"
+}
+
+print_error() {
+    echo -e "${RED}[ERROR]${NC} $1"
+}
+
+# Check arguments
+if [ -z "$1" ] || [ -z "$2" ]; then
+    print_error "Usage: $0 <resource-group> <app-service-name>"
+    print_info "Example: $0 rg-signalr-chat-dev signalr-chat-dev-app"
+    exit 1
+fi
+
+RESOURCE_GROUP=$1
+APP_SERVICE_NAME=$2
+
+print_info "=========================================="
+print_info "Connection Strings Migration Script"
+print_info "=========================================="
+print_info "Resource Group: $RESOURCE_GROUP"
+print_info "App Service: $APP_SERVICE_NAME"
+print_info ""
+
+# Verify Azure CLI is installed
+if ! command -v az &> /dev/null; then
+    print_error "Azure CLI is not installed. Please install it first."
+    exit 1
+fi
+
+# Verify logged in to Azure
+print_info "Verifying Azure login..."
+if ! az account show &> /dev/null; then
+    print_error "Not logged in to Azure. Please run 'az login' first."
+    exit 1
+fi
+
+print_success "Azure login verified"
+
+# Verify resource group exists
+print_info "Verifying resource group exists..."
+if ! az group show --name "$RESOURCE_GROUP" &> /dev/null; then
+    print_error "Resource group '$RESOURCE_GROUP' not found"
+    exit 1
+fi
+
+print_success "Resource group verified"
+
+# Verify app service exists
+print_info "Verifying App Service exists..."
+if ! az webapp show --name "$APP_SERVICE_NAME" --resource-group "$RESOURCE_GROUP" &> /dev/null; then
+    print_error "App Service '$APP_SERVICE_NAME' not found in resource group '$RESOURCE_GROUP'"
+    exit 1
+fi
+
+print_success "App Service verified"
+print_info ""
+
+# Connection string keys to migrate
+CONNECTION_STRING_KEYS=(
+    "Azure:SignalR:ConnectionString"
+    "Cosmos:ConnectionString"
+    "Redis:ConnectionString"
+    "Acs:ConnectionString"
+)
+
+print_info "=========================================="
+print_info "Step 1: Reading current App Settings"
+print_info "=========================================="
+
+# Get current app settings
+print_info "Fetching current application settings..."
+CURRENT_SETTINGS=$(az webapp config appsettings list \
+    --name "$APP_SERVICE_NAME" \
+    --resource-group "$RESOURCE_GROUP" \
+    --output json)
+
+if [ -z "$CURRENT_SETTINGS" ] || [ "$CURRENT_SETTINGS" == "[]" ]; then
+    print_warning "No application settings found"
+else
+    print_success "Application settings retrieved"
+fi
+
+# Arrays to store connection strings to migrate (parallel arrays)
+FOUND_KEYS=()
+FOUND_VALUES=()
+
+# Extract connection string values from app settings
+print_info ""
+print_info "Checking for connection strings in App Settings..."
+for KEY in "${CONNECTION_STRING_KEYS[@]}"; do
+    VALUE=$(echo "$CURRENT_SETTINGS" | jq -r ".[] | select(.name==\"$KEY\") | .value")
+    
+    if [ -n "$VALUE" ] && [ "$VALUE" != "null" ]; then
+        FOUND_KEYS+=("$KEY")
+        FOUND_VALUES+=("$VALUE")
+        print_success "Found: $KEY"
+    else
+        print_warning "Not found in App Settings: $KEY"
+    fi
+done
+
+# Check if any connection strings were found
+if [ ${#FOUND_KEYS[@]} -eq 0 ]; then
+    print_warning "No connection strings found in App Settings to migrate"
+    print_info "This could mean:"
+    print_info "  1. Connection strings are already in the Connection Strings section"
+    print_info "  2. Connection strings haven't been configured yet"
+    print_info "  3. The App Service uses different environment variable names"
+    print_info ""
+    print_info "Exiting without making changes"
+    exit 0
+fi
+
+print_info ""
+print_info "=========================================="
+print_info "Step 2: Creating Connection Strings"
+print_info "=========================================="
+
+# Create connection strings in the Connection Strings section
+# Note: Azure App Service will inject these as CUSTOMCONNSTR_{name} environment variables
+for i in "${!FOUND_KEYS[@]}"; do
+    KEY="${FOUND_KEYS[$i]}"
+    VALUE="${FOUND_VALUES[$i]}"
+    
+    # Determine connection string name (remove _CONNECTION_STRING suffix for cleaner names)
+    CONN_NAME=""
+    case "$KEY" in
+        "Azure:SignalR:ConnectionString")
+            CONN_NAME="SignalR"
+            ;;
+        "Cosmos:ConnectionString")
+            CONN_NAME="Cosmos"
+            ;;
+        "Redis:ConnectionString")
+            CONN_NAME="Redis"
+            ;;
+        "Acs:ConnectionString")
+            CONN_NAME="ACS"
+            ;;
+        *)
+            CONN_NAME="$KEY"
+            ;;
+    esac
+    
+    print_info "Creating connection string: $CONN_NAME"
+    
+    # Create connection string (type: Custom for all)
+    az webapp config connection-string set \
+        --name "$APP_SERVICE_NAME" \
+        --resource-group "$RESOURCE_GROUP" \
+        --connection-string-type "Custom" \
+        --settings "$CONN_NAME=$VALUE" \
+        --output none
+    
+    if [ $? -eq 0 ]; then
+        print_success "Created: $CONN_NAME"
+    else
+        print_error "Failed to create: $CONN_NAME"
+        exit 1
+    fi
+done
+
+print_info ""
+print_info "=========================================="
+print_info "Step 3: Verifying Connection Strings"
+print_info "=========================================="
+
+# Verify connection strings were created
+print_info "Verifying connection strings..."
+CONN_STRINGS=$(az webapp config connection-string list \
+    --name "$APP_SERVICE_NAME" \
+    --resource-group "$RESOURCE_GROUP" \
+    --output json)
+
+for i in "${!FOUND_KEYS[@]}"; do
+    KEY="${FOUND_KEYS[$i]}"
+    CONN_NAME=""
+    case "$KEY" in
+        "Azure:SignalR:ConnectionString")
+            CONN_NAME="SignalR"
+            ;;
+        "Cosmos:ConnectionString")
+            CONN_NAME="Cosmos"
+            ;;
+        "Redis:ConnectionString")
+            CONN_NAME="Redis"
+            ;;
+        "Acs:ConnectionString")
+            CONN_NAME="ACS"
+            ;;
+        *)
+            CONN_NAME="$KEY"
+            ;;
+    esac
+    
+    FOUND=$(echo "$CONN_STRINGS" | jq -r ".[] | select(.name==\"$CONN_NAME\") | .value")
+    
+    if [ -n "$FOUND" ] && [ "$FOUND" != "null" ]; then
+        print_success "Verified: $CONN_NAME (value length: ${#FOUND} chars)"
+    else
+        print_error "Verification failed: $CONN_NAME not found in Connection Strings"
+        exit 1
+    fi
+done
+
+print_info ""
+print_info "=========================================="
+print_info "Step 4: Removing from App Settings"
+print_info "=========================================="
+print_warning "This step will remove connection strings from App Settings"
+print_warning "The application will now read them from Connection Strings section"
+print_info ""
+
+# Remove connection strings from app settings
+SETTINGS_TO_REMOVE=""
+for KEY in "${FOUND_KEYS[@]}"; do
+    if [ -z "$SETTINGS_TO_REMOVE" ]; then
+        SETTINGS_TO_REMOVE="$KEY"
+    else
+        SETTINGS_TO_REMOVE="$SETTINGS_TO_REMOVE $KEY"
+    fi
+done
+
+if [ -n "$SETTINGS_TO_REMOVE" ]; then
+    print_info "Removing connection strings from App Settings..."
+    
+    az webapp config appsettings delete \
+        --name "$APP_SERVICE_NAME" \
+        --resource-group "$RESOURCE_GROUP" \
+        --setting-names $SETTINGS_TO_REMOVE \
+        --output none
+    
+    if [ $? -eq 0 ]; then
+        print_success "Connection strings removed from App Settings"
+    else
+        print_error "Failed to remove connection strings from App Settings"
+        print_warning "Connection strings exist in BOTH App Settings and Connection Strings"
+        print_warning "Please manually remove them from App Settings"
+        exit 1
+    fi
+fi
+
+print_info ""
+print_info "=========================================="
+print_info "Step 5: Final Verification"
+print_info "=========================================="
+
+# Final check - ensure connection strings are not in app settings anymore
+print_info "Verifying connection strings removed from App Settings..."
+FINAL_SETTINGS=$(az webapp config appsettings list \
+    --name "$APP_SERVICE_NAME" \
+    --resource-group "$RESOURCE_GROUP" \
+    --output json)
+
+STILL_EXISTS=false
+for KEY in "${FOUND_KEYS[@]}"; do
+    VALUE=$(echo "$FINAL_SETTINGS" | jq -r ".[] | select(.name==\"$KEY\") | .value")
+    
+    if [ -n "$VALUE" ] && [ "$VALUE" != "null" ]; then
+        print_error "$KEY still exists in App Settings!"
+        STILL_EXISTS=true
+    fi
+done
+
+if [ "$STILL_EXISTS" = true ]; then
+    print_error "Some connection strings still exist in App Settings"
+    exit 1
+fi
+
+print_success "All connection strings successfully removed from App Settings"
+print_info ""
+
+# Summary
+print_info "=========================================="
+print_success "Migration Complete!"
+print_info "=========================================="
+print_info "Summary:"
+print_info "  - Resource Group: $RESOURCE_GROUP"
+print_info "  - App Service: $APP_SERVICE_NAME"
+print_info "  - Connection Strings migrated: ${#FOUND_KEYS[@]}"
+print_info ""
+print_info "Migrated connection strings:"
+for KEY in "${FOUND_KEYS[@]}"; do
+    case "$KEY" in
+        "Azure:SignalR:ConnectionString")
+            print_info "  ✓ SignalR (from $KEY)"
+            ;;
+        "Cosmos:ConnectionString")
+            print_info "  ✓ Cosmos (from $KEY)"
+            ;;
+        "Redis:ConnectionString")
+            print_info "  ✓ Redis (from $KEY)"
+            ;;
+        "Acs:ConnectionString")
+            print_info "  ✓ ACS (from $KEY)"
+            ;;
+    esac
+done
+
+print_info ""
+print_info "Next steps:"
+print_info "  1. Restart the App Service to apply changes:"
+print_info "     az webapp restart --name $APP_SERVICE_NAME --resource-group $RESOURCE_GROUP"
+print_info ""
+print_info "  2. Verify the application works correctly"
+print_info ""
+print_info "  3. Check connection strings in Azure Portal:"
+print_info "     App Service → Configuration → Connection Strings"
+print_info ""
+print_warning "Note: Connection strings are now injected as environment variables with"
+print_warning "the CUSTOMCONNSTR_ prefix (e.g., CUSTOMCONNSTR_SignalR)"
+print_info ""
+print_success "Migration script completed successfully!"
