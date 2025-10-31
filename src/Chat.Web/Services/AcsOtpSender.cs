@@ -119,16 +119,19 @@ namespace Chat.Web.Services
         private static string SanitizeForLog(string input)
         {
             if (string.IsNullOrEmpty(input))
-                return input;
-            // Remove all ASCII control chars
-            var chars = input.ToCharArray();
-            var sb = new System.Text.StringBuilder(chars.Length);
-            foreach (var c in chars)
+                return "[empty]";
+            // Remove all control chars (ASCII and Unicode), and trim spaces.
+            var sb = new System.Text.StringBuilder(input.Length);
+            foreach (var c in input)
             {
                 if (!char.IsControl(c))
                     sb.Append(c);
             }
-            return sb.ToString();
+            // Optionally, truncate to a safe length (e.g., 100 chars).
+            var sanitized = sb.ToString().Trim();
+            if (sanitized.Length > 100) sanitized = sanitized.Substring(0, 100) + "...";
+            // Delimit with square brackets so log entries are visually isolated.
+            return "[" + sanitized + "]";
         }
 
         private static void ArmCooldown()
