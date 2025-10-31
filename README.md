@@ -36,6 +36,11 @@ The project intentionally keeps scope tight: fixed public rooms, text messages o
 * SessionStorage backed optimistic message reconciliation
 * Read receipts: message ReadBy is persisted and broadcast so clients can show who has read each message
 * Delayed unread notifications: if a message remains unread after a configurable delay, send notification via email/SMS
+* Content Security Policy (CSP): Comprehensive security headers to protect against XSS attacks
+  * Nonce-based inline script security
+  * Strict CSP directives (script-src, style-src, connect-src)
+  * WebSocket (wss:) and HTTPS explicitly allowed for SignalR
+  * Additional security headers (X-Content-Type-Options, X-Frame-Options, Referrer-Policy)
 
 ## Fixed Room Topology
 Rooms are static; there is no runtime CRUD. Rooms and initial users must be provisioned via the bootstrap script (see `docs/BOOTSTRAP.md` for details).
@@ -197,6 +202,12 @@ Implementation details:
 - `NotificationSender` constructs the notification payload; `AcsOtpSender` applies the email subject for notifications while preserving OTP-specific formatting for the authentication flow.
 
 ## Security Notes
+* **Content Security Policy (CSP)**: Comprehensive security headers implemented to protect against XSS attacks:
+  - Nonce-based inline script security using cryptographically secure per-request nonces
+  - Strict CSP directives: `default-src 'self'`, `script-src 'self' 'nonce-{nonce}'`, `style-src 'self' 'unsafe-inline'`, `connect-src 'self' wss: https:`
+  - WebSocket (wss:) and HTTPS explicitly allowed for SignalR real-time communication
+  - Additional security headers: `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`
+  - Implementation: `SecurityHeadersMiddleware` generates unique nonces and applies headers to all responses
 * OTP codes are stored hashed by default (Argon2id + salt + pepper). To support legacy/testing scenarios, plaintext storage can be toggled with `Otp:HashingEnabled=false`.
 * Provide a high-entropy Base64 pepper via `Otp__Pepper` in each environment. Keep this secret out of source control.
 * Rate limiting applied to auth/OTP endpoints via fixed window limiter (configurable limits).
@@ -288,15 +299,16 @@ Comprehensive test coverage with 55 tests across all 9 locales:
 All 55 tests passing ✅
 
 ## Testing
-The project includes comprehensive test coverage across three test assemblies:
+The project includes comprehensive test coverage across four test assemblies:
 
 ### Test Summary
-* **Total Tests**: 109 tests
+* **Total Tests**: 116 tests
 * **Status**: All passing ✅
 * **Test Projects**:
   - `Chat.Tests` (80 tests): Unit tests including localization (55 tests), OTP hashing, configuration guards, unread notifications
   - `Chat.DataSeed.Tests` (10 tests): Data seeding validation
   - `Chat.IntegrationTests` (19 tests): End-to-end integration tests including OTP flow, rate limiting, room authorization, hub lifecycle
+  - `Chat.Web.Tests` (7 tests): Web-specific tests including security headers (CSP) and health endpoints
 
 ### Key Test Categories
 1. **Localization Tests** (55 tests in Chat.Tests)
@@ -323,6 +335,15 @@ The project includes comprehensive test coverage across three test assemblies:
 4. **Data Tests** (10 tests in Chat.DataSeed.Tests)
    - Bootstrap data seeding validation
    - User/Room/Message seed data integrity
+
+5. **Web Tests** (7 tests in Chat.Web.Tests)
+   - `SecurityHeadersTests`: Content Security Policy (CSP) headers validation (3 tests)
+     - Tests CSP presence on all endpoints (/login, /chat, /healthz, /api/localization/strings)
+     - Validates all required CSP directives (script-src, style-src, connect-src with WebSocket support)
+     - Verifies nonce uniqueness and HTML integration for inline script security
+   - `HealthEndpointsTests`: Health check endpoints validation (1 test)
+     - Tests in-memory mode health endpoints (/healthz, /healthz/ready)
+   - Additional Web.Tests: (3 tests - from before CSP implementation)
 
 ### Running Tests
 ```bash
@@ -351,6 +372,11 @@ Use the `test` task defined in `.vscode/tasks.json`:
 - `Testing:InMemory=true` flag enables in-memory OTP store and repositories
 - No external dependencies required (Redis/Cosmos mocked)
 - Tests run in isolation with separate DI containers
+
+### Recent Test Cleanup (v0.9.3)
+The following tests were removed as part of test suite cleanup:
+- **RoomsEndpointsTests** (entire file) - Removed 2 outdated tests that were checking for non-existent POST/DELETE endpoints on the read-only RoomsController
+- **HealthEndpointsTests.RealMode_Healthz_Ready_Returns200_WithOverriddenChecks** - Removed overly complex test that attempted to test "real mode" with fake configuration; the InMemoryMode test provides adequate coverage
 
 ## Future Enhancements (Not Implemented)
 * Typing indicators
