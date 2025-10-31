@@ -503,6 +503,16 @@ Benefits:
 | Presence tracking | Redis hash (single key) | Sharded Redis or dedicated presence service |
 
 ## Security Notes
+- **HTTP Strict Transport Security (HSTS)**: Production-ready HSTS configuration protects against protocol downgrade attacks:
+  - 1-year max-age (31536000 seconds) extends protection window from default 30 days
+  - `Preload` directive enabled for HSTS preload list eligibility (https://hstspreload.org/)
+  - `IncludeSubDomains` enabled to protect all subdomains
+  - Only applied in Production environment (not in test mode via `Testing:InMemory`)
+  - Configured in `Startup.ConfigureServices` using `services.AddHsts()` with custom options
+  - Activated in `Startup.Configure` via `app.UseHsts()` (Production only)
+  - Expected header: `Strict-Transport-Security: max-age=31536000; includeSubDomains; preload`
+  - Mitigates first-visit vulnerability and man-in-the-middle attacks
+  - Certificate renewal must remain automated (Azure App Service handles this automatically)
 - OTP codes are stored hashed by default (Argon2id + salt + pepper). Legacy/plaintext verification is supported only when explicitly enabled for testing and uses constant-time comparison. Provide a high-entropy Base64 pepper per environment via `Otp__Pepper`.
 - Correlation IDs are opaque UUIDs (avoid embedding user data)
 - OTP endpoints are rate-limited.
