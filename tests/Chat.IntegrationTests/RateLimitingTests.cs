@@ -22,7 +22,8 @@ namespace Chat.IntegrationTests
         public async Task BurstRequests_Produce429()
         {
             var client = _factory.CreateClient();
-            var tasks = new Task<HttpResponseMessage>[7];
+            // With rate limit of 20 requests per 5 seconds, need 25 concurrent requests to trigger 429
+            var tasks = new Task<HttpResponseMessage>[25];
             for (int i = 0; i < tasks.Length; i++)
             {
                 tasks[i] = client.PostAsJsonAsync("/api/auth/start", new StartReq("alice", "alice"));
