@@ -94,7 +94,7 @@
 			"command": "bash",
 			"args": [
 				"-lc",
-				"set -a; [ -f .env.local ] && source .env.local; export ASPNETCORE_ENVIRONMENT=Development; dotnet run --project ./src/Chat.Web --urls=http://localhost:5099"
+				"set -a; [ -f .env.local ] && source .env.local; export ASPNETCORE_ENVIRONMENT=Development; dotnet run --project ./src/Chat.Web --urls=https://localhost:5099"
 			],
 			"options": {
 				"cwd": "${workspaceFolder}"
@@ -102,7 +102,7 @@
 			"problemMatcher": [
 				"$msCompile"
 			],
-			"detail": "Loads secrets from .env.local and runs Chat.Web with Development environment."
+			"detail": "Loads secrets from .env.local and runs Chat.Web with Development environment (HTTPS)."
 		},
 		{
 			"label": "PROD Run Chat (Azure local env)",
@@ -110,7 +110,7 @@
 			"command": "bash",
 			"args": [
 				"-lc",
-				"set -a; [ -f .env.local ] && source .env.local; export ASPNETCORE_ENVIRONMENT=Production; dotnet run --project ./src/Chat.Web --urls=http://localhost:5099"
+				"set -a; [ -f .env.local ] && source .env.local; export ASPNETCORE_ENVIRONMENT=Production; dotnet run --project ./src/Chat.Web --urls=https://localhost:5099"
 			],
 			"options": {
 				"cwd": "${workspaceFolder}"

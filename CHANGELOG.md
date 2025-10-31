@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Content Security Policy (CSP) Headers**: Comprehensive security headers middleware to protect against XSS and other attacks
+  - Content-Security-Policy with strict directives (script-src, style-src, connect-src, etc.)
+  - Nonce-based inline script security for Login page
+  - X-Content-Type-Options: nosniff to prevent MIME type sniffing
+  - X-Frame-Options: DENY to prevent clickjacking attacks
+  - Referrer-Policy: strict-origin-when-cross-origin for controlled referrer information
+  - WebSocket (wss:) and HTTPS connections explicitly allowed for SignalR compatibility
+  - All security headers applied early in the request pipeline
+
 ## [0.9.3] - 2025-10-30
 
 ### Added
