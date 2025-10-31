@@ -16,6 +16,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Referrer-Policy: strict-origin-when-cross-origin for controlled referrer information
   - WebSocket (wss:) and HTTPS connections explicitly allowed for SignalR compatibility
   - All security headers applied early in the request pipeline
+- **OTP Attempt Rate Limiting**: Per-user failed verification attempt tracking to prevent brute-force attacks (#26)
+  - Redis-backed counter (`otp_attempts:{user}`) with atomic INCR operations
+  - Configurable threshold (default: 5 attempts) via `Otp__MaxAttempts` environment variable
+  - Automatic expiry (5-minute TTL synchronized with OTP lifetime)
+  - Counter increments only on failed verification, not on success
+  - OpenTelemetry metric: `chat.otp.verifications.ratelimited` tracks blocked attempts
+  - Structured logging with sanitized usernames and attempt progression
+  - Defense-in-depth: endpoint rate limiting (20 req/5s) + per-user attempt limiting (5 attempts)
+  - Safe fallback on Redis errors (fail-open for availability)
+  - Generic 401 responses prevent username enumeration
+  - Comprehensive integration tests (3 tests covering all scenarios)
 
 ## [0.9.3] - 2025-10-30
 
