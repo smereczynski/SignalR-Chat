@@ -29,28 +29,33 @@ namespace Chat.IntegrationTests
         {
             // Arrange: Request OTP for alice
             var startPayload = new { userName = "alice" };
-            var startResponse = await _client.PostAsync("/api/auth/start",
-                new StringContent(JsonSerializer.Serialize(startPayload), Encoding.UTF8, "application/json"));
+            using (var startContent = new StringContent(JsonSerializer.Serialize(startPayload), Encoding.UTF8, "application/json"))
+            {
+                var startResponse = await _client.PostAsync("/api/auth/start", startContent);
+                Assert.True(startResponse.IsSuccessStatusCode, $"Start failed with {startResponse.StatusCode}");
+            }
             Assert.True(startResponse.IsSuccessStatusCode, $"Start failed with {startResponse.StatusCode}");
 
             // Act: Make 5 failed verification attempts (default MaxAttempts)
             for (int i = 1; i <= 5; i++)
             {
                 var verifyPayload = new { userName = "alice", code = "000000" }; // Wrong code
-                var verifyResponse = await _client.PostAsync("/api/auth/verify",
-                    new StringContent(JsonSerializer.Serialize(verifyPayload), Encoding.UTF8, "application/json"));
-                
-                // Should get Unauthorized for wrong code
-                Assert.Equal(HttpStatusCode.Unauthorized, verifyResponse.StatusCode);
+                using (var verifyContent = new StringContent(JsonSerializer.Serialize(verifyPayload), Encoding.UTF8, "application/json"))
+                {
+                    var verifyResponse = await _client.PostAsync("/api/auth/verify", verifyContent);
+                    // Should get Unauthorized for wrong code
+                    Assert.Equal(HttpStatusCode.Unauthorized, verifyResponse.StatusCode);
+                }
             }
 
             // Assert: 6th attempt should still be blocked (counter at limit)
             var blockedPayload = new { userName = "alice", code = "123456" };
-            var blockedResponse = await _client.PostAsync("/api/auth/verify",
-                new StringContent(JsonSerializer.Serialize(blockedPayload), Encoding.UTF8, "application/json"));
-            
-            // Should still return Unauthorized (blocked due to too many attempts)
-            Assert.Equal(HttpStatusCode.Unauthorized, blockedResponse.StatusCode);
+            using (var blockedContent = new StringContent(JsonSerializer.Serialize(blockedPayload), Encoding.UTF8, "application/json"))
+            {
+                var blockedResponse = await _client.PostAsync("/api/auth/verify", blockedContent);
+                // Should still return Unauthorized (blocked due to too many attempts)
+                Assert.Equal(HttpStatusCode.Unauthorized, blockedResponse.StatusCode);
+            }
         }
 
         [Fact]
