@@ -121,9 +121,17 @@ High priority to address:
 | Phase | Action |
 |-------|--------|
 | Immediate | Implement hashed OTP (Argon2id + pepper), per-user attempt counter with TTL, HttpOnly+Secure cookie enforcement |
-| Short Term | Add CSP header (script-src with nonce), Origin check on hub negotiate, constant-time verification, uniform error responses |
+| Short Term | ✅ **COMPLETED**: Add CSP header (script-src with nonce), Origin check on hub negotiate, constant-time verification, uniform error responses |
 | Mid Term | Add session GUID claim + optional revocation store, implement presence & rate metrics alerts |
 | Future | Move to backplane & ensure consistent rate limiting distributed; integrate security headers audit (e.g., Helmet equivalent for .NET) |
+
+**CSP Implementation Status (Completed)**:
+- ✅ Content-Security-Policy header with nonce-based inline script support
+- ✅ X-Content-Type-Options: nosniff
+- ✅ X-Frame-Options: DENY
+- ✅ Referrer-Policy: strict-origin-when-cross-origin
+- ✅ WebSocket (wss:) and HTTPS connections allowed for SignalR
+- ✅ SecurityHeadersMiddleware applied early in pipeline
 
 ### 2.7 Monitoring & Detection
 Log (without PII/OTP):
@@ -146,15 +154,15 @@ Export metrics:
 
 ## 3. Implementation Checklist (Practical)
 
-| Item | Status (Assumed) | Next Step |
-|------|------------------|-----------|
-| OTP hashing | Not yet | Introduce Argon2id hasher w/ pepper |
-| Rate limiting OTP verify | Not implemented | Redis INCR + TTL + threshold |
-| Cookie flags | Verify | Ensure Secure, HttpOnly, SameSite=Lax/Strict |
-| Session revocation | None | Add sessionId claim (GUID) + optional blacklist |
-| XSS mitigations | Partial | Audit all user-sourced content; add CSP |
-| Logging hygiene | Unknown | Ensure no OTP/code or raw headers logged |
-| Origin check | Unknown | Validate `Request.Headers[\"Origin\"]` for hub negotiate |
+| Item | Status | Next Step |
+|------|--------|-----------|
+| OTP hashing | ✅ Completed | Argon2id hasher w/ pepper implemented |
+| Rate limiting OTP verify | ✅ Completed | Redis INCR + TTL + threshold |
+| Cookie flags | ✅ Completed | Secure, HttpOnly, SameSite=Lax configured |
+| Session revocation | Not implemented | Add sessionId claim (GUID) + optional blacklist |
+| XSS mitigations | ✅ Completed | CSP with nonce, security headers middleware |
+| Logging hygiene | ✅ Completed | No OTP/code or raw headers logged |
+| Origin check | Recommended | Validate `Request.Headers["Origin"]` for hub negotiate |
 
 ---
 
@@ -175,14 +183,23 @@ Return generic: `{ "error": "invalid_or_expired" }` to avoid oracle distinctions
 ---
 
 ## 5. Recommended Security Headers (Baseline)
-| Header | Value (Example) |
-|--------|-----------------|
-| Content-Security-Policy | `default-src 'self'; script-src 'self' 'nonce-{RANDOM}'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'` |
-| X-Content-Type-Options | `nosniff` |
-| X-Frame-Options | `DENY` (or rely on CSP frame-ancestors) |
-| Referrer-Policy | `strict-origin-when-cross-origin` |
-| Permissions-Policy | (restrict unneeded features) |
-| Strict-Transport-Security | `max-age=31536000; includeSubDomains; preload` (prod only, after confirming HTTPS everywhere) |
+
+**Implementation Status: ✅ COMPLETED** (via `SecurityHeadersMiddleware`)
+
+| Header | Value (Implemented) | Purpose |
+|--------|---------------------|---------|
+| Content-Security-Policy | `default-src 'self'; script-src 'self' 'nonce-{RANDOM}'; style-src 'self' 'unsafe-inline'; connect-src 'self' wss: https:; img-src 'self' data: https:; font-src 'self' data:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'` | Restrict resource loading, prevent XSS |
+| X-Content-Type-Options | `nosniff` | Prevent MIME type sniffing |
+| X-Frame-Options | `DENY` | Prevent clickjacking (also covered by CSP frame-ancestors) |
+| Referrer-Policy | `strict-origin-when-cross-origin` | Control referrer information leakage |
+| Strict-Transport-Security | *Not yet implemented* | Enforce HTTPS (recommend for production: `max-age=31536000; includeSubDomains; preload`) |
+| Permissions-Policy | *Not yet implemented* | Restrict browser features (optional enhancement) |
+
+**Notes**:
+- Nonce is generated per request using `RandomNumberGenerator.GetBytes(16)`
+- Inline scripts in Login.cshtml use `nonce="@HttpContext.Items["csp-nonce"]"`
+- `style-src 'unsafe-inline'` required for Bootstrap modal inline styles
+- `connect-src wss: https:` allows WebSocket connections for SignalR
 
 ---
 

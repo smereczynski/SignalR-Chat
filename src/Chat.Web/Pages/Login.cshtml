@@ -106,7 +106,7 @@
 
 @section Scripts {
   <script src="~/lib/bootstrap/js/bootstrap.bundle.min.js"></script>
-  <script>
+  <script nonce="@HttpContext.Items["csp-nonce"]">
     // Expose sanitized ReturnUrl to JS via server-rendering (server will still validate on verify)
     window.__returnUrl = (function(){
       try {
