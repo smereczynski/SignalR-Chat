@@ -43,6 +43,7 @@ using System.Diagnostics.Metrics;
 using OpenTelemetry.Instrumentation.Runtime;
 using OpenTelemetry.Instrumentation.StackExchangeRedis;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Chat.Web.Middleware;
 
 namespace Chat.Web
 {
@@ -438,6 +439,10 @@ namespace Chat.Web
 
             app.UseHttpsRedirection();
             app.UseStaticFiles();
+
+            // Security headers middleware (CSP, X-Content-Type-Options, X-Frame-Options, Referrer-Policy)
+            // Must be early in pipeline to set headers before any response is written
+            app.UseMiddleware<SecurityHeadersMiddleware>();
 
             // Localization middleware (must be before UseRouting)
             app.UseRequestLocalization();
