@@ -134,8 +134,14 @@ namespace Chat.Web.Tests
 
         private string ExtractNonceFromCSP(string cspHeader)
         {
-            var nonceStart = cspHeader.IndexOf("'nonce-") + 7;
+            var noncePattern = "'nonce-";
+            var nonceStart = cspHeader.IndexOf(noncePattern);
+            if (nonceStart == -1)
+                return string.Empty;
+            nonceStart += noncePattern.Length;
             var nonceEnd = cspHeader.IndexOf("'", nonceStart);
+            if (nonceEnd == -1 || nonceEnd <= nonceStart)
+                return string.Empty;
             return cspHeader.Substring(nonceStart, nonceEnd - nonceStart);
         }
     }
