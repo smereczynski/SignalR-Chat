@@ -14,6 +14,7 @@ namespace Chat.Web.Services
         void IncRoomsJoined();
         void IncOtpRequests();
         void IncOtpVerifications();
+        void IncOtpVerificationRateLimited();
         void IncReconnectAttempt(int attempt, int delayMs);
         void IncActiveConnections();
         void DecActiveConnections();
@@ -40,6 +41,7 @@ namespace Chat.Web.Services
         private long _roomsJoined;
         private long _otpRequests;
         private long _otpVerifications;
+        private long _otpVerificationRateLimited;
         private long _activeConnections;
         private long _reconnectAttempts;
 
@@ -48,6 +50,7 @@ namespace Chat.Web.Services
         private static readonly Counter<long> RoomsJoinedCounter = Meter.CreateCounter<long>("chat.rooms.joined");
         private static readonly Counter<long> OtpRequestsCounter = Meter.CreateCounter<long>("chat.otp.requests");
         private static readonly Counter<long> OtpVerificationsCounter = Meter.CreateCounter<long>("chat.otp.verifications");
+        private static readonly Counter<long> OtpVerificationRateLimitedCounter = Meter.CreateCounter<long>("chat.otp.verifications.ratelimited");
         private static readonly Counter<long> ReconnectAttemptsCounter = Meter.CreateCounter<long>("chat.reconnect.attempts");
         private static readonly UpDownCounter<long> ActiveConnectionsGauge = Meter.CreateUpDownCounter<long>("chat.connections.active");
         private static readonly UpDownCounter<long> RoomPresenceGauge = Meter.CreateUpDownCounter<long>("chat.room.presence");
@@ -60,6 +63,7 @@ namespace Chat.Web.Services
         public void IncRoomsJoined(){ Interlocked.Increment(ref _roomsJoined); RoomsJoinedCounter.Add(1); }
         public void IncOtpRequests(){ Interlocked.Increment(ref _otpRequests); OtpRequestsCounter.Add(1); }
         public void IncOtpVerifications(){ Interlocked.Increment(ref _otpVerifications); OtpVerificationsCounter.Add(1); }
+        public void IncOtpVerificationRateLimited(){ Interlocked.Increment(ref _otpVerificationRateLimited); OtpVerificationRateLimitedCounter.Add(1); }
         public void IncReconnectAttempt(int attempt, int delayMs){ Interlocked.Increment(ref _reconnectAttempts); ReconnectAttemptsCounter.Add(1, new ("attempt", attempt), new ("delay_ms", delayMs)); }
         public void IncActiveConnections(){ Interlocked.Increment(ref _activeConnections); ActiveConnectionsGauge.Add(1); }
         public void DecActiveConnections(){ Interlocked.Decrement(ref _activeConnections); ActiveConnectionsGauge.Add(-1); }

@@ -14,6 +14,12 @@ namespace Chat.Web.Options
         /// </summary>
         public bool HashingEnabled { get; set; } = true;
 
+        /// <summary>
+        /// Maximum number of failed verification attempts before blocking further attempts.
+        /// Default: 5 attempts.
+        /// </summary>
+        public int MaxAttempts { get; set; } = 5;
+
         // Argon2id parameters (memory in KB as commonly used by libraries)
         public int MemoryKB { get; set; } = 64 * 1024; // 64 MB
         public int Iterations { get; set; } = 3;

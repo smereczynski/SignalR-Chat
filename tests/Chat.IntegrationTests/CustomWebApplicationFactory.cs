@@ -34,8 +34,8 @@ namespace Chat.IntegrationTests
                     ["Testing:InMemory"] = "true", // instruct Startup to use in-memory stores
                     ["Cosmos:ConnectionString"] = "placeholder", // will not be used due to in-memory flag
                     ["Redis:ConnectionString"] = "placeholder",
-                    // Test-tuned rate limiter (fast window for deterministic rejection & quick reset)
-                    ["RateLimiting:Auth:PermitLimit"] = "5",
+                    // Test-tuned rate limiter (permissive for integration tests, OTP attempt limiting tested separately)
+                    ["RateLimiting:Auth:PermitLimit"] = "20",
                     ["RateLimiting:Auth:WindowSeconds"] = "5",
                     ["RateLimiting:Auth:QueueLimit"] = "0",
                     ["Features:EnableRestPostMessages"] = "true",

@@ -131,9 +131,27 @@ namespace Chat.Web.Controllers
         public async Task<IActionResult> Verify([FromBody] VerifyRequest req)
         {
             var user = _users.GetByUserName(req.UserName);
-            if (user == null || user.Enabled == false) return Unauthorized();
+            // WORKAROUND: ContentResult to avoid PipeWriter UnflushedBytes issue in test harness.
+            if (user == null || user.Enabled == false) 
+                return new ContentResult { Content = "", ContentType = "text/plain", StatusCode = 401 };
+            
+            // Check if user has exceeded maximum verification attempts
+            var maxAttempts = _otpOptions.Value?.MaxAttempts ?? 5;
+            var attempts = await _otpStore.GetAttemptsAsync(req.UserName);
+            if (attempts >= maxAttempts)
+            {
+                var sanitizedUserName = req.UserName.Replace("\r", "").Replace("\n", "");
+                _logger.LogWarning("OTP verification blocked: too many attempts for {User} ({Attempts}/{Max})", 
+                    sanitizedUserName, attempts, maxAttempts);
+                _metrics.IncOtpVerificationRateLimited();
+                // WORKAROUND: Generic response to avoid enumeration + PipeWriter issue
+                return new ContentResult { Content = "", ContentType = "text/plain", StatusCode = 401 };
+            }
+            
             var expected = await _otpStore.GetAsync(req.UserName);
-            if (string.IsNullOrEmpty(expected)) return Unauthorized();
+            // WORKAROUND: ContentResult to avoid PipeWriter UnflushedBytes issue in test harness.
+            if (string.IsNullOrEmpty(expected)) 
+                return new ContentResult { Content = "", ContentType = "text/plain", StatusCode = 401 };
             bool ok;
             if (expected.StartsWith("OtpHash:", StringComparison.Ordinal))
             {
@@ -145,7 +163,17 @@ namespace Chat.Web.Controllers
                 // Legacy plaintext path (short-lived during migration)
                 ok = FixedTimeEquals(expected, req.Code);
             }
-            if (!ok) return Unauthorized();
+            
+            if (!ok)
+            {
+                // Increment failed attempt counter with same TTL as OTP (5 minutes)
+                var newAttempts = await _otpStore.IncrementAttemptsAsync(req.UserName, TimeSpan.FromMinutes(5));
+                var sanitizedUserName = req.UserName.Replace("\r", "").Replace("\n", "");
+                _logger.LogWarning("OTP verification failed for {User} (attempt {Attempts}/{Max})", 
+                    sanitizedUserName, newAttempts, maxAttempts);
+                // WORKAROUND: ContentResult to avoid PipeWriter UnflushedBytes issue in test harness.
+                return new ContentResult { Content = "", ContentType = "text/plain", StatusCode = 401 };
+            }
 
             await _otpStore.RemoveAsync(req.UserName);
             _metrics.IncOtpVerifications();
@@ -167,7 +195,10 @@ namespace Chat.Web.Controllers
             {
                 dest = req.ReturnUrl;
             }
-            return Ok(new { nextUrl = dest });
+            // WORKAROUND: Manual serialization to avoid PipeWriter UnflushedBytes issue in test harness.
+            var payload = new { nextUrl = dest };
+            var json = JsonSerializer.Serialize(payload);
+            return new ContentResult { Content = json, ContentType = "application/json", StatusCode = 200 };
         }
 
         private static bool FixedTimeEquals(string a, string b)
