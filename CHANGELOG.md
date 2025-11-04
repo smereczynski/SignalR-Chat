@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Azure Connection Strings Migration**: Migrated connection strings from Application Settings to Connection Strings section (#83)
+  - Azure CLI migration script (`scripts/migrate-connection-strings.azcli`) for automated migration
+  - Supports 4 connection strings: Cosmos, Redis, ACS, SignalR
+  - Backward-compatible configuration reading with fallback to Application Settings
+  - Connection Strings section preferred (injected as `CUSTOMCONNSTR_{name}` environment variables)
+  - Verification and validation steps in migration script
+  - Follows Azure best practices for connection string management
+  - Tested on dev and staging environments (chat-dev-plc, chat-dev-plc-staging)
 - **HSTS Configuration**: Enhanced HTTP Strict Transport Security with production-ready settings (#64)
   - 1-year max-age (31536000 seconds) for extended protection
   - `Preload` directive enabled for HSTS preload list eligibility

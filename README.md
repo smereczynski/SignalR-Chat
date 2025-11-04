@@ -97,14 +97,14 @@ The app uses standard ASP.NET Core configuration with environment-specific overr
 Key configuration sections:
 * `Otp`: OTP hashing parameters (Argon2id memory, iterations, parallelism), TTL, hashing toggle, failed attempt limit (MaxAttempts)
 * `RateLimiting`: Per-endpoint rate limits (OTP request/verify, MarkRead operations)
-* `Cosmos`: Connection strings, database/container names, messages TTL
-* `Redis`: Connection string for OTP storage, attempt counters, and caching
-* `AzureSignalR`: Connection string (auto-added when not in test mode)
-* `Acs`: Azure Communication Services for email/SMS delivery
+* `Cosmos`: Connection string (preferably in Azure Connection Strings section as `Cosmos`, fallback to `Cosmos:ConnectionString` in Application Settings), database/container names, messages TTL
+* `Redis`: Connection string (preferably in Azure Connection Strings section as `Redis`, fallback to `Redis:ConnectionString` in Application Settings) for OTP storage, attempt counters, and caching
+* `AzureSignalR`: Connection string (preferably in Azure Connection Strings section as `SignalR`, fallback to `Azure:SignalR:ConnectionString` in Application Settings, auto-added when not in test mode)
+* `Acs`: Azure Communication Services connection string (preferably in Azure Connection Strings section as `ACS`, fallback to `Acs:ConnectionString` in Application Settings) for email/SMS delivery
 * `Notifications`: Unread message notification delays and channels
 * `OTel`: OpenTelemetry exporter endpoints (Azure Monitor, OTLP)
 
-Environment variables override appsettings values using the standard colon-to-double-underscore mapping (e.g., `Otp__Pepper`, `Cosmos__MessagesTtlSeconds`).
+Environment variables override appsettings values using the standard colon-to-double-underscore mapping (e.g., `Otp__Pepper`, `Cosmos__MessagesTtlSeconds`). Azure App Service injects Connection Strings as `CUSTOMCONNSTR_{name}` environment variables (e.g., `CUSTOMCONNSTR_Cosmos`).
 
 ## Local Development
 Prerequisites:
