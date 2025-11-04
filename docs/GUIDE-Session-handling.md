@@ -118,20 +118,116 @@ High priority to address:
 5. Logging hygiene (scrub or avoid logging OTP and secret inputs).
 
 ### 2.6 Mitigation Roadmap
-| Phase | Action |
-|-------|--------|
-| Immediate | Implement hashed OTP (Argon2id + pepper), per-user attempt counter with TTL, HttpOnly+Secure cookie enforcement |
-| Short Term | ✅ **COMPLETED**: Add CSP header (script-src with nonce), Origin check on hub negotiate, constant-time verification, uniform error responses |
-| Mid Term | Add session GUID claim + optional revocation store, implement presence & rate metrics alerts |
-| Future | Move to backplane & ensure consistent rate limiting distributed; integrate security headers audit (e.g., Helmet equivalent for .NET) |
 
-**CSP Implementation Status (Completed)**:
-- ✅ Content-Security-Policy header with nonce-based inline script support
-- ✅ X-Content-Type-Options: nosniff
-- ✅ X-Frame-Options: DENY
-- ✅ Referrer-Policy: strict-origin-when-cross-origin
-- ✅ WebSocket (wss:) and HTTPS connections allowed for SignalR
-- ✅ SecurityHeadersMiddleware applied early in pipeline
+#### 2.6.1 Completed (v0.9.4)
+
+1. ✅ **Hashed OTP Storage** (Issue #26)
+   - Argon2id with pepper + salt implemented
+   - Format: `OtpHash:v2:argon2id:m=65536,t=4,p=4:{saltB64}:{hashB64}`
+   - Pepper: Environment variable `Otp__Pepper` (32+ bytes)
+   - Location: `Argon2OtpHasher.cs`
+
+2. ✅ **OTP Attempt Rate Limiting** (Issue #26)
+   - Redis-backed per-user counter: `otp_attempts:{username}`
+   - Default threshold: 5 attempts per OTP lifetime (300s)
+   - Metrics: `chat.otp.verifications.ratelimited`
+   - Fail-open on Redis errors
+
+3. ✅ **HTTPS-only Enforcement** (Issue #64)
+   - HSTS configured: `max-age=31536000; includeSubDomains; preload`
+   - `app.UseHttpsRedirection()` and `app.UseHsts()` in Startup.cs
+   - Cookie flags: `Secure=true, HttpOnly=true, SameSite=Lax`
+
+4. ✅ **Content Security Policy** (Issue #61)
+   - SecurityHeadersMiddleware with per-request nonce generation
+   - CSP header: `default-src 'self'; script-src 'self' 'nonce-{nonce}'; ...`
+   - WebSocket (wss:) and HTTPS connections allowed for SignalR
+   - Location: `SecurityHeadersMiddleware.cs` (line 46)
+
+5. ✅ **Security Headers Suite**
+   - `X-Content-Type-Options: nosniff`
+   - `X-Frame-Options: DENY`
+   - `Referrer-Policy: strict-origin-when-cross-origin`
+   - Applied early in middleware pipeline (Startup.cs line 484)
+
+6. ✅ **Logging Hygiene**
+   - No OTP codes or sensitive headers logged
+   - Sanitized usernames in structured logs
+
+7. ✅ **MarkRead Rate Limiting** (Issue #25)
+   - Per-user rate limiter for message read operations
+
+8. ✅ **Thread-Safe ChatHub** (Issue #24)
+   - ConcurrentDictionary-based connection tracking
+
+#### 2.6.2 Short Term (High Priority - Open Issues)
+
+1. **Secure RNG for OTP Generation** (Issue #62 - P1)
+   - Replace `new Random()` with `RandomNumberGenerator.GetInt32()`
+   - Prevents predictable OTP sequences
+   - **STATUS**: Needs verification of current implementation
+
+2. **Origin Validation for SignalR Hub** (Issue #63 - P1)
+   - Validate `Origin` header against whitelist on hub negotiate
+   - Prevent unauthorized cross-origin connections
+
+3. **TestAuthHandler Production Guard** (Issue #65 - P1)
+   - Runtime check preventing test auth in production
+   - Fail-fast on misconfiguration
+
+4. **Improve Exception Handling in Argon2OtpHasher** (Issue #27 - P1)
+   - Structured error handling for crypto failures
+   - Proper logging without leaking secrets
+
+5. **Constant-Time Comparison for OTP** (Issue #67 - P2)
+   - Ensure timing-attack resistance in verification
+   - Note: Argon2.Verify() provides this, but verify implementation
+
+6. **Rotate Cookies on Critical Actions**
+   - Generate new `SessionId` cookie after successful OTP
+   - Use secure flags: `Secure=true, SameSite=Strict`
+   - **STATUS**: Not yet implemented
+
+#### 2.6.3 Mid Term (Moderate Priority)
+
+1. **Session Revocation Mechanism** (Not yet implemented)
+   - Add session GUID claim to JWT/cookie
+   - Implement Redis-backed blacklist for revoked sessions
+   - Allow manual session invalidation
+
+2. **Structured Logging for OTP Flow** (Issue #34 - P2)
+   - Replace string interpolation with structured logging
+   - Consistent field names across auth flow
+
+3. **Telemetry Rate Limiting** (Issue #68 - P2)
+   - Add rate limiting to telemetry endpoints
+   - Prevent abuse of diagnostic APIs
+
+4. **Telemetry Cache Size Limits** (Issue #69 - P2)
+   - Implement bounded cache for telemetry data
+   - Prevent memory exhaustion
+
+5. **Presence & Rate Metrics Alerts**
+   - Threshold-based alerts for suspicious patterns
+   - Integration with monitoring systems
+
+#### 2.6.4 Future
+
+1. **Distributed Rate Limiting**
+   - Move to backplane for consistent rate limiting
+   - Handle multi-instance scenarios
+
+2. **Managed Identity Migration** (Issue #71 - P2)
+   - Implement DefaultAzureCredential
+   - Remove connection strings from configuration
+
+3. **Infrastructure as Code** (Issue #84 - P1)
+   - Implement Azure Bicep templates
+   - Automate resource provisioning
+
+4. **CD Pipeline Refactoring** (Issue #85 - P1)
+   - Modernize GitHub Actions workflows
+   - Improve deployment reliability
 
 ### 2.7 Monitoring & Detection
 Log (without PII/OTP):
@@ -182,24 +278,60 @@ Return generic: `{ "error": "invalid_or_expired" }` to avoid oracle distinctions
 
 ---
 
-## 5. Recommended Security Headers (Baseline)
+## 5. Security Headers Implementation
 
-**Implementation Status: ✅ COMPLETED** (via `SecurityHeadersMiddleware`)
+**Status: ✅ IMPLEMENTED** (via `SecurityHeadersMiddleware`, v0.9.4)
 
-| Header | Value (Implemented) | Purpose |
-|--------|---------------------|---------|
-| Content-Security-Policy | `default-src 'self'; script-src 'self' 'nonce-{RANDOM}'; style-src 'self' 'unsafe-inline'; connect-src 'self' wss: https:; img-src 'self' data: https:; font-src 'self' data:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'` | Restrict resource loading, prevent XSS |
-| X-Content-Type-Options | `nosniff` | Prevent MIME type sniffing |
-| X-Frame-Options | `DENY` | Prevent clickjacking (also covered by CSP frame-ancestors) |
-| Referrer-Policy | `strict-origin-when-cross-origin` | Control referrer information leakage |
-| Strict-Transport-Security | *Not yet implemented* | Enforce HTTPS (recommend for production: `max-age=31536000; includeSubDomains; preload`) |
-| Permissions-Policy | *Not yet implemented* | Restrict browser features (optional enhancement) |
+| Header | Implemented Value | Purpose | Status |
+|--------|------------------|---------|--------|
+| Content-Security-Policy | `default-src 'self'; script-src 'self' 'nonce-{RANDOM}'; style-src 'self' 'unsafe-inline'; connect-src 'self' wss: https:; img-src 'self' data: https:; font-src 'self' data:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'` | Restrict resource loading, prevent XSS | ✅ Issue #61 |
+| X-Content-Type-Options | `nosniff` | Prevent MIME type sniffing | ✅ Implemented |
+| X-Frame-Options | `DENY` | Prevent clickjacking | ✅ Implemented |
+| Referrer-Policy | `strict-origin-when-cross-origin` | Control referrer information leakage | ✅ Implemented |
+| Strict-Transport-Security | `max-age=31536000; includeSubDomains; preload` | Enforce HTTPS in production | ✅ Issue #64 |
+| Permissions-Policy | *Optional* | Restrict browser features | ⏳ Not implemented |
 
-**Notes**:
-- Nonce is generated per request using `RandomNumberGenerator.GetBytes(16)`
-- Inline scripts in Login.cshtml use `nonce="@HttpContext.Items["csp-nonce"]"`
-- `style-src 'unsafe-inline'` required for Bootstrap modal inline styles
-- `connect-src wss: https:` allows WebSocket connections for SignalR
+**Implementation Details**:
+- **Location**: `src/Chat.Web/Middleware/SecurityHeadersMiddleware.cs` (line 46)
+- **Registration**: `Startup.cs` line 484 (`app.UseMiddleware<SecurityHeadersMiddleware>()`)
+- **HSTS Configuration**: `Startup.cs` lines 329-334 (conditional on non-development)
+- **CSP Nonce**: Generated per request using `RandomNumberGenerator.GetBytes(16)` → Base64
+- **Razor Integration**: Inline scripts use `nonce="@HttpContext.Items["csp-nonce"]"` (Login.cshtml)
+- **Bootstrap Compatibility**: `style-src 'unsafe-inline'` required for modal inline styles
+- **SignalR Support**: `connect-src wss: https:` allows WebSocket connections
+
+**Header Application**:
+```csharp
+// SecurityHeadersMiddleware.cs
+public async Task InvokeAsync(HttpContext context)
+{
+    var nonce = GenerateNonce();
+    context.Items["csp-nonce"] = nonce;
+    
+    context.Response.OnStarting(() =>
+    {
+        var headers = context.Response.Headers;
+        headers["Content-Security-Policy"] = $"default-src 'self'; script-src 'self' 'nonce-{nonce}'; ...";
+        headers["X-Content-Type-Options"] = "nosniff";
+        headers["X-Frame-Options"] = "DENY";
+        headers["Referrer-Policy"] = "strict-origin-when-cross-origin";
+        return Task.CompletedTask;
+    });
+    
+    await _next(context);
+}
+```
+
+**HSTS Configuration** (Startup.cs):
+```csharp
+if (!env.IsDevelopment())
+{
+    app.UseHsts(); // HSTS middleware
+    options.Hsts.MaxAge = TimeSpan.FromDays(365);
+    options.Hsts.IncludeSubDomains = true;
+    options.Hsts.Preload = true;
+}
+```
 
 ---
 
