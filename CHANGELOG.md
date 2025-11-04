@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Dependencies Update**: Updated frontend dependencies for improved features and security
+  - Bootstrap updated from 5.2.0 to 5.3.8 (latest stable version with bug fixes and enhancements)
+  - @microsoft/signalr pinned to version 9.0.6 (previously "latest", now explicit for reproducible builds)
+
 ## [0.9.4] - 2025-11-04
 
 ### Added
