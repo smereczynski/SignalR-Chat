@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.4] - 2025-11-04
+
 ### Added
 - **Azure Connection Strings Migration**: Migrated connection strings from Application Settings to Connection Strings section (#83)
   - Azure CLI migration script (`scripts/migrate-connection-strings.azcli`) for automated migration
@@ -194,6 +196,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `SeedingTests.cs`: Tests for automatic seeding (no longer applicable)
 - Placeholder `appsettings.json`: Removed to avoid committing secrets (use environment-specific files)
 
+[0.9.4]: https://github.com/smereczynski/SignalR-Chat/compare/v0.9.3...v0.9.4
 [0.9.3]: https://github.com/smereczynski/SignalR-Chat/compare/v0.9.2...v0.9.3
 [0.9.2]: https://github.com/smereczynski/SignalR-Chat/compare/v0.9.0...v0.9.2
 [0.9.0]: https://github.com/smereczynski/SignalR-Chat/releases/tag/v0.9.0
