@@ -1,7 +1,7 @@
 {
   "name": "signalr-chat-assets",
   "private": true,
-  "version": "0.9.3",
+  "version": "0.9.4",
   "scripts": {
     "build:css": "sass src/Chat.Web/wwwroot/css/site.scss src/Chat.Web/wwwroot/css/site.css --no-source-map",
     "build:css:prod": "sass src/Chat.Web/wwwroot/css/site.scss src/Chat.Web/wwwroot/css/site.min.css --style=compressed --no-source-map",
