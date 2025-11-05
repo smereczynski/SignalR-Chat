@@ -50,7 +50,29 @@ jobs:
         Acs__SmsFrom: "+1234567890"
     
     - name: Publish application
-      run: dotnet publish src/Chat.Web/Chat.Web.csproj --configuration Release --output ./publish --no-build
+      run: dotnet publish src/Chat.Web/Chat.Web.csproj --configuration Release --output ./publish
+    
+    - name: Verify frontend assets in publish output
+      run: |
+        echo "Verifying Bootstrap version in published output..."
+        if (Test-Path "./publish/wwwroot/lib/bootstrap/css/bootstrap.min.css") {
+          $content = Get-Content "./publish/wwwroot/lib/bootstrap/css/bootstrap.min.css" -Raw
+          if ($content -match "v5\.(\d+)\.(\d+)") {
+            Write-Host "Bootstrap CSS found: v5.$($matches[1]).$($matches[2])"
+          } else {
+            Write-Host "Bootstrap CSS found but version not detected"
+          }
+        } else {
+          Write-Error "ERROR: Bootstrap CSS not found in publish output!"
+          exit 1
+        }
+        if (Test-Path "./publish/wwwroot/lib/microsoft-signalr/signalr.min.js") {
+          Write-Host "SignalR library found"
+        } else {
+          Write-Error "ERROR: SignalR library not found in publish output!"
+          exit 1
+        }
+      shell: pwsh
     
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
