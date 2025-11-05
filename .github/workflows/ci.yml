@@ -62,7 +62,7 @@ jobs:
     
     - name: Publish build artifacts
       if: success() && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
-      run: dotnet publish src/Chat.Web/Chat.Web.csproj --configuration Release --output ./publish --no-build
+      run: dotnet publish src/Chat.Web/Chat.Web.csproj --configuration Release --output ./publish
     
     - name: Upload build artifacts
       if: success() && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
