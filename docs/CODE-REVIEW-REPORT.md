@@ -63,11 +63,18 @@ code = new Random().Next(100000, 999999).ToString(); // ❌ INSECURE
 code = System.Security.Cryptography.RandomNumberGenerator.GetInt32(100000, 1000000).ToString(); // ✅ SECURE
 ```
 
+**Additional Improvements:**
+- Fixed off-by-one error: Original code `Next(100000, 999999)` generated 100000-999998 (exclusive upper bound)
+- New code generates full 6-digit range: 100000-999999 (900,000 possible codes vs. 899,999)
+- Cryptographically secure random number generation
+- No change to OTP format or length visible to users
+
 **Verification:**
 - ✅ Build successful
 - ✅ All 112 tests passing
 - ✅ CodeQL security scan: 0 alerts
 - ✅ Cryptographically secure RNG now used
+- ✅ Full 6-digit code range now available
 
 **Recommendation:** ✅ No further action required
 
