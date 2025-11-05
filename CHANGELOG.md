@@ -7,10 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.5] - 2025-11-05
+
 ### Changed
 - **Dependencies Update**: Updated frontend dependencies for improved features and security
   - Bootstrap updated from 5.2.0 to 5.3.8 (latest stable version with bug fixes and enhancements)
   - @microsoft/signalr pinned to version 9.0.6 (previously "latest", now explicit for reproducible builds)
+
+### Fixed
+- **CI/CD Workflows**: Fixed deployment pipeline to ensure npm-generated assets are included (#90)
+  - Removed `--no-build` flag from `dotnet publish` in all workflows (CI, CD staging, CD production)
+  - Added verification step to validate Bootstrap and SignalR libraries in publish output
+  - Prevents deployment of incomplete packages missing `wwwroot/lib/*` files
+  - Ensures production deployments include updated frontend dependencies
+
+### Documentation
+- **Security Guides**: Updated security documentation to reflect v0.9.4 implementation status (#88)
+  - Corrected GUIDE-Session-handling.md with completed v0.9.4 features (HSTS, CSP, rate limiting)
+  - Added comprehensive pepper management documentation to GUIDE-OTP-hashing.md
+  - Documented storage options (environment variable, Azure App Service, Azure Key Vault)
+  - Added pepper generation, rotation strategies, and troubleshooting guides
+  - Reorganized mitigation roadmap by priority (completed, P1, P2, future)
 
 ## [0.9.4] - 2025-11-04
 
