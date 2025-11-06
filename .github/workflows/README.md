@@ -1,10 +1,50 @@
 # GitHub Actions CI/CD Pipelines
 
-This repository uses GitHub Actions for continuous integration and deployment to Azure App Service.
+This repository uses GitHub Actions for continuous integration, infrastructure deployment, and application deployment to Azure.
 
 ## 📋 Pipeline Overview
 
-### 1. CI - Build and Test (`ci.yml`)
+### 1. Infrastructure Deployment (`deploy-infrastructure.yml`)
+**Triggers:**
+- Manual workflow dispatch (via GitHub UI or CLI)
+- Supports dev, staging, and production environments
+
+**Purpose:** Deploy and manage Azure infrastructure using Bicep templates
+
+**Jobs:**
+- **Setup:** Configure Azure credentials and validate environment
+- **What-If:** Preview infrastructure changes before deployment
+- **Approval:** Manual approval gate for production deployments
+- **Deploy:** Execute Bicep deployment to Azure
+- **Validate:** Verify deployment (check 2 subnets exist in VNet)
+- **Seed Database:** Automatically seed Cosmos DB with initial data
+
+**Required Environment Variables** (per environment):
+```
+BICEP_BASE_NAME                        # Base name for resources (e.g., signalrchat)
+BICEP_LOCATION                         # Azure region (e.g., polandcentral)
+BICEP_VNET_ADDRESS_PREFIX             # VNet CIDR /26 (e.g., 10.0.0.0/26)
+BICEP_APP_SERVICE_SUBNET_PREFIX       # First subnet /27 (e.g., 10.0.0.0/27)
+BICEP_PRIVATE_ENDPOINTS_SUBNET_PREFIX # Second subnet /27 (e.g., 10.0.0.32/27)
+BICEP_ACS_DATA_LOCATION              # ACS data location (e.g., Europe)
+```
+
+**Deployment Time:**
+- Dev/Staging: ~20-25 minutes
+- Production: ~25-35 minutes (includes multi-region setup)
+
+**Resources Deployed:**
+- Virtual Network with 2 subnets (/27 each)
+- App Service Plan (P0V4 PremiumV4)
+- App Service (Web App)
+- Cosmos DB NoSQL (3 containers: messages, users, rooms)
+- Azure Managed Redis (Balanced_B1/B3/B5)
+- Azure SignalR Service (Standard_S1)
+- Azure Communication Services
+- Log Analytics Workspace + Application Insights
+- Private Endpoints (Cosmos DB, Redis, SignalR)
+
+### 2. CI - Build and Test (`ci.yml`)
 **Triggers:**
 - Push to any branch
 - Pull requests to `main`
@@ -19,7 +59,7 @@ This repository uses GitHub Actions for continuous integration and deployment to
 - ✅ Upload test results
 - ✅ Create and upload build artifacts (only for `main` branch and tags)
 
-### 2. CD Staging (`cd-staging.yml`)
+### 3. CD Staging (`cd-staging.yml`)
 **Triggers:**
 - Push to `main` branch (after PR merge)
 
@@ -31,7 +71,7 @@ This repository uses GitHub Actions for continuous integration and deployment to
 
 **Environment:** `staging` (no required reviewers)
 
-### 3. CD Production (`cd-production.yml`)
+### 4. CD Production (`cd-production.yml`)
 **Triggers:**
 - Push tags matching `v*.*.*` (e.g., `v1.0.0`, `v2.1.3`)
 
@@ -59,20 +99,37 @@ AZURE_SUBSCRIPTION_ID   # Your Azure Subscription ID
 ```
 
 #### Environment Variables:
-**staging environment:**
+
+**Infrastructure deployment (dev/staging/production environments):**
 ```
-AZURE_WEBAPP_NAME       # Azure App Service name for staging (e.g., chat-dev-plc)
+BICEP_BASE_NAME                        # Base name for resources (e.g., signalrchat)
+BICEP_LOCATION                         # Azure region (e.g., polandcentral)
+BICEP_VNET_ADDRESS_PREFIX             # VNet CIDR /26 (e.g., 10.0.0.0/26, 10.1.0.0/26, 10.2.0.0/26)
+BICEP_APP_SERVICE_SUBNET_PREFIX       # First subnet /27 (e.g., 10.0.0.0/27, 10.1.0.0/27, 10.2.0.0/27)
+BICEP_PRIVATE_ENDPOINTS_SUBNET_PREFIX # Second subnet /27 (e.g., 10.0.0.32/27, 10.1.0.32/27, 10.2.0.32/27)
+BICEP_ACS_DATA_LOCATION              # ACS data location (e.g., Europe)
 ```
 
-**production environment:**
+**Application deployment (staging environment):**
 ```
-AZURE_WEBAPP_NAME       # Azure App Service name for production (e.g., chat-prod-plc)
+AZURE_WEBAPP_NAME       # Azure App Service name for staging (e.g., signalrchat-staging-polandcentral)
+```
+
+**Application deployment (production environment):**
+```
+AZURE_WEBAPP_NAME       # Azure App Service name for production (e.g., signalrchat-prod-polandcentral)
 ```
 
 ### Azure Setup
 
 #### 1. Create Federated Credentials in Azure
 In your Service Principal's **Certificates & secrets → Federated credentials**:
+
+**For Development (infrastructure only):**
+- Name: `github-dev`
+- Issuer: `https://token.actions.githubusercontent.com`
+- Subject identifier: `repo:smereczynski/SignalR-Chat:environment:dev`
+- Audience: `api://AzureADTokenExchange`
 
 **For Staging:**
 - Name: `github-staging`
@@ -87,25 +144,72 @@ In your Service Principal's **Certificates & secrets → Federated credentials**
 - Audience: `api://AzureADTokenExchange`
 
 #### 2. Grant Permissions
-Ensure your Service Principal has **Contributor** role on:
-- Staging App Service
-- Production App Service
+Ensure your Service Principal has:
+- **Contributor** role on the Azure subscription (for infrastructure deployment)
+- **Website Contributor** role on App Services (for application deployment)
 
 ## 🌍 GitHub Environments
 
+### dev
+- **Purpose:** Infrastructure deployment only (manual trigger)
+- **Protection rules:** None
+- **Variables:** 6 BICEP_* variables (see Authentication section above)
+
 ### staging
+- **Purpose:** Infrastructure + application deployment
 - **Protection rules:** None (auto-deploy on push to main)
-- **Variables:** `AZURE_WEBAPP_NAME` (staging app service name)
+- **Variables:** 
+  - 6 BICEP_* variables (for infrastructure)
+  - `AZURE_WEBAPP_NAME` (for application deployment)
 
 ### production
+- **Purpose:** Infrastructure + application deployment
 - **Protection rules:**
   - ✅ Required reviewers: 1-2 people
   - ✅ Branch restriction: Only `main` branch tags
-- **Variables:** `AZURE_WEBAPP_NAME` (production app service name)
+- **Variables:**
+  - 6 BICEP_* variables (for infrastructure)
+  - `AZURE_WEBAPP_NAME` (for application deployment)
 
 ## 🚀 Deployment Workflow
 
-### Deploy to Staging
+### Deploy Infrastructure (First Time Setup or Updates)
+
+**Via GitHub UI:**
+1. Go to **Actions** tab
+2. Select **Deploy Infrastructure** workflow
+3. Click **Run workflow**
+4. Select environment: `dev`, `staging`, or `prod`
+5. Click **Run workflow** button
+6. Monitor deployment progress (~20-30 minutes)
+
+**Via GitHub CLI:**
+```bash
+# Deploy to development
+gh workflow run deploy-infrastructure.yml -f environment=dev
+
+# Deploy to staging
+gh workflow run deploy-infrastructure.yml -f environment=staging
+
+# Deploy to production (requires approval)
+gh workflow run deploy-infrastructure.yml -f environment=prod
+```
+
+**Prerequisites:**
+- Configure 6 environment variables in GitHub (see Infrastructure Deployment section above)
+- Azure federated credentials configured for the Service Principal
+- Service Principal has Contributor role on subscription or resource group
+
+**What Happens:**
+1. ✅ Azure login via OIDC
+2. ✅ Bicep what-if analysis (preview changes)
+3. ⏸️ Manual approval (production only)
+4. ✅ Deploy all infrastructure resources
+5. ✅ Validate deployment (check 2 subnets in VNet)
+6. ✅ Seed database with initial data
+7. ✅ Output app URL and connection details
+
+### Deploy Application to Staging
 1. Create a feature branch: `git checkout -b feature/my-feature`
 2. Make changes and commit
 3. Push and create PR to `main`
