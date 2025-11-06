@@ -6,6 +6,26 @@ Real-time multi-room chat on .NET 9 using SignalR (in‑process hub), Azure Cosm
 
 The project intentionally keeps scope tight: fixed public rooms, text messages only, no editing/deleting, and OTP-based authentication.
 
+## Table of Contents
+
+- [Features](#implemented-features-current-state)
+- [Infrastructure](#infrastructure)
+- [Architecture](#architecture-overview)
+- [Configuration](#configuration)
+- [Local Development](#local-development)
+- [OTP Authentication](#otp-authentication-summary)
+- [Messaging Flow](#messaging-flow)
+- [Telemetry & Metrics](#telemetry--metrics)
+- [Notifications](#notifications-unread-messages)
+- [Security Notes](#security-notes)
+- [SignalR Authentication](#signalr-authentication-model)
+- [Health Endpoints](#health)
+- [Localization](#localization)
+- [Testing](#testing)
+- [License](#license)
+
+---
+
 ## Implemented Features (Current State)
 * Multi-room chat (fixed rooms: `general`, `ops`, `random`)
 * Text messages only (immutable after send)
@@ -47,7 +67,75 @@ The project intentionally keeps scope tight: fixed public rooms, text messages o
   * Additional security headers (X-Content-Type-Options, X-Frame-Options, Referrer-Policy)
 
 ## Fixed Room Topology
-Rooms are static; there is no runtime CRUD. Rooms and initial users must be provisioned via the bootstrap script (see `docs/BOOTSTRAP.md` for details).
+Rooms are static; there is no runtime CRUD. Rooms and initial users must be provisioned via the bootstrap process (see `docs/BOOTSTRAP.md` for details).
+
+---
+
+## Infrastructure
+
+The application uses **Azure Bicep** templates for reproducible infrastructure deployments across dev, staging, and production environments. **All deployments are automated through GitHub Actions** - no manual scripts are supported.
+
+### Quick Start
+
+```bash
+# 1. Configure GitHub environment variables (via UI)
+#    Repository → Settings → Secrets and variables → Actions → Variables
+#    Required: BICEP_BASE_NAME, BICEP_LOCATION, BICEP_VNET_ADDRESS_PREFIX,
+#              BICEP_APP_SERVICE_SUBNET_PREFIX, BICEP_PRIVATE_ENDPOINTS_SUBNET_PREFIX,
+#              BICEP_ACS_DATA_LOCATION
+
+# 2. Deploy infrastructure via GitHub Actions
+#    Actions → Deploy Infrastructure → Run workflow → Select environment (dev/staging/prod)
+#    Or via CLI:
+gh workflow run deploy-infrastructure.yml -f environment=dev
+
+# 3. Access the deployed application
+#    URL displayed in workflow run summary:
+#    https://signalrchat-dev-polandcentral.azurewebsites.net
+```
+
+See **[Bootstrap Guide](docs/BOOTSTRAP.md)** for detailed deployment instructions.
+
+### Infrastructure Components
+
+| Resource | Purpose | SKU (dev / staging / prod) |
+|----------|---------|----------------------------|
+| **Virtual Network** | Network isolation with TWO subnets (/27 each) | Standard |
+| **App Service** | Web application hosting | P0V4 / P0V4 / P0V4+AZ |
+| **Cosmos DB** | NoSQL database (messages, users, rooms) | Serverless+AZ / Serverless+AZ / Standard+Geo+AZ |
+| **Azure Managed Redis** | OTP storage, session cache, presence | Balanced_B1 / Balanced_B3 / Balanced_B5 |
+| **SignalR Service** | Real-time communication hub | Standard_S1×1 / Standard_S1×1 / Standard_S1×5 |
+| **Communication Services** | Email and SMS capabilities | Global resource (Europe data location) |
+| **Application Insights** | APM and telemetry | Workspace-based |
+| **Log Analytics** | Centralized logging | 30d / 90d / 365d retention |
+| **Private Endpoints** | Secure service connections | Cosmos DB, Redis, SignalR |
+
+### Network Architecture
+
+Each environment has a Virtual Network (/26 CIDR) with **exactly TWO dedicated subnets** (/27 each):
+
+1. **App Service Subnet** (`10.x.0.0/27`): Delegated to `Microsoft.Web/serverFarms` for VNet integration
+2. **Private Endpoints Subnet** (`10.x.0.32/27`): For secure Azure service connections (Cosmos DB, Redis, SignalR)
+
+**Security**:
+- Network Security Groups (NSGs) on both subnets
+- HTTPS-only App Service (TLS 1.2 minimum)
+- Private endpoints for all data services
+- Comprehensive security headers (CSP, HSTS, X-Frame-Options)
+
+### Documentation
+
+- **[Infrastructure README](infra/bicep/README.md)**: Complete Bicep documentation with architecture diagrams, deployment steps, parameter descriptions, troubleshooting guide
+- **[Bootstrap Guide](docs/BOOTSTRAP.md)**: Step-by-step guide for infrastructure provisioning, data seeding, and GitHub Actions integration
+- **[Architecture](ARCHITECTURE.md)**: System architecture, infrastructure components, data schemas, security notes
+
+### Cost Estimates
+
+- **Development**: ~$50-100/month (Basic/Free SKUs, single region)
+- **Staging**: ~$200-400/month (Standard SKUs, 2 instances)
+- **Production**: ~$800-1500/month (Premium SKUs, 3 instances with AZ, geo-replication)
+
+---
 
 ## Architecture Overview
 **Runtime**: ASP.NET Core 9 (Razor Pages + Controllers + SignalR Hub)  

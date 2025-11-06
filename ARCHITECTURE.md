@@ -1,12 +1,199 @@
 # Architecture
 
-This document describes the high-level architecture of SignalR-Chat with focus on the OTP hashing implementation.
+This document describes the high-level architecture of SignalR-Chat with focus on infrastructure provisioning, OTP hashing implementation, and runtime components.
+
+## Table of Contents
+
+- [Infrastructure as Code (Bicep)](#infrastructure-as-code-bicep)
+- [Diagrams](#diagrams)
+- [Runtime Overview](#runtime-overview)
+- [OTP Authentication and Hashing](#otp-authentication-and-hashing)
+- [Observability](#observability)
+- [Cosmos Messages Retention (TTL)](#cosmos-messages-retention-ttl)
+- [Localization](#localization)
+- [Current Overview](#current-overview)
+- [Key Components](#key-components)
+- [SignalR Role](#signalr-role)
+- [Redis Role](#redis-role)
+- [Runtime Flows](#runtime-flows)
+- [Build & Front-End Delivery](#build--front-end-delivery)
+- [Observability & Telemetry](#observability--telemetry)
+- [Scaling Considerations](#scaling-considerations)
+- [Security Notes](#security-notes)
+- [Future Roadmap (Prioritized)](#future-roadmap-prioritized)
+- [Glossary](#glossary)
+- [Data Schemas](#data-schemas)
+
+---
+
+## Infrastructure as Code (Bicep)
+
+The application uses **Azure Bicep** templates for reproducible infrastructure deployments across dev, staging, and production environments. All deployments are automated through **GitHub Actions** with environment-specific configurations.
+
+### Infrastructure Components
+
+| Component | Purpose | Configuration |
+|-----------|---------|---------------|
+| **Virtual Network** | Network isolation with TWO dedicated subnets | /26 CIDR per environment |
+| **App Service Subnet** | Delegated to `Microsoft.Web/serverFarms` for VNet integration | /27 CIDR (first subnet) |
+| **Private Endpoints Subnet** | Secure Azure service connections with private endpoints | /27 CIDR (second subnet) |
+| **Network Security Groups** | Security rules for both subnets | HTTPS (443), HTTP (80), internal traffic |
+| **Log Analytics Workspace** | Centralized logging and monitoring | 30/90/365 day retention |
+| **Application Insights** | Application performance monitoring | Workspace-based (not classic) |
+| **Cosmos DB** | NoSQL database with 3 containers | Zone-redundant for all environments, geo-replication for prod |
+| **Azure Managed Redis** | OTP storage, session cache, presence tracking | Balanced_B1 (dev), Balanced_B3 (staging/prod) |
+| **Azure SignalR Service** | Real-time communication hub | Standard_S1 for all environments (1/1/5 units) |
+| **Azure Communication Services** | Email and SMS capabilities | Global resource, Europe data location |
+| **App Service Plan** | Web application hosting | P0V4 PremiumV4 for all environments |
+| **App Service (Web App)** | SignalR Chat application | VNet integrated, HTTPS-only, TLS 1.2, identity disabled |
+| **Private Endpoints** | Secure connections to Cosmos DB, Redis, SignalR | Deployed in private endpoints subnet |
+
+### Network Architecture (Critical Requirement)
+
+Each environment **must** have a Virtual Network with **exactly TWO subnets**:
+
+1. **App Service Subnet** (First subnet):
+   - Purpose: VNet integration for App Service
+   - Delegation: `Microsoft.Web/serverFarms`
+   - NSG Rules: Allow HTTPS (443), HTTP (80) inbound
+   - Connected to: App Service via VNet integration
+   - Naming: IP-based format (e.g., `10-0-0-0--27` for 10.0.0.0/27)
+
+2. **Private Endpoints Subnet** (Second subnet):
+   - Purpose: Private Endpoint connections to Cosmos DB, Redis, SignalR
+   - NSG Rules: Restrictive rules for internal traffic only
+   - Private Endpoints: Cosmos DB (Sql), Redis (redisEnterprise), SignalR (signalr)
+   - Naming: IP-based format (e.g., `10-0-0-32--27` for 10.0.0.32/27)
+
+### Deployment Strategy
+
+**GitHub Actions Only** (`.github/workflows/deploy-infrastructure.yml`):
+- All deployments are triggered via GitHub Actions workflow
+- Environment selection: dev, staging, prod (manual dispatch)
+- Approval gates required for production deployments
+- Automatic what-if preview before deployment
+- Post-deployment validation (2 subnets check)
+- Database seeding after successful deployment
+- Optional teardown action for cleanup
+
+**Environment Variables** (GitHub repository secrets/variables):
+All 6 parameters are configured per environment as GitHub variables:
+- `BICEP_BASE_NAME`: Base name for resources (e.g., `signalrchat`)
+- `BICEP_LOCATION`: Azure region (e.g., `polandcentral`)
+- `BICEP_VNET_ADDRESS_PREFIX`: VNet CIDR (e.g., `10.0.0.0/26`)
+- `BICEP_APP_SERVICE_SUBNET_PREFIX`: First subnet CIDR (e.g., `10.0.0.0/27`)
+- `BICEP_PRIVATE_ENDPOINTS_SUBNET_PREFIX`: Second subnet CIDR (e.g., `10.0.0.32/27`)
+- `BICEP_ACS_DATA_LOCATION`: ACS data location (e.g., `Europe`)
+
+**Resource Naming Convention** (from issue #84):
+```
+Resource Group:     rg-{codename}-{env}-{location}
+App Service Plan:   serverfarm-{codename}-{env}-{location}
+App Service:        {codename}-{env}-{location}
+Cosmos DB:          cdb-{codename}-{env}-{location}
+Redis:              redis-{codename}-{env}-{location}
+SignalR:            sigr-{codename}-{env}-{location}
+ACS:                acs-{codename}-{env}
+App Insights:       ai-{codename}-{env}-{location}
+Log Analytics:      law-{codename}-{env}-{location}
+Virtual Network:    vnet-{codename}-{env}-{location}
+Private Endpoint:   pe-{resourcename}
+PE Network Interface: nic-pe-{resourcename}
+```
+
+Examples:
+- Virtual Network: `vnet-signalrchat-dev-polandcentral`
+- App Service: `signalrchat-prod-polandcentral`
+- Cosmos DB: `cdb-signalrchat-staging-polandcentral`
+- Private Endpoint: `pe-redis-signalrchat-dev-polandcentral`
+
+### Environment SKU Matrix
+
+| Resource | Dev | Staging | Production |
+|----------|-----|---------|------------|
+| App Service Plan | P0V4 PremiumV4 (1 instance, no AZ) | P0V4 PremiumV4 (2 instances, AZ) | P0V4 PremiumV4 (3 instances, AZ) |
+| Cosmos DB | Zone-redundant, single region | Zone-redundant, single region | Zone-redundant, multi-region (polandcentral + germanywestcentral) |
+| Redis Cache | Balanced_B1 (Azure Managed Redis) | Balanced_B3 (Azure Managed Redis) | Balanced_B5 (Azure Managed Redis) |
+| SignalR Service | Standard_S1 (1 unit) | Standard_S1 (1 unit) | Standard_S1 (5 units) |
+| Log Analytics | 30-day retention, 1 GB cap | 90-day retention, 5 GB cap | 365-day retention, 10 GB cap |
+| Private Endpoints | Enabled for all services | Enabled for all services | Enabled for all services |
+
+### Cost Estimates
+- **Development**: ~$150-250/month (P0V4 + Standard SignalR + Managed Redis)
+- **Staging**: ~$350-500/month (2 instances + zone redundancy)
+- **Production**: ~$1200-1800/month (3 instances + multi-region + 5 SignalR units)
+
+### Deployment Documentation
+
+For detailed deployment instructions, see:
+- **[Infrastructure README](infra/bicep/README.md)**: Complete Bicep documentation with architecture diagrams, deployment steps, and troubleshooting
+- **[Bootstrap Guide](docs/BOOTSTRAP.md)**: Step-by-step guide for infrastructure provisioning and data seeding
+
+---
 
 ## Diagrams
 
 The following Mermaid diagrams visualize the system components and key runtime flows.
 
-### System architecture
+### Infrastructure Architecture (Azure)
+
+```mermaid
+flowchart TB
+  subgraph Internet
+    U[Users/Browsers]
+  end
+  
+  subgraph Azure["Azure Subscription"]
+    subgraph RG["Resource Group (rg-signalrchat-{env})"]
+      subgraph VNet["Virtual Network (10.X.0.0/16)"]
+        subgraph AppSubnet["App Service Subnet (10.X.1.0/24)<br/>Delegated: Microsoft.Web/serverFarms"]
+          AS["App Service<br/>(Chat.Web)<br/>VNet Integrated"]
+        end
+        
+        subgraph PESubnet["Private Endpoints Subnet (10.X.2.0/24)"]
+          PE[Private Endpoints<br/>(Future)]
+        end
+      end
+      
+      NSG1["NSG: appservice-subnet"]
+      NSG2["NSG: privateendpoints-subnet"]
+      
+      ASignalR["Azure SignalR Service<br/>(Free F1/Standard S1)"]
+      Redis["Azure Cache for Redis<br/>(Basic/Standard/Premium)"]
+      Cosmos["Cosmos DB (NoSQL)<br/>(Serverless/Standard)<br/>messages | users | rooms"]
+      ACS["Azure Communication Services<br/>(Email/SMS)"]
+      
+      LAW["Log Analytics Workspace<br/>(30/90/365d retention)"]
+      AI["Application Insights<br/>(Workspace-based)"]
+    end
+  end
+  
+  U -->|HTTPS| AS
+  AS -.->|VNet Integration| AppSubnet
+  AS -->|Real-time| ASignalR
+  AS -->|OTP, Cache, Presence| Redis
+  AS -->|Data| Cosmos
+  AS -->|Notifications| ACS
+  AS -->|Telemetry| AI
+  AI -->|Logs/Metrics| LAW
+  
+  NSG1 -.->|Secures| AppSubnet
+  NSG2 -.->|Secures| PESubnet
+  
+  style VNet fill:#e1f5ff
+  style AppSubnet fill:#ffe1e1
+  style PESubnet fill:#fff4e1
+  style RG fill:#f0f0f0
+```
+
+Notes:
+- Each environment (dev/staging/prod) has its own Resource Group with isolated VNet
+- VNet has **exactly TWO subnets** (critical requirement for issue #84)
+- App Service is VNet integrated via delegated subnet
+- Private Endpoints subnet reserved for future secure connections
+- All resources follow naming convention: `{baseName}-{env}-{type}[-{suffix}]`
+
+### System Architecture (Runtime)
 
 ```mermaid
 flowchart LR
@@ -38,7 +225,7 @@ flowchart LR
 
 Notes:
 - Azure SignalR is used in non-test modes; in Testing:InMemory the app uses in-process SignalR only.
-- Redis is used exclusively for OTP storage; messages/users/rooms are stored in Cosmos DB via repositories.
+- Redis is used for OTP storage, rate limiting counters, and presence tracking; messages/users/rooms are stored in Cosmos DB.
 - Observability exporters are selected by configuration: Azure Monitor > OTLP > Console.
 
 ### OTP authentication flow
