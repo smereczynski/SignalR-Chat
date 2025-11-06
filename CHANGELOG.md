@@ -7,6 +7,104 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Infrastructure as Code Implementation**: Complete Azure Bicep templates for automated infrastructure deployment (#84)
+  - ⚠️ **WARNING**: Bicep templates and GitHub Actions workflow **NOT TESTED YET** - pending validation in dev/staging/prod environments
+  - **Deployment Strategy**: GitHub Actions-only workflow (no manual scripts) with environment variables
+    - Manual workflow_dispatch trigger with environment selection (dev/staging/prod)
+    - 6 required environment variables per environment (BICEP_BASE_NAME, BICEP_LOCATION, BICEP_VNET_ADDRESS_PREFIX, BICEP_APP_SERVICE_SUBNET_PREFIX, BICEP_PRIVATE_ENDPOINTS_SUBNET_PREFIX, BICEP_ACS_DATA_LOCATION)
+    - No parameter files used in deployment (samples provided for reference only)
+    - What-if analysis before deployment for change preview
+    - Manual approval gate for production deployments
+    - Automatic database seeding after infrastructure deployment
+    - Post-deployment validation (verifies 2 subnets in VNet)
+    - Optional teardown action for environment cleanup
+  - **Bicep Modules Created**:
+    - `networking.bicep`: VNet with 2 subnets (/27 each) + NSGs for App Service integration and Private Endpoints
+    - `monitoring.bicep`: Log Analytics Workspace (30d/90d/365d retention) + Application Insights (workspace-based)
+    - `cosmos-db.bicep`: Cosmos DB NoSQL with 3 containers (messages, users, rooms), serverless for dev/staging, geo-replication for prod, private endpoint
+    - `redis.bicep`: **Azure Managed Redis** (Microsoft.Cache/redisEnterprise, not Azure Cache for Redis), Balanced_B1/B3/B5 SKUs, port 10000, private endpoint
+    - `signalr.bicep`: Azure SignalR Service **always Standard_S1** (no Free tier for any environment), private endpoint
+    - `communication.bicep`: Azure Communication Services with Europe data location
+    - `app-service.bicep`: App Service Plan (P0V4 PremiumV4 for all environments) + Web App with VNet integration, all connection strings configured
+    - `main.bicep`: Main orchestration template with symbolic references, no tags, no default parameter values
+  - **Networking Architecture**:
+    - VNet with /26 CIDR block
+    - TWO dedicated /27 subnets per environment:
+      - Subnet 1 (10.x.0.0/27): App Service VNet integration
+      - Subnet 2 (10.x.0.32/27): Private Endpoints for data services
+    - IP-based subnet naming (e.g., `10-0-0-0--27`, `10-0-0-32--27`)
+    - Private endpoints for Cosmos DB (Sql), Redis (redisEnterprise), SignalR (signalr)
+    - Network Security Groups on both subnets
+  - **Resource Naming Convention** (issue #84):
+    - Resource Group: `rg-{codename}-{env}-{location}`
+    - App Service Plan: `serverfarm-{codename}-{env}-{location}`
+    - App Service: `{codename}-{env}-{location}`
+    - Cosmos DB: `cdb-{codename}-{env}-{location}`
+    - Redis: `redis-{codename}-{env}-{location}`
+    - SignalR: `sigr-{codename}-{env}-{location}`
+    - Azure Communication Services: `acs-{codename}-{env}`
+    - Application Insights: `ai-{codename}-{env}-{location}`
+    - Log Analytics: `law-{codename}-{env}-{location}`
+    - Private Endpoint: `pe-{resourcename}`
+    - Private Endpoint NIC: `nic-pe-{resourcename}`
+  - **SKU Configuration**:
+    - App Service: P0V4 PremiumV4 for all environments (zone redundancy disabled for dev)
+    - Azure Managed Redis: Balanced_B1 (dev), Balanced_B3 (staging), Balanced_B5 (prod)
+    - SignalR Service: Standard_S1 with 1/1/5 units (dev/staging/prod) - **NO Free tier**
+    - Cosmos DB: Serverless with zone redundancy for dev/staging, Standard with geo-replication for prod
+  - **Configuration Management**:
+    - All tags removed from Bicep templates
+    - All default parameter values removed (environment variables only)
+    - infra/bicep/main.json added to .gitignore
+  - **GitHub Actions Workflow** (`.github/workflows/deploy-infrastructure.yml`):
+    - Azure OIDC authentication (federated credentials)
+    - Environment-based deployment (dev/staging/prod)
+    - Deployment time: ~20-35 minutes
+    - Automatic resource group creation
+    - Connection strings output for application configuration
+  - **Documentation Updates**:
+    - ARCHITECTURE.md: Infrastructure section updated with GitHub Actions deployment strategy
+    - BOOTSTRAP.md: Phase 1 replaced with GitHub Actions workflow instructions
+    - README.md: Quick start updated with GitHub Actions workflow
+    - .github/workflows/README.md: Infrastructure deployment workflow documentation
+    - infra/bicep/README.md: Comprehensive Bicep templates documentation
+
+### Changed
+- **Azure Region**: Default location changed from `eastus` to `polandcentral` for all environments
+- **Azure Communication Services**: Data location changed from `United States` to `Europe`
+- **Redis Service**: Migrated from Azure Cache for Redis to **Azure Managed Redis** (Microsoft.Cache/redisEnterprise)
+  - Connection port changed from 6379 to 10000
+  - Two-tier resource structure (redisEnterprise + child databases)
+  - Enterprise-grade clustering and encryption
+- **SignalR Service**: Always uses Standard_S1 tier (removed Free_F1 option for dev environment)
+- **App Service**: Standardized on P0V4 PremiumV4 for all environments (removed B1 for dev)
+- **Deployment Method**: Shell scripts removed, **GitHub Actions-only** deployment strategy
+
+### Removed
+- **Deployment Scripts**: Deleted all manual deployment shell scripts (deploy.sh, validate.sh, teardown.sh)
+- **Configuration**: Removed tags from all Bicep templates
+- **Configuration**: Removed default parameter values from main.bicep
+- **Legacy Scripts**: Removed `scripts/migrate-connection-strings.azcli` (superseded by Bicep)
+
+### Testing Status
+- ⚠️ **PENDING**: Infrastructure deployment to dev environment
+- ⚠️ **PENDING**: Infrastructure deployment to staging environment
+- ⚠️ **PENDING**: Infrastructure deployment to production environment
+- ⚠️ **PENDING**: VNet validation (2 subnets verification)
+- ⚠️ **PENDING**: Private endpoints connectivity testing
+- ⚠️ **PENDING**: Database seeding verification
+- ⚠️ **PENDING**: Application startup and connection string validation
+
+### Migration Notes
+- **Before Deployment**: Configure 6 environment variables in GitHub repository settings for each environment
+- **Service Principal Setup**: Configure Azure federated credentials for dev/staging/prod environments
+- **Breaking Change**: This release requires complete infrastructure re-deployment (not an update to existing resources)
+- **Cost Impact**: 
+  - Dev: ~$150-250/month (P0V4 + Balanced_B1 + Serverless Cosmos)
+  - Staging: ~$400-600/month (P0V4 + Balanced_B3 + Serverless Cosmos)
+  - Production: ~$1200-1800/month (P0V4 + Balanced_B5 + Standard Cosmos + geo-replication)
+
 ## [0.9.5] - 2025-11-05
 
 ### Changed
