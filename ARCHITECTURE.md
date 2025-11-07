@@ -34,33 +34,57 @@ The application uses **Azure Bicep** templates for reproducible infrastructure d
 
 | Component | Purpose | Configuration |
 |-----------|---------|---------------|
-| **Virtual Network** | Network isolation with TWO dedicated subnets | /26 CIDR per environment |
+| **Resource Groups** | Separate infrastructure isolation | Networking RG + Application RG per environment |
+| **Virtual Network** | Network isolation with TWO dedicated subnets | /26 CIDR per environment (deployed in networking RG) |
+| **Network Security Groups** | Security rules per subnet | Named `nsg-{subnetName}` (deployed in networking RG) |
+| **Route Tables** | Traffic routing per subnet | Named `rt-{vnetName}-{type}` (deployed in networking RG) |
 | **App Service Subnet** | Delegated to `Microsoft.Web/serverFarms` for VNet integration | /27 CIDR (first subnet) |
 | **Private Endpoints Subnet** | Secure Azure service connections with private endpoints | /27 CIDR (second subnet) |
-| **Network Security Groups** | Security rules for both subnets | HTTPS (443), HTTP (80), internal traffic |
-| **Log Analytics Workspace** | Centralized logging and monitoring | 30/90/365 day retention |
-| **Application Insights** | Application performance monitoring | Workspace-based (not classic) |
-| **Cosmos DB** | NoSQL database with 3 containers | Zone-redundant for all environments, geo-replication for prod |
-| **Azure Managed Redis** | OTP storage, session cache, presence tracking | Balanced_B1 (dev), Balanced_B3 (staging/prod) |
-| **Azure SignalR Service** | Real-time communication hub | Standard_S1 for all environments (1/1/5 units) |
-| **Azure Communication Services** | Email and SMS capabilities | Global resource, Europe data location |
-| **App Service Plan** | Web application hosting | P0V4 PremiumV4 for all environments |
-| **App Service (Web App)** | SignalR Chat application | VNet integrated, HTTPS-only, TLS 1.2, identity disabled |
-| **Private Endpoints** | Secure connections to Cosmos DB, Redis, SignalR | Deployed in private endpoints subnet |
+| **Log Analytics Workspace** | Centralized logging and monitoring | 30/90/365 day retention (deployed in application RG) |
+| **Application Insights** | Application performance monitoring | Workspace-based (not classic, deployed in application RG) |
+| **Cosmos DB** | NoSQL database with 3 containers | Zone-redundant for all environments, geo-replication for prod (deployed in application RG) |
+| **Azure Managed Redis** | OTP storage, session cache, presence tracking | Balanced_B1 (dev), Balanced_B3 (staging/prod) (deployed in application RG) |
+| **Azure SignalR Service** | Real-time communication hub | Standard_S1 for all environments (1/1/5 units) (deployed in application RG) |
+| **Azure Communication Services** | Email and SMS capabilities | Global resource, Europe data location (deployed in application RG) |
+| **App Service Plan** | Web application hosting | P0V4 PremiumV4 for all environments (deployed in application RG) |
+| **App Service (Web App)** | SignalR Chat application | VNet integrated, HTTPS-only, TLS 1.2, identity disabled (deployed in application RG) |
+| **Private Endpoints** | Secure connections to Cosmos DB, Redis, SignalR | Deployed in private endpoints subnet (cross-RG references) |
 
 ### Network Architecture (Critical Requirement)
 
-Each environment **must** have a Virtual Network with **exactly TWO subnets**:
+Each environment has **TWO separate resource groups**:
+
+**1. Networking Resource Group** (`rg-vnet-{baseName}-{environment}-{shortLocation}`):
+- Virtual Network (/26 CIDR)
+- Network Security Groups (NSGs): `nsg-{subnetName}` format
+- Route Tables: `rt-{vnetName}-appservice`, `rt-{vnetName}-pe`
+- TWO subnets (/27 each):
+  - **App Service Subnet** (e.g., `10.0.0.0/27`): VNet integration, route table with Internet route
+  - **Private Endpoints Subnet** (e.g., `10.0.0.32/27`): Private endpoint connections, empty route table
+
+**2. Application Resource Group** (`rg-{baseName}-{environment}-{shortLocation}`):
+- App Service Plan & Web App (references VNet from networking RG)
+- Cosmos DB + Private Endpoint (in networking RG subnet)
+- Redis + Private Endpoint (in networking RG subnet)
+- SignalR + Private Endpoint (in networking RG subnet)
+- Azure Communication Services
+- Monitoring (Log Analytics + Application Insights)
+
+**Subnet Details:**
 
 1. **App Service Subnet** (First subnet):
    - Purpose: VNet integration for App Service
    - Delegation: `Microsoft.Web/serverFarms`
+   - NSG: `nsg-{subnetName}` (e.g., `nsg-10-0-0-0--27`)
+   - Route Table: `rt-{vnetName}-appservice` with default Internet route (0.0.0.0/0 → Internet)
    - NSG Rules: Allow HTTPS (443), HTTP (80) inbound
    - Connected to: App Service via VNet integration
    - Naming: IP-based format (e.g., `10-0-0-0--27` for 10.0.0.0/27)
 
 2. **Private Endpoints Subnet** (Second subnet):
    - Purpose: Private Endpoint connections to Cosmos DB, Redis, SignalR
+   - NSG: `nsg-{subnetName}` (e.g., `nsg-10-0-0-32--27`)
+   - Route Table: `rt-{vnetName}-pe` (no routes configured)
    - NSG Rules: Restrictive rules for internal traffic only
    - Private Endpoints: Cosmos DB (Sql), Redis (redisEnterprise), SignalR (signalr)
    - Naming: IP-based format (e.g., `10-0-0-32--27` for 10.0.0.32/27)
@@ -77,35 +101,43 @@ Each environment **must** have a Virtual Network with **exactly TWO subnets**:
 - Optional teardown action for cleanup
 
 **Environment Variables** (GitHub repository secrets/variables):
-All 6 parameters are configured per environment as GitHub variables:
+All 7 parameters are configured per environment as GitHub variables:
 - `BICEP_BASE_NAME`: Base name for resources (e.g., `signalrchat`)
 - `BICEP_LOCATION`: Azure region (e.g., `polandcentral`)
+- `BICEP_SHORT_LOCATION`: Short location code (e.g., `plc` for polandcentral)
 - `BICEP_VNET_ADDRESS_PREFIX`: VNet CIDR (e.g., `10.0.0.0/26`)
 - `BICEP_APP_SERVICE_SUBNET_PREFIX`: First subnet CIDR (e.g., `10.0.0.0/27`)
 - `BICEP_PRIVATE_ENDPOINTS_SUBNET_PREFIX`: Second subnet CIDR (e.g., `10.0.0.32/27`)
 - `BICEP_ACS_DATA_LOCATION`: ACS data location (e.g., `Europe`)
 
-**Resource Naming Convention** (from issue #84):
+**Resource Naming Convention** (from issue #84 + shortLocation):
 ```
-Resource Group:     rg-{codename}-{env}-{location}
-App Service Plan:   serverfarm-{codename}-{env}-{location}
-App Service:        {codename}-{env}-{location}
-Cosmos DB:          cdb-{codename}-{env}-{location}
-Redis:              redis-{codename}-{env}-{location}
-SignalR:            sigr-{codename}-{env}-{location}
-ACS:                acs-{codename}-{env}
-App Insights:       ai-{codename}-{env}-{location}
-Log Analytics:      law-{codename}-{env}-{location}
-Virtual Network:    vnet-{codename}-{env}-{location}
-Private Endpoint:   pe-{resourcename}
-PE Network Interface: nic-pe-{resourcename}
+Networking Resource Group:  rg-vnet-{codename}-{env}-{shortloc}
+Application Resource Group: rg-{codename}-{env}-{shortloc}
+App Service Plan:            serverfarm-{codename}-{env}-{shortloc}
+App Service:                 {codename}-{env}-{shortloc}
+Cosmos DB:                   cdb-{codename}-{env}-{shortloc}
+Redis:                       redis-{codename}-{env}-{shortloc}
+SignalR:                     sigr-{codename}-{env}-{shortloc}
+ACS:                         acs-{codename}-{env}
+App Insights:                ai-{codename}-{env}-{shortloc}
+Log Analytics:               law-{codename}-{env}-{shortloc}
+Virtual Network:             vnet-{codename}-{env}-{shortloc}
+Network Security Group:      nsg-{subnetname}
+Route Table:                 rt-{vnetname}-{type}
+Private Endpoint:            pe-{resourcename}
+PE Network Interface:        nic-pe-{resourcename}
 ```
 
 Examples:
-- Virtual Network: `vnet-signalrchat-dev-polandcentral`
-- App Service: `signalrchat-prod-polandcentral`
-- Cosmos DB: `cdb-signalrchat-staging-polandcentral`
-- Private Endpoint: `pe-redis-signalrchat-dev-polandcentral`
+- Networking RG: `rg-vnet-signalrchat-dev-plc`
+- Application RG: `rg-signalrchat-dev-plc`
+- Virtual Network: `vnet-signalrchat-dev-plc`
+- NSG (App Service): `nsg-10-0-0-0--27`
+- Route Table (App Service): `rt-vnet-signalrchat-dev-plc-appservice`
+- App Service: `signalrchat-prod-plc`
+- Cosmos DB: `cdb-signalrchat-staging-plc`
+- Private Endpoint: `pe-redis-signalrchat-dev-plc`
 
 ### Environment SKU Matrix
 
@@ -144,54 +176,64 @@ flowchart TB
   end
   
   subgraph Azure["Azure Subscription"]
-    subgraph RG["Resource Group (rg-signalrchat-{env})"]
-      subgraph VNet["Virtual Network (10.X.0.0/16)"]
-        subgraph AppSubnet["App Service Subnet (10.X.1.0/24)<br/>Delegated: Microsoft.Web/serverFarms"]
-          AS["App Service<br/>(Chat.Web)<br/>VNet Integrated"]
+    subgraph NetRG["Networking Resource Group<br/>(rg-vnet-{baseName}-{env}-{shortLoc})"]
+      subgraph VNet["Virtual Network (/26 CIDR)"]
+        subgraph AppSubnet["App Service Subnet (/27)<br/>nsg-{subnetName}<br/>rt-{vnetName}-appservice"]
+          direction LR
         end
         
-        subgraph PESubnet["Private Endpoints Subnet (10.X.2.0/24)"]
-          PE[Private Endpoints<br/>(Future)]
+        subgraph PESubnet["Private Endpoints Subnet (/27)<br/>nsg-{subnetName}<br/>rt-{vnetName}-pe"]
+          PE_Cosmos["pe-cdb-{name}"]
+          PE_Redis["pe-redis-{name}"]
+          PE_SignalR["pe-sigr-{name}"]
         end
       end
-      
-      NSG1["NSG: appservice-subnet"]
-      NSG2["NSG: privateendpoints-subnet"]
-      
+    end
+    
+    subgraph AppRG["Application Resource Group<br/>(rg-{baseName}-{env}-{shortLoc})"]
+      AS["App Service<br/>(Chat.Web)<br/>VNet Integrated"]
       ASignalR["Azure SignalR Service<br/>(Standard S1)"]
       Redis["Azure Managed Redis<br/>(Balanced B1/B3/B5)"]
-      Cosmos["Cosmos DB (NoSQL)<br/>(Serverless/Standard)<br/>messages | users | rooms"]
-      ACS["Azure Communication Services<br/>(Email/SMS)"]
+      Cosmos["Cosmos DB (NoSQL)<br/>messages | users | rooms"]
+      ACS["Azure Communication Services"]
       
-      LAW["Log Analytics Workspace<br/>(30/90/365d retention)"]
-      AI["Application Insights<br/>(Workspace-based)"]
+      LAW["Log Analytics Workspace"]
+      AI["Application Insights"]
     end
   end
   
   U -->|HTTPS| AS
   AS -.->|VNet Integration| AppSubnet
-  AS -->|Real-time| ASignalR
-  AS -->|OTP, Cache, Presence| Redis
-  AS -->|Data| Cosmos
+  AS -->|Private Endpoint| PE_SignalR
+  AS -->|Private Endpoint| PE_Redis
+  AS -->|Private Endpoint| PE_Cosmos
+  
+  PE_SignalR -.-> ASignalR
+  PE_Redis -.-> Redis
+  PE_Cosmos -.-> Cosmos
+  
   AS -->|Notifications| ACS
   AS -->|Telemetry| AI
   AI -->|Logs/Metrics| LAW
   
-  NSG1 -.->|Secures| AppSubnet
-  NSG2 -.->|Secures| PESubnet
-  
   style VNet fill:#e1f5ff
   style AppSubnet fill:#ffe1e1
   style PESubnet fill:#fff4e1
-  style RG fill:#f0f0f0
+  style NetRG fill:#f0f0f0,stroke:#333,stroke-width:2px
+  style AppRG fill:#f0f0f0,stroke:#333,stroke-width:2px
 ```
 
 Notes:
-- Each environment (dev/staging/prod) has its own Resource Group with isolated VNet
-- VNet has **exactly TWO subnets** (critical requirement for issue #84)
-- App Service is VNet integrated via delegated subnet
-- Private Endpoints subnet reserved for future secure connections
-- All resources follow naming convention: `{baseName}-{env}-{type}[-{suffix}]`
+- Each environment has **two separate resource groups** (networking + application)
+- Networking RG contains VNet, NSGs, and Route Tables
+- Application RG contains all application services
+- VNet has **exactly TWO subnets** (/27 each within /26 VNet)
+- App Service subnet has route table with Internet route (0.0.0.0/0 → Internet)
+- Private Endpoints subnet has route table with no routes
+- NSGs named `nsg-{subnetName}` (IP-based subnet naming)
+- Route Tables named `rt-{vnetName}-{type}`
+- Cross-resource-group references enable VNet integration and private endpoints
+- All resources follow naming convention: `{type}-{baseName}-{env}-{shortLoc}`
 
 ### System Architecture (Runtime)
 

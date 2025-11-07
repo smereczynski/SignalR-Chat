@@ -87,11 +87,11 @@ The application uses **Azure Bicep** templates for reproducible infrastructure d
 # 2. Deploy infrastructure via GitHub Actions
 #    Actions → Deploy Infrastructure → Run workflow → Select environment (dev/staging/prod)
 #    Or via CLI:
-gh workflow run deploy-infrastructure.yml -f environment=dev
+gh workflow run deploy-infrastructure.yml -f environment=dev -f action=deploy
 
 # 3. Access the deployed application
 #    URL displayed in workflow run summary:
-#    https://signalrchat-dev-polandcentral.azurewebsites.net
+#    https://signalrchat-dev-plc.azurewebsites.net
 ```
 
 See **[Bootstrap Guide](docs/BOOTSTRAP.md)** for detailed deployment instructions.
@@ -100,7 +100,11 @@ See **[Bootstrap Guide](docs/BOOTSTRAP.md)** for detailed deployment instruction
 
 | Resource | Purpose | SKU (dev / staging / prod) |
 |----------|---------|----------------------------|
-| **Virtual Network** | Network isolation with TWO subnets (/27 each) | Standard |
+| **Networking Resource Group** | Isolated networking infrastructure | Per environment |
+| **Virtual Network** | Network isolation with TWO subnets (/27 each) | /26 CIDR |
+| **Network Security Groups** | Security rules per subnet (`nsg-{subnetName}`) | Standard |
+| **Route Tables** | Traffic routing per subnet (`rt-{vnetName}-{type}`) | Standard |
+| **Application Resource Group** | Application services and dependencies | Per environment |
 | **App Service** | Web application hosting | P0V4 / P0V4 / P0V4+AZ |
 | **Cosmos DB** | NoSQL database (messages, users, rooms) | Serverless+AZ / Serverless+AZ / Standard+Geo+AZ |
 | **Azure Managed Redis** | OTP storage, session cache, presence | Balanced_B1 / Balanced_B3 / Balanced_B5 |
@@ -108,20 +112,34 @@ See **[Bootstrap Guide](docs/BOOTSTRAP.md)** for detailed deployment instruction
 | **Communication Services** | Email and SMS capabilities | Global resource (Europe data location) |
 | **Application Insights** | APM and telemetry | Workspace-based |
 | **Log Analytics** | Centralized logging | 30d / 90d / 365d retention |
-| **Private Endpoints** | Secure service connections | Cosmos DB, Redis, SignalR |
+| **Private Endpoints** | Secure service connections (cross-RG) | Cosmos DB, Redis, SignalR |
 
 ### Network Architecture
 
-Each environment has a Virtual Network (/26 CIDR) with **exactly TWO dedicated subnets** (/27 each):
+Each environment has **two separate resource groups**:
 
-1. **App Service Subnet** (`10.x.0.0/27`): Delegated to `Microsoft.Web/serverFarms` for VNet integration
-2. **Private Endpoints Subnet** (`10.x.0.32/27`): For secure Azure service connections (Cosmos DB, Redis, SignalR)
+**Networking Resource Group** (`rg-vnet-{baseName}-{env}-{shortLocation}`):
+- Virtual Network (/26 CIDR)
+- TWO subnets (/27 each):
+  - **App Service Subnet**: VNet integration, route table with Internet route
+  - **Private Endpoints Subnet**: Private endpoint connections, empty route table
+- Network Security Groups: `nsg-{subnetName}` (per subnet)
+- Route Tables: `rt-{vnetName}-appservice`, `rt-{vnetName}-pe`
+
+**Application Resource Group** (`rg-{baseName}-{env}-{shortLocation}`):
+- App Service Plan + Web App (VNet integrated to networking RG)
+- Cosmos DB + Private Endpoint (in networking RG subnet)
+- Redis + Private Endpoint (in networking RG subnet)
+- SignalR + Private Endpoint (in networking RG subnet)
+- Azure Communication Services
+- Monitoring (Log Analytics + Application Insights)
 
 **Security**:
-- Network Security Groups (NSGs) on both subnets
+- NSGs on both subnets with restrictive rules
 - HTTPS-only App Service (TLS 1.2 minimum)
-- Private endpoints for all data services
+- Private endpoints for all data services (cross-RG references)
 - Comprehensive security headers (CSP, HSTS, X-Frame-Options)
+- Route tables control traffic flow per subnet
 
 ### Documentation
 
@@ -131,9 +149,9 @@ Each environment has a Virtual Network (/26 CIDR) with **exactly TWO dedicated s
 
 ### Cost Estimates
 
-- **Development**: ~$50-100/month (Basic/Free SKUs, single region)
-- **Staging**: ~$200-400/month (Standard SKUs, 2 instances)
-- **Production**: ~$800-1500/month (Premium SKUs, 3 instances with AZ, geo-replication)
+- **Development**: ~$150-250/month (Basic SKUs, single region, networking RG + application RG)
+- **Staging**: ~$350-500/month (Standard SKUs, 2 instances, dual RGs)
+- **Production**: ~$1200-1800/month (Premium SKUs, 3 instances with AZ, geo-replication, dual RGs)
 
 ---
 
