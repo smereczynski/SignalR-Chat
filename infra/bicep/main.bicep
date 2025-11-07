@@ -114,7 +114,6 @@ module acs './modules/communication.bicep' = {
   name: 'acs-deployment'
   params: {
     acsName: 'acs-${baseName}-${environment}'
-    location: location
     dataLocation: acsDataLocation
   }
 }
