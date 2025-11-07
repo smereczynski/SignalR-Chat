@@ -29,13 +29,10 @@ param privateEndpointSubnetId string = ''
 // SKU: dev=Balanced_B1, staging=Balanced_B3, prod=Balanced_B5
 var skuName = environment == 'prod' ? 'Balanced_B5' : (environment == 'staging' ? 'Balanced_B3' : 'Balanced_B1')
 
-// High availability: enabled for staging/prod, disabled for dev
-var highAvailability = environment == 'dev' ? 'Disabled' : 'Enabled'
-
 // ==========================================
 // Azure Managed Redis Cluster
 // ==========================================
-resource redisEnterprise 'Microsoft.Cache/redisEnterprise@2025-07-01' = {
+resource redisEnterprise 'Microsoft.Cache/redisEnterprise@2024-10-01' = {
   name: redisName
   location: location
   sku: {
@@ -46,15 +43,13 @@ resource redisEnterprise 'Microsoft.Cache/redisEnterprise@2025-07-01' = {
   }
   properties: {
     minimumTlsVersion: '1.2'
-    highAvailability: highAvailability
-    publicNetworkAccess: 'Enabled'
   }
 }
 
 // ==========================================
 // Redis Database
 // ==========================================
-resource redisEnterpriseDatabase 'Microsoft.Cache/redisEnterprise/databases@2025-07-01' = {
+resource redisEnterpriseDatabase 'Microsoft.Cache/redisEnterprise/databases@2024-10-01' = {
   parent: redisEnterprise
   name: 'default'
   properties: {
