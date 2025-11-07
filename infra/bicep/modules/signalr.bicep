@@ -80,12 +80,17 @@ resource privateEndpoint 'Microsoft.Network/privateEndpoints@2023-11-01' = if (p
     }
     privateLinkServiceConnections: [
       {
-        name: 'pe-${signalRName}'
+        name: 'pe-${signalRName}-connection'
         properties: {
           privateLinkServiceId: signalR.id
           groupIds: [
             'signalr'
           ]
+          privateLinkServiceConnectionState: {
+            status: 'Approved'
+            description: 'Auto-approved'
+            actionsRequired: 'None'
+          }
         }
       }
     ]
