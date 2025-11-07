@@ -107,7 +107,9 @@ output hostName string = signalr.properties.hostName
 
 // Outputs (Connection Strings) - SENSITIVE
 @description('The primary connection string for the SignalR service')
+@secure()
 output connectionString string = signalr.listKeys().primaryConnectionString
 
 @description('The primary key for the SignalR service')
+@secure()
 output primaryKey string = signalr.listKeys().primaryKey
