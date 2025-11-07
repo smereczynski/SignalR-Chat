@@ -28,12 +28,15 @@ param acsName string
 ])
 param dataLocation string = 'Europe'
 
+@description('The Azure region for the Communication Service resource')
+param location string = resourceGroup().location
+
 // ==========================================
 // Azure Communication Service
 // ==========================================
 resource communicationService 'Microsoft.Communication/communicationServices@2025-05-01' = {
   name: acsName
-  location: 'global'
+  location: location
   properties: {
     dataLocation: dataLocation
   }
