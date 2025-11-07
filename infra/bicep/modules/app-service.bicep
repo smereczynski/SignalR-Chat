@@ -3,7 +3,6 @@
 // ==========================================
 // This module creates:
 // - App Service Plan
-// - Web App with system-assigned managed identity
 // - VNet integration
 // - App Settings and Connection Strings
 
@@ -246,6 +245,3 @@ output webAppName string = webApp.name
 
 @description('The default hostname of the Web App')
 output defaultHostName string = webApp.properties.defaultHostName
-
-@description('The principal ID of the system-assigned managed identity (empty when disabled)')
-output principalId string = ''

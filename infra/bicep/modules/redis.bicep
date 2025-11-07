@@ -52,8 +52,8 @@ resource redisEnterprise 'Microsoft.Cache/redisEnterprise@2024-09-01-preview' = 
 // Redis Database
 // ==========================================
 resource redisEnterpriseDatabase 'Microsoft.Cache/redisEnterprise/databases@2024-09-01-preview' = {
-  name: 'default'
   parent: redisEnterprise
+  name: 'default'
   properties: {
     clientProtocol: 'Encrypted'
     port: 10000

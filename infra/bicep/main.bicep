@@ -140,9 +140,6 @@ output resourceGroupName string = resourceGroup().name
 @description('The environment deployed')
 output environment string = environment
 
-@description('The App Service principal ID (for RBAC assignments)')
-output appServicePrincipalId string = appService.outputs.principalId
-
 @description('Virtual Network ID')
 output vnetId string = networking.outputs.vnetId
 

@@ -73,7 +73,6 @@ resource cosmosAccount 'Microsoft.DocumentDB/databaseAccounts@2024-05-15' = {
     enableMultipleWriteLocations: false
     publicNetworkAccess: privateEndpointSubnetId != '' ? 'Disabled' : 'Enabled'
     networkAclBypass: 'AzureServices'
-    networkAclBypassResourceIds: []
     capabilities: !isProduction ? [
       {
         name: 'EnableServerless'
