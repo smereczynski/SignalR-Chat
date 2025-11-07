@@ -35,11 +35,16 @@ param privateEndpointsSubnetPrefix string
 @description('Azure Communication Services data location')
 param acsDataLocation string
 
+@description('The networking resource group name')
+param networkingResourceGroupName string
+
 // ==========================================
 // Module: Networking (TWO Subnets)
 // ==========================================
+// Deploy to separate networking resource group
 module networking './modules/networking.bicep' = {
   name: 'networking-deployment'
+  scope: resourceGroup(networkingResourceGroupName)
   params: {
     vnetName: 'vnet-${baseName}-${environment}-${shortLocation}'
     location: location
