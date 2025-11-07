@@ -86,11 +86,6 @@ resource privateEndpoint 'Microsoft.Network/privateEndpoints@2023-11-01' = if (p
           groupIds: [
             'signalr'
           ]
-          privateLinkServiceConnectionState: {
-            status: 'Approved'
-            description: 'Auto-approved'
-            actionsRequired: 'None'
-          }
         }
       }
     ]

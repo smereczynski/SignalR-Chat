@@ -82,11 +82,6 @@ resource privateEndpoint 'Microsoft.Network/privateEndpoints@2023-11-01' = if (p
           groupIds: [
             'redisEnterprise'
           ]
-          privateLinkServiceConnectionState: {
-            status: 'Approved'
-            description: 'Auto-approved'
-            actionsRequired: 'None'
-          }
         }
       }
     ]
