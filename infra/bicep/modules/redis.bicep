@@ -32,7 +32,7 @@ var skuName = environment == 'prod' ? 'Balanced_B5' : (environment == 'staging' 
 // ==========================================
 // Azure Managed Redis Cluster
 // ==========================================
-resource redisEnterprise 'Microsoft.Cache/redisEnterprise@2025-04-01' = {
+resource redisEnterprise 'Microsoft.Cache/redisEnterprise@2024-09-01-preview' = {
   name: redisName
   location: location
   sku: {
@@ -51,7 +51,7 @@ resource redisEnterprise 'Microsoft.Cache/redisEnterprise@2025-04-01' = {
 // ==========================================
 // Redis Database
 // ==========================================
-resource redisEnterpriseDatabase 'Microsoft.Cache/redisEnterprise/databases@2025-04-01' = {
+resource redisEnterpriseDatabase 'Microsoft.Cache/redisEnterprise/databases@2024-09-01-preview' = {
   parent: redisEnterprise
   name: 'default'
   properties: {
