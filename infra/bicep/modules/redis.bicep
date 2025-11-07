@@ -36,7 +36,6 @@ resource redisEnterprise 'Microsoft.Cache/redisEnterprise@2025-04-01' = {
   name: redisName
   location: location
   sku: {
-    capacity: 2
     name: skuName
   }
   identity: {
