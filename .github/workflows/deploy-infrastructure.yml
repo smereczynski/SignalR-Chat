@@ -157,16 +157,14 @@ jobs:
         run: |
           az group create \
             --name ${{ env.NETWORKING_RESOURCE_GROUP }} \
-            --location ${{ env.BICEP_LOCATION }} \
-            --tags Environment=${{ env.ENVIRONMENT }} Application=signalr-chat Component=networking ManagedBy=github-actions
+            --location ${{ env.BICEP_LOCATION }}
       
       - name: Create Resource Group
         if: github.event.inputs.action != 'teardown'
         run: |
           az group create \
             --name ${{ env.RESOURCE_GROUP }} \
-            --location ${{ env.BICEP_LOCATION }} \
-            --tags Environment=${{ env.ENVIRONMENT }} Application=signalr-chat ManagedBy=github-actions
+            --location ${{ env.BICEP_LOCATION }}
       
       - name: Validate Bicep Template
         if: github.event.inputs.action == 'validate' || github.event.inputs.action == 'deploy'
