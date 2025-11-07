@@ -28,8 +28,6 @@ param acsName string
 ])
 param dataLocation string = 'United States'
 
-@description('Tags to apply to all resources')
-
 // ==========================================
 // Communication Service
 // ==========================================

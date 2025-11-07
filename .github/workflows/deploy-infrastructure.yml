@@ -132,10 +132,8 @@ jobs:
           
           # Extract outputs for subsequent steps
           APP_URL=$(cat deployment-output.json | jq -r '.properties.outputs.appUrl.value')
-          COSMOS_ENDPOINT=$(cat deployment-output.json | jq -r '.properties.outputs.cosmosEndpoint.value')
           
           echo "app_url=$APP_URL" >> $GITHUB_OUTPUT
-          echo "cosmos_endpoint=$COSMOS_ENDPOINT" >> $GITHUB_OUTPUT
           
           echo "✅ Deployment completed successfully!"
           echo "🌐 App URL: $APP_URL"
@@ -237,5 +235,4 @@ jobs:
           
           if [ "${{ steps.deploy.outputs.app_url }}" != "" ]; then
             echo "**App URL:** ${{ steps.deploy.outputs.app_url }}" >> $GITHUB_STEP_SUMMARY
-            echo "**Cosmos Endpoint:** ${{ steps.deploy.outputs.cosmos_endpoint }}" >> $GITHUB_STEP_SUMMARY
           fi
