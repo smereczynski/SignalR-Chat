@@ -408,4 +408,5 @@ docs/notes/*
 .DS_Store
 
 # Bicep compiled JSON files
-infra/bicep/main.json
+infra/bicep/*.json
+infra/bicep/**/*.json

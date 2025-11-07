@@ -32,10 +32,6 @@ var skuName = environment == 'prod' ? 'Balanced_B5' : (environment == 'staging' 
 // High availability: disabled for dev, enabled for staging/prod
 var highAvailability = environment == 'dev' ? 'Disabled' : 'Enabled'
 
-// Zone redundancy is configured via zones array (only for staging/prod)
-// Note: Balanced_B1 (dev) doesn't support zones
-var availabilityZones = environment == 'dev' ? [] : ['1', '2', '3']
-
 // ==========================================
 // Azure Managed Redis Cluster
 // ==========================================
@@ -45,7 +41,7 @@ resource redisEnterprise 'Microsoft.Cache/redisEnterprise@2025-07-01' = {
   sku: {
     name: skuName
   }
-  zones: availabilityZones
+  zones: ['1', '2', '3']
   identity: {
     type: 'None'
   }
