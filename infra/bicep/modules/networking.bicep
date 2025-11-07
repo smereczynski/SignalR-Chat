@@ -31,37 +31,24 @@ var appServiceSubnetName = replace(replace(appServiceSubnetPrefix, '.', '-'), '/
 var privateEndpointsSubnetName = replace(replace(privateEndpointsSubnetPrefix, '.', '-'), '/', '--')
 
 // ==========================================
-// Network Security Group for App Service Subnet
+// Network Security Group for App Service subnet
 // ==========================================
-resource appServiceNsg 'Microsoft.Network/networkSecurityGroups@2023-11-01' = {
+resource nsgAppService 'Microsoft.Network/networkSecurityGroups@2024-10-01' = {
   name: 'nsg-${appServiceSubnetName}'
   location: location
   properties: {
     securityRules: [
       {
-        name: 'AllowAppServiceOutbound'
+        name: 'AllowHttpsOutbound'
         properties: {
-          protocol: '*'
+          protocol: 'Tcp'
           sourcePortRange: '*'
-          destinationPortRange: '*'
+          destinationPortRange: '443'
           sourceAddressPrefix: 'VirtualNetwork'
           destinationAddressPrefix: '*'
           access: 'Allow'
           priority: 100
           direction: 'Outbound'
-        }
-      }
-      {
-        name: 'AllowAzureLoadBalancerInbound'
-        properties: {
-          protocol: '*'
-          sourcePortRange: '*'
-          destinationPortRange: '*'
-          sourceAddressPrefix: 'AzureLoadBalancer'
-          destinationAddressPrefix: '*'
-          access: 'Allow'
-          priority: 100
-          direction: 'Inbound'
         }
       }
     ]
@@ -71,7 +58,7 @@ resource appServiceNsg 'Microsoft.Network/networkSecurityGroups@2023-11-01' = {
 // ==========================================
 // Network Security Group for Private Endpoints Subnet
 // ==========================================
-resource privateEndpointsNsg 'Microsoft.Network/networkSecurityGroups@2023-11-01' = {
+resource privateEndpointsNsg 'Microsoft.Network/networkSecurityGroups@2024-10-01' = {
   name: 'nsg-${privateEndpointsSubnetName}'
   location: location
   properties: {
@@ -96,7 +83,7 @@ resource privateEndpointsNsg 'Microsoft.Network/networkSecurityGroups@2023-11-01
 // ==========================================
 // Route Table for App Service Subnet
 // ==========================================
-resource appServiceRouteTable 'Microsoft.Network/routeTables@2023-11-01' = {
+resource appServiceRouteTable 'Microsoft.Network/routeTables@2024-10-01' = {
   name: 'rt-${vnetName}-appservice'
   location: location
   properties: {
@@ -116,7 +103,7 @@ resource appServiceRouteTable 'Microsoft.Network/routeTables@2023-11-01' = {
 // ==========================================
 // Route Table for Private Endpoints Subnet
 // ==========================================
-resource privateEndpointsRouteTable 'Microsoft.Network/routeTables@2023-11-01' = {
+resource privateEndpointsRouteTable 'Microsoft.Network/routeTables@2024-10-01' = {
   name: 'rt-${vnetName}-pe'
   location: location
   properties: {
@@ -128,7 +115,7 @@ resource privateEndpointsRouteTable 'Microsoft.Network/routeTables@2023-11-01' =
 // ==========================================
 // Virtual Network with TWO Subnets
 // ==========================================
-resource vnet 'Microsoft.Network/virtualNetworks@2023-11-01' = {
+resource vnet 'Microsoft.Network/virtualNetworks@2024-10-01' = {
   name: vnetName
   location: location
   properties: {
@@ -143,7 +130,7 @@ resource vnet 'Microsoft.Network/virtualNetworks@2023-11-01' = {
         properties: {
           addressPrefix: appServiceSubnetPrefix
           networkSecurityGroup: {
-            id: appServiceNsg.id
+            id: nsgAppService.id
           }
           routeTable: {
             id: appServiceRouteTable.id
@@ -200,7 +187,7 @@ output privateEndpointsSubnetId string = vnet.properties.subnets[1].id
 output privateEndpointsSubnetName string = vnet.properties.subnets[1].name
 
 @description('The resource ID of the App Service NSG')
-output appServiceNsgId string = appServiceNsg.id
+output appServiceNsgId string = nsgAppService.id
 
 @description('The resource ID of the Private Endpoints NSG')
 output privateEndpointsNsgId string = privateEndpointsNsg.id

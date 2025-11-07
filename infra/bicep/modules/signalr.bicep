@@ -32,9 +32,9 @@ var sku = {
 }
 
 // ==========================================
-// SignalR Service
+// Azure SignalR Service
 // ==========================================
-resource signalR 'Microsoft.SignalRService/signalR@2024-03-01' = {
+resource signalr 'Microsoft.SignalRService/signalR@2024-10-01-preview' = {
   name: signalRName
   location: location
   sku: sku
@@ -71,7 +71,7 @@ resource signalR 'Microsoft.SignalRService/signalR@2024-03-01' = {
 // ==========================================
 // Private Endpoint
 // ==========================================
-resource privateEndpoint 'Microsoft.Network/privateEndpoints@2023-11-01' = if (privateEndpointSubnetId != '') {
+resource privateEndpoint 'Microsoft.Network/privateEndpoints@2024-10-01' = if (privateEndpointSubnetId != '') {
   name: 'pe-${signalRName}'
   location: location
   properties: {
@@ -82,7 +82,7 @@ resource privateEndpoint 'Microsoft.Network/privateEndpoints@2023-11-01' = if (p
       {
         name: 'pe-${signalRName}-connection'
         properties: {
-          privateLinkServiceId: signalR.id
+          privateLinkServiceId: signalr.id
           groupIds: [
             'signalr'
           ]
@@ -97,18 +97,17 @@ resource privateEndpoint 'Microsoft.Network/privateEndpoints@2023-11-01' = if (p
 // Outputs
 // ==========================================
 @description('The resource ID of the SignalR service')
-output signalRId string = signalR.id
+output signalRId string = signalr.id
 
 @description('The name of the SignalR service')
-output signalRName string = signalR.name
+output signalRName string = signalr.name
 
 @description('The hostname of the SignalR service')
-output hostName string = signalR.properties.hostName
+output hostName string = signalr.properties.hostName
 
-@description('The connection string for the SignalR service')
-@secure()
-output connectionString string = signalR.listKeys().primaryConnectionString
+// Outputs (Connection Strings) - SENSITIVE
+@description('The primary connection string for the SignalR service')
+output connectionString string = signalr.listKeys().primaryConnectionString
 
-@description('The primary access key')
-@secure()
-output primaryKey string = signalR.listKeys().primaryKey
+@description('The primary key for the SignalR service')
+output primaryKey string = signalr.listKeys().primaryKey

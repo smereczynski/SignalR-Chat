@@ -116,6 +116,42 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
       
+      - name: Register Azure Resource Providers
+        if: github.event.inputs.action != 'teardown'
+        run: |
+          echo "::group::Checking and Registering Required Azure Resource Providers"
+          
+          PROVIDERS=(
+            "Microsoft.AlertsManagement"
+            "Microsoft.DocumentDB"
+            "Microsoft.Cache"
+            "Microsoft.SignalRService"
+            "Microsoft.Communication"
+            "Microsoft.Web"
+            "Microsoft.Network"
+            "Microsoft.Insights"
+            "Microsoft.OperationalInsights"
+          )
+          
+          for PROVIDER in "${PROVIDERS[@]}"; do
+            echo "Checking provider: $PROVIDER"
+            
+            # Get current registration state
+            STATE=$(az provider show --namespace "$PROVIDER" --query "registrationState" -o tsv 2>/dev/null || echo "NotFound")
+            
+            if [ "$STATE" == "Registered" ]; then
+              echo "  ✅ Already registered: $PROVIDER"
+            else
+              echo "  ⏳ Registering: $PROVIDER (current state: $STATE)"
+              az provider register --namespace "$PROVIDER" --wait
+              echo "  ✅ Registered: $PROVIDER"
+            fi
+          done
+          
+          echo ""
+          echo "✅ All required resource providers are registered"
+          echo "::endgroup::"
+      
       - name: Create Networking Resource Group
         if: github.event.inputs.action != 'teardown'
         run: |

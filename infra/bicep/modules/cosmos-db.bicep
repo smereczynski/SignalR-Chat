@@ -59,7 +59,7 @@ var locations = isProduction ? [
 // ==========================================
 // Cosmos DB Account
 // ==========================================
-resource cosmosAccount 'Microsoft.DocumentDB/databaseAccounts@2024-05-15' = {
+resource cosmosAccount 'Microsoft.DocumentDB/databaseAccounts@2024-11-15' = {
   name: accountName
   location: location
   kind: 'GlobalDocumentDB'
@@ -82,7 +82,7 @@ resource cosmosAccount 'Microsoft.DocumentDB/databaseAccounts@2024-05-15' = {
 // ==========================================
 // Database
 // ==========================================
-resource database 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases@2024-05-15' = {
+resource database 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases@2024-11-15' = {
   parent: cosmosAccount
   name: databaseName
   properties: {
@@ -95,7 +95,7 @@ resource database 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases@2024-05-15
 // ==========================================
 // Container: messages
 // ==========================================
-resource messagesContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-05-15' = {
+resource messagesContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-11-15' = {
   parent: database
   name: 'messages'
   properties: {
@@ -124,7 +124,7 @@ resource messagesContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/c
 // ==========================================
 // Container: users
 // ==========================================
-resource usersContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-05-15' = {
+resource usersContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-11-15' = {
   parent: database
   name: 'users'
   properties: {
@@ -161,7 +161,7 @@ resource usersContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/cont
 // ==========================================
 // Container: rooms
 // ==========================================
-resource roomsContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-05-15' = {
+resource roomsContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-11-15' = {
   parent: database
   name: 'rooms'
   properties: {
@@ -189,7 +189,7 @@ resource roomsContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/cont
 // ==========================================
 // Private Endpoint
 // ==========================================
-resource privateEndpoint 'Microsoft.Network/privateEndpoints@2023-11-01' = if (privateEndpointSubnetId != '') {
+resource privateEndpoint 'Microsoft.Network/privateEndpoints@2024-10-01' = if (privateEndpointSubnetId != '') {
   name: 'pe-${accountName}'
   location: location
   properties: {

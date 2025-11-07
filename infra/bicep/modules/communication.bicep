@@ -29,9 +29,9 @@ param acsName string
 param dataLocation string = 'Europe'
 
 // ==========================================
-// Communication Service
+// Azure Communication Service
 // ==========================================
-resource communicationService 'Microsoft.Communication/communicationServices@2023-04-01' = {
+resource communicationService 'Microsoft.Communication/communicationServices@2025-05-01' = {
   name: acsName
   location: 'global'
   properties: {
