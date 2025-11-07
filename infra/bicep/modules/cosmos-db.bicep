@@ -198,12 +198,17 @@ resource privateEndpoint 'Microsoft.Network/privateEndpoints@2023-11-01' = if (p
     }
     privateLinkServiceConnections: [
       {
-        name: 'pe-${accountName}'
+        name: 'pe-${accountName}-connection'
         properties: {
           privateLinkServiceId: cosmosAccount.id
           groupIds: [
             'Sql'
           ]
+          privateLinkServiceConnectionState: {
+            status: 'Approved'
+            description: 'Auto-approved'
+            actionsRequired: 'None'
+          }
         }
       }
     ]

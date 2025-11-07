@@ -76,12 +76,17 @@ resource privateEndpoint 'Microsoft.Network/privateEndpoints@2023-11-01' = if (p
     }
     privateLinkServiceConnections: [
       {
-        name: 'pe-${redisName}'
+        name: 'pe-${redisName}-connection'
         properties: {
           privateLinkServiceId: redisEnterprise.id
           groupIds: [
             'redisEnterprise'
           ]
+          privateLinkServiceConnectionState: {
+            status: 'Approved'
+            description: 'Auto-approved'
+            actionsRequired: 'None'
+          }
         }
       }
     ]
