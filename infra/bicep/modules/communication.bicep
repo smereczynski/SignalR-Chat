@@ -26,7 +26,7 @@ param acsName string
   'UK'
   'United States'
 ])
-param dataLocation string = 'United States'
+param dataLocation string = 'Europe'
 
 // ==========================================
 // Communication Service

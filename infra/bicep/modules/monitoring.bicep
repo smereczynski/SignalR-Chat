@@ -11,6 +11,9 @@ param baseName string
 @description('The location for all resources')
 param location string = resourceGroup().location
 
+@description('Short location abbreviation for resource names (e.g., plc for polandcentral)')
+param shortLocation string
+
 @description('The environment (dev, staging, prod) - determines retention')
 @allowed([
   'dev'
@@ -23,8 +26,8 @@ param environment string
 // Variables
 // ==========================================
 var retentionInDays = environment == 'prod' ? 365 : (environment == 'staging' ? 90 : 30)
-var logAnalyticsName = 'law-${baseName}-${environment}-${location}'
-var appInsightsName = 'ai-${baseName}-${environment}-${location}'
+var logAnalyticsName = 'law-${baseName}-${environment}-${shortLocation}'
+var appInsightsName = 'ai-${baseName}-${environment}-${shortLocation}'
 
 // ==========================================
 // Log Analytics Workspace

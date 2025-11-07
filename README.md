@@ -80,9 +80,9 @@ The application uses **Azure Bicep** templates for reproducible infrastructure d
 ```bash
 # 1. Configure GitHub environment variables (via UI)
 #    Repository → Settings → Secrets and variables → Actions → Variables
-#    Required: BICEP_BASE_NAME, BICEP_LOCATION, BICEP_VNET_ADDRESS_PREFIX,
-#              BICEP_APP_SERVICE_SUBNET_PREFIX, BICEP_PRIVATE_ENDPOINTS_SUBNET_PREFIX,
-#              BICEP_ACS_DATA_LOCATION
+#    Required: BICEP_BASE_NAME, BICEP_LOCATION, BICEP_SHORT_LOCATION,
+#              BICEP_VNET_ADDRESS_PREFIX, BICEP_APP_SERVICE_SUBNET_PREFIX,
+#              BICEP_PRIVATE_ENDPOINTS_SUBNET_PREFIX, BICEP_ACS_DATA_LOCATION
 
 # 2. Deploy infrastructure via GitHub Actions
 #    Actions → Deploy Infrastructure → Run workflow → Select environment (dev/staging/prod)
