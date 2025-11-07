@@ -36,7 +36,7 @@ var zoneRedundancy = environment == 'dev' ? 'Disabled' : 'Enabled'
 // ==========================================
 // Azure Managed Redis Cluster
 // ==========================================
-resource redisEnterprise 'Microsoft.Cache/redisEnterprise@2025-04-01' = {
+resource redisEnterprise 'Microsoft.Cache/redisEnterprise@2025-07-01' = {
   name: redisName
   location: location
   sku: {
@@ -56,7 +56,7 @@ resource redisEnterprise 'Microsoft.Cache/redisEnterprise@2025-04-01' = {
 // ==========================================
 // Redis Database
 // ==========================================
-resource redisEnterpriseDatabase 'Microsoft.Cache/redisEnterprise/databases@2025-04-01' = {
+resource redisEnterpriseDatabase 'Microsoft.Cache/redisEnterprise/databases@2025-07-01' = {
   parent: redisEnterprise
   name: 'default'
   properties: {
