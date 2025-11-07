@@ -45,6 +45,58 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
       
+      - name: Validate Environment Variables
+        run: |
+          echo "::group::Validating Required Environment Variables"
+          
+          MISSING_VARS=()
+          
+          if [ -z "${{ vars.BICEP_BASE_NAME }}" ]; then
+            MISSING_VARS+=("BICEP_BASE_NAME")
+          fi
+          
+          if [ -z "${{ vars.BICEP_LOCATION }}" ]; then
+            MISSING_VARS+=("BICEP_LOCATION")
+          fi
+          
+          if [ -z "${{ vars.BICEP_VNET_ADDRESS_PREFIX }}" ]; then
+            MISSING_VARS+=("BICEP_VNET_ADDRESS_PREFIX")
+          fi
+          
+          if [ -z "${{ vars.BICEP_APP_SERVICE_SUBNET_PREFIX }}" ]; then
+            MISSING_VARS+=("BICEP_APP_SERVICE_SUBNET_PREFIX")
+          fi
+          
+          if [ -z "${{ vars.BICEP_PRIVATE_ENDPOINTS_SUBNET_PREFIX }}" ]; then
+            MISSING_VARS+=("BICEP_PRIVATE_ENDPOINTS_SUBNET_PREFIX")
+          fi
+          
+          if [ -z "${{ vars.BICEP_ACS_DATA_LOCATION }}" ]; then
+            MISSING_VARS+=("BICEP_ACS_DATA_LOCATION")
+          fi
+          
+          if [ ${#MISSING_VARS[@]} -gt 0 ]; then
+            echo "❌ ERROR: Missing required environment variables for environment '${{ github.event.inputs.environment }}':"
+            for var in "${MISSING_VARS[@]}"; do
+              echo "  - $var"
+            done
+            echo ""
+            echo "Please configure these variables in:"
+            echo "GitHub Repository → Settings → Secrets and variables → Actions → Variables"
+            echo "Select the '${{ github.event.inputs.environment }}' environment"
+            exit 1
+          fi
+          
+          echo "✅ All required environment variables are configured:"
+          echo "  - BICEP_BASE_NAME: ${{ vars.BICEP_BASE_NAME }}"
+          echo "  - BICEP_LOCATION: ${{ vars.BICEP_LOCATION }}"
+          echo "  - BICEP_VNET_ADDRESS_PREFIX: ${{ vars.BICEP_VNET_ADDRESS_PREFIX }}"
+          echo "  - BICEP_APP_SERVICE_SUBNET_PREFIX: ${{ vars.BICEP_APP_SERVICE_SUBNET_PREFIX }}"
+          echo "  - BICEP_PRIVATE_ENDPOINTS_SUBNET_PREFIX: ${{ vars.BICEP_PRIVATE_ENDPOINTS_SUBNET_PREFIX }}"
+          echo "  - BICEP_ACS_DATA_LOCATION: ${{ vars.BICEP_ACS_DATA_LOCATION }}"
+          
+          echo "::endgroup::"
+      
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
