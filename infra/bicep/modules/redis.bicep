@@ -29,10 +29,14 @@ param privateEndpointSubnetId string = ''
 // SKU: dev=Balanced_B1, staging=Balanced_B3, prod=Balanced_B5
 var skuName = environment == 'prod' ? 'Balanced_B5' : (environment == 'staging' ? 'Balanced_B3' : 'Balanced_B1')
 
+// High availability and zone redundancy: disabled for dev, enabled for staging/prod
+var highAvailability = environment == 'dev' ? 'Disabled' : 'Enabled'
+var zoneRedundancy = environment == 'dev' ? 'Disabled' : 'Enabled'
+
 // ==========================================
 // Azure Managed Redis Cluster
 // ==========================================
-resource redisEnterprise 'Microsoft.Cache/redisEnterprise@2024-09-01-preview' = {
+resource redisEnterprise 'Microsoft.Cache/redisEnterprise@2025-04-01' = {
   name: redisName
   location: location
   sku: {
@@ -43,13 +47,16 @@ resource redisEnterprise 'Microsoft.Cache/redisEnterprise@2024-09-01-preview' = 
   }
   properties: {
     minimumTlsVersion: '1.2'
+    publicNetworkAccess: 'Enabled'
+    highAvailability: highAvailability
+    zoneRedundancy: zoneRedundancy
   }
 }
 
 // ==========================================
 // Redis Database
 // ==========================================
-resource redisEnterpriseDatabase 'Microsoft.Cache/redisEnterprise/databases@2024-09-01-preview' = {
+resource redisEnterpriseDatabase 'Microsoft.Cache/redisEnterprise/databases@2025-04-01' = {
   parent: redisEnterprise
   name: 'default'
   properties: {
@@ -67,7 +74,7 @@ resource redisEnterpriseDatabase 'Microsoft.Cache/redisEnterprise/databases@2024
 // ==========================================
 // Private Endpoint
 // ==========================================
-resource privateEndpoint 'Microsoft.Network/privateEndpoints@2023-11-01' = if (privateEndpointSubnetId != '') {
+resource privateEndpoint 'Microsoft.Network/privateEndpoints@2024-10-01' = if (privateEndpointSubnetId != '') {
   name: 'pe-${redisName}'
   location: location
   properties: {

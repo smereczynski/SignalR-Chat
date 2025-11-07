@@ -71,7 +71,7 @@ var skuConfig = environment == 'prod' ? {
 // ==========================================
 // App Service Plan
 // ==========================================
-resource appServicePlan 'Microsoft.Web/serverfarms@2023-12-01' = {
+resource appServicePlan 'Microsoft.Web/serverfarms@2024-11-01' = {
   name: 'serverfarm-${appName}'
   location: location
   sku: {
@@ -89,7 +89,7 @@ resource appServicePlan 'Microsoft.Web/serverfarms@2023-12-01' = {
 // ==========================================
 // Web App
 // ==========================================
-resource webApp 'Microsoft.Web/sites@2023-12-01' = {
+resource webApp 'Microsoft.Web/sites@2024-11-01' = {
   name: appName
   location: location
   kind: 'app,linux'
@@ -98,9 +98,12 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
     httpsOnly: true
     clientAffinityEnabled: false
     virtualNetworkSubnetId: vnetIntegrationSubnetId
-    vnetRouteAllEnabled: true
-    vnetImagePullEnabled: false
-    vnetContentShareEnabled: false
+    outboundVnetRouting: {
+      allTraffic: true
+      applicationTraffic: true
+      imagePullTraffic: false
+      contentShareTraffic: false
+    }
     siteConfig: {
       linuxFxVersion: 'DOTNETCORE|9.0'
       netFrameworkVersion: 'v9.0'
