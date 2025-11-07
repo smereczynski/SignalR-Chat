@@ -29,10 +29,13 @@ param privateEndpointSubnetId string = ''
 // SKU: dev=Balanced_B1, staging=Balanced_B3, prod=Balanced_B5
 var skuName = environment == 'prod' ? 'Balanced_B5' : (environment == 'staging' ? 'Balanced_B3' : 'Balanced_B1')
 
+// High availability: enabled for staging/prod, disabled for dev
+var highAvailability = environment == 'dev' ? 'Disabled' : 'Enabled'
+
 // ==========================================
 // Azure Managed Redis Cluster
 // ==========================================
-resource redisEnterprise 'Microsoft.Cache/redisEnterprise@2024-09-01-preview' = {
+resource redisEnterprise 'Microsoft.Cache/redisEnterprise@2025-07-01' = {
   name: redisName
   location: location
   sku: {
@@ -43,15 +46,15 @@ resource redisEnterprise 'Microsoft.Cache/redisEnterprise@2024-09-01-preview' = 
   }
   properties: {
     minimumTlsVersion: '1.2'
-    highAvailability: 'Enabled'
-
+    highAvailability: highAvailability
+    publicNetworkAccess: 'Enabled'
   }
 }
 
 // ==========================================
 // Redis Database
 // ==========================================
-resource redisEnterpriseDatabase 'Microsoft.Cache/redisEnterprise/databases@2024-09-01-preview' = {
+resource redisEnterpriseDatabase 'Microsoft.Cache/redisEnterprise/databases@2025-07-01' = {
   parent: redisEnterprise
   name: 'default'
   properties: {
@@ -59,17 +62,6 @@ resource redisEnterpriseDatabase 'Microsoft.Cache/redisEnterprise/databases@2024
     port: 10000
     clusteringPolicy: 'OSSCluster'
     evictionPolicy: 'NoEviction'
-    modules: [
-      {
-        name: 'RedisJSON'
-      }
-    ]
-    persistence: {
-      aofEnabled: false
-      rdbEnabled: false
-    }
-    deferUpgrade: 'NotDeferred'
-    accessKeysAuthentication: 'Enabled'
   }
 }
 
