@@ -23,6 +23,7 @@ This repository uses GitHub Actions for continuous integration, infrastructure d
 ```
 BICEP_BASE_NAME                        # Base name for resources (e.g., signalrchat)
 BICEP_LOCATION                         # Azure region (e.g., polandcentral)
+BICEP_SHORT_LOCATION                   # Short location code (e.g., plc for polandcentral)
 BICEP_VNET_ADDRESS_PREFIX             # VNet CIDR /26 (e.g., 10.0.0.0/26)
 BICEP_APP_SERVICE_SUBNET_PREFIX       # First subnet /27 (e.g., 10.0.0.0/27)
 BICEP_PRIVATE_ENDPOINTS_SUBNET_PREFIX # Second subnet /27 (e.g., 10.0.0.32/27)
@@ -104,6 +105,7 @@ AZURE_SUBSCRIPTION_ID   # Your Azure Subscription ID
 ```
 BICEP_BASE_NAME                        # Base name for resources (e.g., signalrchat)
 BICEP_LOCATION                         # Azure region (e.g., polandcentral)
+BICEP_SHORT_LOCATION                   # Short location code (e.g., plc for polandcentral)
 BICEP_VNET_ADDRESS_PREFIX             # VNet CIDR /26 (e.g., 10.0.0.0/26, 10.1.0.0/26, 10.2.0.0/26)
 BICEP_APP_SERVICE_SUBNET_PREFIX       # First subnet /27 (e.g., 10.0.0.0/27, 10.1.0.0/27, 10.2.0.0/27)
 BICEP_PRIVATE_ENDPOINTS_SUBNET_PREFIX # Second subnet /27 (e.g., 10.0.0.32/27, 10.1.0.32/27, 10.2.0.32/27)
@@ -153,13 +155,13 @@ Ensure your Service Principal has:
 ### dev
 - **Purpose:** Infrastructure deployment only (manual trigger)
 - **Protection rules:** None
-- **Variables:** 6 BICEP_* variables (see Authentication section above)
+- **Variables:** 7 BICEP_* variables (see Authentication section above)
 
 ### staging
 - **Purpose:** Infrastructure + application deployment
 - **Protection rules:** None (auto-deploy on push to main)
 - **Variables:** 
-  - 6 BICEP_* variables (for infrastructure)
+  - 7 BICEP_* variables (for infrastructure)
   - `AZURE_WEBAPP_NAME` (for application deployment)
 
 ### production
@@ -168,7 +170,7 @@ Ensure your Service Principal has:
   - ✅ Required reviewers: 1-2 people
   - ✅ Branch restriction: Only `main` branch tags
 - **Variables:**
-  - 6 BICEP_* variables (for infrastructure)
+  - 7 BICEP_* variables (for infrastructure)
   - `AZURE_WEBAPP_NAME` (for application deployment)
 
 ## 🚀 Deployment Workflow
@@ -196,7 +198,7 @@ gh workflow run deploy-infrastructure.yml -f environment=prod
 ```
 
 **Prerequisites:**
-- Configure 6 environment variables in GitHub (see Infrastructure Deployment section above)
+- Configure 7 environment variables in GitHub (see Infrastructure Deployment section above)
 - Azure federated credentials configured for the Service Principal
 - Service Principal has Contributor role on subscription or resource group
 

@@ -17,6 +17,9 @@ param environment string
 @description('The Azure region for resources')
 param location string
 
+@description('Short location abbreviation for resource names (e.g., plc for polandcentral)')
+param shortLocation string
+
 @description('The base name for all resources')
 param baseName string
 
@@ -38,7 +41,7 @@ param acsDataLocation string
 module networking './modules/networking.bicep' = {
   name: 'networking-deployment'
   params: {
-    vnetName: 'vnet-${baseName}-${environment}-${location}'
+    vnetName: 'vnet-${baseName}-${environment}-${shortLocation}'
     location: location
     vnetAddressPrefix: vnetAddressPrefix
     appServiceSubnetPrefix: appServiceSubnetPrefix
@@ -54,6 +57,7 @@ module monitoring './modules/monitoring.bicep' = {
   params: {
     baseName: baseName
     location: location
+    shortLocation: shortLocation
     environment: environment
   }
 }
@@ -64,7 +68,7 @@ module monitoring './modules/monitoring.bicep' = {
 module cosmosDb './modules/cosmos-db.bicep' = {
   name: 'cosmos-deployment'
   params: {
-    accountName: 'cdb-${baseName}-${environment}-${location}'
+    accountName: 'cdb-${baseName}-${environment}-${shortLocation}'
     location: location
     environment: environment
     databaseName: 'chat'
@@ -78,7 +82,7 @@ module cosmosDb './modules/cosmos-db.bicep' = {
 module redis './modules/redis.bicep' = {
   name: 'redis-deployment'
   params: {
-    redisName: 'redis-${baseName}-${environment}-${location}'
+    redisName: 'redis-${baseName}-${environment}-${shortLocation}'
     location: location
     environment: environment
     privateEndpointSubnetId: networking.outputs.privateEndpointsSubnetId
@@ -91,7 +95,7 @@ module redis './modules/redis.bicep' = {
 module signalR './modules/signalr.bicep' = {
   name: 'signalr-deployment'
   params: {
-    signalRName: 'sigr-${baseName}-${environment}-${location}'
+    signalRName: 'sigr-${baseName}-${environment}-${shortLocation}'
     location: location
     environment: environment
     privateEndpointSubnetId: networking.outputs.privateEndpointsSubnetId
@@ -115,7 +119,7 @@ module acs './modules/communication.bicep' = {
 module appService './modules/app-service.bicep' = {
   name: 'app-service-deployment'
   params: {
-    appName: '${baseName}-${environment}-${location}'
+    appName: '${baseName}-${environment}-${shortLocation}'
     location: location
     environment: environment
     vnetIntegrationSubnetId: networking.outputs.appServiceSubnetId

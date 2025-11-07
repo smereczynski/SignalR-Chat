@@ -32,9 +32,10 @@ jobs:
     environment: ${{ github.event.inputs.environment }}
     
     env:
-      RESOURCE_GROUP: rg-${{ vars.BICEP_BASE_NAME }}-${{ github.event.inputs.environment }}
+      RESOURCE_GROUP: rg-${{ vars.BICEP_BASE_NAME }}-${{ github.event.inputs.environment }}-${{ vars.BICEP_SHORT_LOCATION }}
       BICEP_BASE_NAME: ${{ vars.BICEP_BASE_NAME }}
       BICEP_LOCATION: ${{ vars.BICEP_LOCATION }}
+      BICEP_SHORT_LOCATION: ${{ vars.BICEP_SHORT_LOCATION }}
       BICEP_VNET_ADDRESS_PREFIX: ${{ vars.BICEP_VNET_ADDRESS_PREFIX }}
       BICEP_APP_SERVICE_SUBNET_PREFIX: ${{ vars.BICEP_APP_SERVICE_SUBNET_PREFIX }}
       BICEP_PRIVATE_ENDPOINTS_SUBNET_PREFIX: ${{ vars.BICEP_PRIVATE_ENDPOINTS_SUBNET_PREFIX }}
@@ -57,6 +58,10 @@ jobs:
           
           if [ -z "${{ vars.BICEP_LOCATION }}" ]; then
             MISSING_VARS+=("BICEP_LOCATION")
+          fi
+          
+          if [ -z "${{ vars.BICEP_SHORT_LOCATION }}" ]; then
+            MISSING_VARS+=("BICEP_SHORT_LOCATION")
           fi
           
           if [ -z "${{ vars.BICEP_VNET_ADDRESS_PREFIX }}" ]; then
@@ -90,6 +95,7 @@ jobs:
           echo "✅ All required environment variables are configured:"
           echo "  - BICEP_BASE_NAME: ${{ vars.BICEP_BASE_NAME }}"
           echo "  - BICEP_LOCATION: ${{ vars.BICEP_LOCATION }}"
+          echo "  - BICEP_SHORT_LOCATION: ${{ vars.BICEP_SHORT_LOCATION }}"
           echo "  - BICEP_VNET_ADDRESS_PREFIX: ${{ vars.BICEP_VNET_ADDRESS_PREFIX }}"
           echo "  - BICEP_APP_SERVICE_SUBNET_PREFIX: ${{ vars.BICEP_APP_SERVICE_SUBNET_PREFIX }}"
           echo "  - BICEP_PRIVATE_ENDPOINTS_SUBNET_PREFIX: ${{ vars.BICEP_PRIVATE_ENDPOINTS_SUBNET_PREFIX }}"
@@ -132,6 +138,7 @@ jobs:
             --parameters baseName=${{ env.BICEP_BASE_NAME }} \
             --parameters environment=${{ env.ENVIRONMENT }} \
             --parameters location=${{ env.BICEP_LOCATION }} \
+            --parameters shortLocation=${{ env.BICEP_SHORT_LOCATION }} \
             --parameters vnetAddressPrefix=${{ env.BICEP_VNET_ADDRESS_PREFIX }} \
             --parameters appServiceSubnetPrefix=${{ env.BICEP_APP_SERVICE_SUBNET_PREFIX }} \
             --parameters privateEndpointsSubnetPrefix=${{ env.BICEP_PRIVATE_ENDPOINTS_SUBNET_PREFIX }} \
@@ -149,6 +156,7 @@ jobs:
             --parameters baseName=${{ env.BICEP_BASE_NAME }} \
             --parameters environment=${{ env.ENVIRONMENT }} \
             --parameters location=${{ env.BICEP_LOCATION }} \
+            --parameters shortLocation=${{ env.BICEP_SHORT_LOCATION }} \
             --parameters vnetAddressPrefix=${{ env.BICEP_VNET_ADDRESS_PREFIX }} \
             --parameters appServiceSubnetPrefix=${{ env.BICEP_APP_SERVICE_SUBNET_PREFIX }} \
             --parameters privateEndpointsSubnetPrefix=${{ env.BICEP_PRIVATE_ENDPOINTS_SUBNET_PREFIX }} \
@@ -170,6 +178,7 @@ jobs:
             --parameters baseName=${{ env.BICEP_BASE_NAME }} \
             --parameters environment=${{ env.ENVIRONMENT }} \
             --parameters location=${{ env.BICEP_LOCATION }} \
+            --parameters shortLocation=${{ env.BICEP_SHORT_LOCATION }} \
             --parameters vnetAddressPrefix=${{ env.BICEP_VNET_ADDRESS_PREFIX }} \
             --parameters appServiceSubnetPrefix=${{ env.BICEP_APP_SERVICE_SUBNET_PREFIX }} \
             --parameters privateEndpointsSubnetPrefix=${{ env.BICEP_PRIVATE_ENDPOINTS_SUBNET_PREFIX }} \
