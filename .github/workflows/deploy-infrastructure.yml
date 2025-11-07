@@ -190,7 +190,7 @@ jobs:
           echo "::endgroup::"
       
       - name: What-If Analysis
-        if: github.event.inputs.action == 'validate' || github.event.inputs.action == 'deploy'
+        if: github.event.inputs.action == 'validate'
         working-directory: infra/bicep
         run: |
           echo "::group::What-If Preview"
