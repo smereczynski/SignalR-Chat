@@ -34,7 +34,7 @@ var privateEndpointsSubnetName = replace(replace(privateEndpointsSubnetPrefix, '
 // Network Security Group for App Service Subnet
 // ==========================================
 resource appServiceNsg 'Microsoft.Network/networkSecurityGroups@2023-11-01' = {
-  name: '${vnetName}-appservice-nsg'
+  name: 'nsg-${appServiceSubnetName}'
   location: location
   properties: {
     securityRules: [
@@ -72,7 +72,7 @@ resource appServiceNsg 'Microsoft.Network/networkSecurityGroups@2023-11-01' = {
 // Network Security Group for Private Endpoints Subnet
 // ==========================================
 resource privateEndpointsNsg 'Microsoft.Network/networkSecurityGroups@2023-11-01' = {
-  name: '${vnetName}-pe-nsg'
+  name: 'nsg-${privateEndpointsSubnetName}'
   location: location
   properties: {
     securityRules: [
@@ -90,6 +90,38 @@ resource privateEndpointsNsg 'Microsoft.Network/networkSecurityGroups@2023-11-01
         }
       }
     ]
+  }
+}
+
+// ==========================================
+// Route Table for App Service Subnet
+// ==========================================
+resource appServiceRouteTable 'Microsoft.Network/routeTables@2023-11-01' = {
+  name: 'rt-${vnetName}-appservice'
+  location: location
+  properties: {
+    routes: [
+      {
+        name: 'InternetRoute'
+        properties: {
+          addressPrefix: '0.0.0.0/0'
+          nextHopType: 'Internet'
+        }
+      }
+    ]
+    disableBgpRoutePropagation: false
+  }
+}
+
+// ==========================================
+// Route Table for Private Endpoints Subnet
+// ==========================================
+resource privateEndpointsRouteTable 'Microsoft.Network/routeTables@2023-11-01' = {
+  name: 'rt-${vnetName}-pe'
+  location: location
+  properties: {
+    routes: []
+    disableBgpRoutePropagation: false
   }
 }
 
@@ -113,6 +145,9 @@ resource vnet 'Microsoft.Network/virtualNetworks@2023-11-01' = {
           networkSecurityGroup: {
             id: appServiceNsg.id
           }
+          routeTable: {
+            id: appServiceRouteTable.id
+          }
           delegations: [
             {
               name: 'Microsoft.Web.serverFarms'
@@ -131,6 +166,9 @@ resource vnet 'Microsoft.Network/virtualNetworks@2023-11-01' = {
           addressPrefix: privateEndpointsSubnetPrefix
           networkSecurityGroup: {
             id: privateEndpointsNsg.id
+          }
+          routeTable: {
+            id: privateEndpointsRouteTable.id
           }
           privateEndpointNetworkPolicies: 'Disabled'
           privateLinkServiceNetworkPolicies: 'Enabled'
@@ -166,3 +204,9 @@ output appServiceNsgId string = appServiceNsg.id
 
 @description('The resource ID of the Private Endpoints NSG')
 output privateEndpointsNsgId string = privateEndpointsNsg.id
+
+@description('The resource ID of the App Service Route Table')
+output appServiceRouteTableId string = appServiceRouteTable.id
+
+@description('The resource ID of the Private Endpoints Route Table')
+output privateEndpointsRouteTableId string = privateEndpointsRouteTable.id

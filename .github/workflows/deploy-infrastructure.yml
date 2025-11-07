@@ -33,6 +33,7 @@ jobs:
     
     env:
       RESOURCE_GROUP: rg-${{ vars.BICEP_BASE_NAME }}-${{ github.event.inputs.environment }}-${{ vars.BICEP_SHORT_LOCATION }}
+      NETWORKING_RESOURCE_GROUP: rg-vnet-${{ vars.BICEP_BASE_NAME }}-${{ github.event.inputs.environment }}-${{ vars.BICEP_SHORT_LOCATION }}
       BICEP_BASE_NAME: ${{ vars.BICEP_BASE_NAME }}
       BICEP_LOCATION: ${{ vars.BICEP_LOCATION }}
       BICEP_SHORT_LOCATION: ${{ vars.BICEP_SHORT_LOCATION }}
@@ -115,6 +116,14 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
       
+      - name: Create Networking Resource Group
+        if: github.event.inputs.action != 'teardown'
+        run: |
+          az group create \
+            --name ${{ env.NETWORKING_RESOURCE_GROUP }} \
+            --location ${{ env.BICEP_LOCATION }} \
+            --tags Environment=${{ env.ENVIRONMENT }} Application=signalr-chat Component=networking ManagedBy=github-actions
+      
       - name: Create Resource Group
         if: github.event.inputs.action != 'teardown'
         run: |
@@ -142,7 +151,8 @@ jobs:
             --parameters vnetAddressPrefix=${{ env.BICEP_VNET_ADDRESS_PREFIX }} \
             --parameters appServiceSubnetPrefix=${{ env.BICEP_APP_SERVICE_SUBNET_PREFIX }} \
             --parameters privateEndpointsSubnetPrefix=${{ env.BICEP_PRIVATE_ENDPOINTS_SUBNET_PREFIX }} \
-            --parameters acsDataLocation="${{ env.BICEP_ACS_DATA_LOCATION }}"
+            --parameters acsDataLocation="${{ env.BICEP_ACS_DATA_LOCATION }}" \
+            --parameters networkingResourceGroupName=${{ env.NETWORKING_RESOURCE_GROUP }}
           echo "::endgroup::"
       
       - name: What-If Analysis
@@ -161,6 +171,7 @@ jobs:
             --parameters appServiceSubnetPrefix=${{ env.BICEP_APP_SERVICE_SUBNET_PREFIX }} \
             --parameters privateEndpointsSubnetPrefix=${{ env.BICEP_PRIVATE_ENDPOINTS_SUBNET_PREFIX }} \
             --parameters acsDataLocation="${{ env.BICEP_ACS_DATA_LOCATION }}" \
+            --parameters networkingResourceGroupName=${{ env.NETWORKING_RESOURCE_GROUP }} \
             --result-format FullResourcePayloads
           echo "::endgroup::"
       
@@ -183,6 +194,7 @@ jobs:
             --parameters appServiceSubnetPrefix=${{ env.BICEP_APP_SERVICE_SUBNET_PREFIX }} \
             --parameters privateEndpointsSubnetPrefix=${{ env.BICEP_PRIVATE_ENDPOINTS_SUBNET_PREFIX }} \
             --parameters acsDataLocation="${{ env.BICEP_ACS_DATA_LOCATION }}" \
+            --parameters networkingResourceGroupName=${{ env.NETWORKING_RESOURCE_GROUP }} \
             --name "$DEPLOYMENT_NAME" \
             --output json > deployment-output.json
           echo "::endgroup::"
@@ -266,7 +278,7 @@ jobs:
       - name: Teardown Infrastructure
         if: github.event.inputs.action == 'teardown'
         run: |
-          echo "::group::Deleting Resource Group"
+          echo "::group::Deleting Application Resource Group"
           echo "⚠️  WARNING: This will delete all resources in ${{ env.RESOURCE_GROUP }}"
           
           # List resources to be deleted
@@ -281,7 +293,25 @@ jobs:
             --yes \
             --no-wait
           
-          echo "✅ Deletion initiated (running in background)"
+          echo "✅ Application RG deletion initiated (running in background)"
+          echo "::endgroup::"
+          
+          echo "::group::Deleting Networking Resource Group"
+          echo "⚠️  WARNING: This will delete all networking resources in ${{ env.NETWORKING_RESOURCE_GROUP }}"
+          
+          # List resources to be deleted
+          az resource list \
+            --resource-group ${{ env.NETWORKING_RESOURCE_GROUP }} \
+            --query "[].{Name:name, Type:type, Location:location}" \
+            --output table || true
+          
+          # Delete resource group
+          az group delete \
+            --name ${{ env.NETWORKING_RESOURCE_GROUP }} \
+            --yes \
+            --no-wait
+          
+          echo "✅ Networking RG deletion initiated (running in background)"
           echo "::endgroup::"
       
       - name: Deployment Summary
