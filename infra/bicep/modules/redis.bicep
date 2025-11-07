@@ -62,10 +62,8 @@ resource redisEnterpriseDatabase 'Microsoft.Cache/redisEnterprise/databases@2025
     port: 10000
     clusteringPolicy: 'OSSCluster'
     evictionPolicy: 'NoEviction'
-    persistence: {
-      aofEnabled: false
-      rdbEnabled: false
-    }
+    // Persistence disabled - removed persistence block to avoid @2025-07-01 API bug
+    // Bug: API requires undocumented "localPath" property when persistence block is present
   }
 }
 
