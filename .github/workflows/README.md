@@ -35,15 +35,21 @@ BICEP_ACS_DATA_LOCATION              # ACS data location (e.g., Europe)
 - Production: ~25-35 minutes (includes multi-region setup)
 
 **Resources Deployed:**
+
+**Networking Resource Group** (`rg-vnet-{baseName}-{env}-{shortLocation}`):
 - Virtual Network with 2 subnets (/27 each)
+- Network Security Groups (NSG per subnet: `nsg-{subnetName}`)
+- Route Tables (per subnet: `rt-{vnetName}-appservice`, `rt-{vnetName}-pe`)
+
+**Application Resource Group** (`rg-{baseName}-{env}-{shortLocation}`):
 - App Service Plan (P0V4 PremiumV4)
-- App Service (Web App)
+- App Service (Web App with VNet integration)
 - Cosmos DB NoSQL (3 containers: messages, users, rooms)
 - Azure Managed Redis (Balanced_B1/B3/B5)
 - Azure SignalR Service (Standard_S1)
 - Azure Communication Services
 - Log Analytics Workspace + Application Insights
-- Private Endpoints (Cosmos DB, Redis, SignalR)
+- Private Endpoints in networking subnet (Cosmos DB, Redis, SignalR)
 
 ### 2. CI - Build and Test (`ci.yml`)
 **Triggers:**
@@ -204,12 +210,15 @@ gh workflow run deploy-infrastructure.yml -f environment=prod
 
 **What Happens:**
 1. ✅ Azure login via OIDC
-2. ✅ Bicep what-if analysis (preview changes)
-3. ⏸️ Manual approval (production only)
-4. ✅ Deploy all infrastructure resources
-5. ✅ Validate deployment (check 2 subnets in VNet)
-6. ✅ Seed database with initial data
-7. ✅ Output app URL and connection details
+2. ✅ Create networking resource group (`rg-vnet-{baseName}-{env}-{shortLocation}`)
+3. ✅ Create application resource group (`rg-{baseName}-{env}-{shortLocation}`)
+4. ✅ Bicep what-if analysis (preview changes)
+5. ⏸️ Manual approval (production only)
+6. ✅ Deploy networking infrastructure (VNet, NSGs, Route Tables) to networking RG
+7. ✅ Deploy application resources to application RG with cross-RG VNet references
+8. ✅ Validate deployment (check 2 subnets in VNet)
+9. ✅ Seed database with initial data
+10. ✅ Output app URL and connection details
 
 ### Deploy Application to Staging
 1. Create a feature branch: `git checkout -b feature/my-feature`
