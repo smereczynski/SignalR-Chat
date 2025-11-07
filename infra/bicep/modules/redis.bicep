@@ -41,7 +41,6 @@ resource redisEnterprise 'Microsoft.Cache/redisEnterprise@2025-07-01' = {
   sku: {
     name: skuName
   }
-  zones: ['1', '2', '3']
   identity: {
     type: 'None'
   }
