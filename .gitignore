@@ -406,3 +406,6 @@ docs/notes/*
 
 #macOS
 .DS_Store
+
+# Bicep compiled JSON files
+infra/bicep/main.json

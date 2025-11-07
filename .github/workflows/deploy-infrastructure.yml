@@ -1,0 +1,290 @@
+name: Deploy Infrastructure
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy'
+        required: true
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+      
+      action:
+        description: 'Action to perform'
+        required: true
+        type: choice
+        options:
+          - validate
+          - deploy
+          - teardown
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  infrastructure:
+    name: ${{ github.event.inputs.action }} - ${{ github.event.inputs.environment }}
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+    
+    env:
+      RESOURCE_GROUP: rg-signalrchat-${{ github.event.inputs.environment }}
+      BICEP_BASE_NAME: ${{ vars.BICEP_BASE_NAME }}
+      BICEP_LOCATION: ${{ vars.BICEP_LOCATION }}
+      BICEP_VNET_ADDRESS_PREFIX: ${{ vars.BICEP_VNET_ADDRESS_PREFIX }}
+      BICEP_APP_SERVICE_SUBNET_PREFIX: ${{ vars.BICEP_APP_SERVICE_SUBNET_PREFIX }}
+      BICEP_PRIVATE_ENDPOINTS_SUBNET_PREFIX: ${{ vars.BICEP_PRIVATE_ENDPOINTS_SUBNET_PREFIX }}
+      BICEP_ACS_DATA_LOCATION: ${{ vars.BICEP_ACS_DATA_LOCATION }}
+      ENVIRONMENT: ${{ github.event.inputs.environment }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Validate Environment Variables
+        run: |
+          echo "::group::Validating Required Environment Variables"
+          
+          MISSING_VARS=()
+          
+          if [ -z "${{ vars.BICEP_BASE_NAME }}" ]; then
+            MISSING_VARS+=("BICEP_BASE_NAME")
+          fi
+          
+          if [ -z "${{ vars.BICEP_LOCATION }}" ]; then
+            MISSING_VARS+=("BICEP_LOCATION")
+          fi
+          
+          if [ -z "${{ vars.BICEP_VNET_ADDRESS_PREFIX }}" ]; then
+            MISSING_VARS+=("BICEP_VNET_ADDRESS_PREFIX")
+          fi
+          
+          if [ -z "${{ vars.BICEP_APP_SERVICE_SUBNET_PREFIX }}" ]; then
+            MISSING_VARS+=("BICEP_APP_SERVICE_SUBNET_PREFIX")
+          fi
+          
+          if [ -z "${{ vars.BICEP_PRIVATE_ENDPOINTS_SUBNET_PREFIX }}" ]; then
+            MISSING_VARS+=("BICEP_PRIVATE_ENDPOINTS_SUBNET_PREFIX")
+          fi
+          
+          if [ -z "${{ vars.BICEP_ACS_DATA_LOCATION }}" ]; then
+            MISSING_VARS+=("BICEP_ACS_DATA_LOCATION")
+          fi
+          
+          if [ ${#MISSING_VARS[@]} -gt 0 ]; then
+            echo "❌ ERROR: Missing required environment variables for environment '${{ github.event.inputs.environment }}':"
+            for var in "${MISSING_VARS[@]}"; do
+              echo "  - $var"
+            done
+            echo ""
+            echo "Please configure these variables in:"
+            echo "GitHub Repository → Settings → Secrets and variables → Actions → Variables"
+            echo "Select the '${{ github.event.inputs.environment }}' environment"
+            exit 1
+          fi
+          
+          echo "✅ All required environment variables are configured:"
+          echo "  - BICEP_BASE_NAME: ${{ vars.BICEP_BASE_NAME }}"
+          echo "  - BICEP_LOCATION: ${{ vars.BICEP_LOCATION }}"
+          echo "  - BICEP_VNET_ADDRESS_PREFIX: ${{ vars.BICEP_VNET_ADDRESS_PREFIX }}"
+          echo "  - BICEP_APP_SERVICE_SUBNET_PREFIX: ${{ vars.BICEP_APP_SERVICE_SUBNET_PREFIX }}"
+          echo "  - BICEP_PRIVATE_ENDPOINTS_SUBNET_PREFIX: ${{ vars.BICEP_PRIVATE_ENDPOINTS_SUBNET_PREFIX }}"
+          echo "  - BICEP_ACS_DATA_LOCATION: ${{ vars.BICEP_ACS_DATA_LOCATION }}"
+          
+          echo "::endgroup::"
+      
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+      
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      
+      - name: Create Resource Group
+        if: github.event.inputs.action != 'teardown'
+        run: |
+          az group create \
+            --name ${{ env.RESOURCE_GROUP }} \
+            --location ${{ env.BICEP_LOCATION }} \
+            --tags Environment=${{ env.ENVIRONMENT }} Application=signalr-chat ManagedBy=github-actions
+      
+      - name: Validate Bicep Template
+        if: github.event.inputs.action == 'validate' || github.event.inputs.action == 'deploy'
+        working-directory: infra/bicep
+        run: |
+          echo "::group::Bicep Syntax Check"
+          az bicep build --file main.bicep
+          echo "::endgroup::"
+          
+          echo "::group::Template Validation"
+          az deployment group validate \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --template-file main.bicep \
+            --parameters baseName=${{ env.BICEP_BASE_NAME }} \
+            --parameters environment=${{ env.ENVIRONMENT }} \
+            --parameters location=${{ env.BICEP_LOCATION }} \
+            --parameters vnetAddressPrefix=${{ env.BICEP_VNET_ADDRESS_PREFIX }} \
+            --parameters appServiceSubnetPrefix=${{ env.BICEP_APP_SERVICE_SUBNET_PREFIX }} \
+            --parameters privateEndpointsSubnetPrefix=${{ env.BICEP_PRIVATE_ENDPOINTS_SUBNET_PREFIX }} \
+            --parameters acsDataLocation="${{ env.BICEP_ACS_DATA_LOCATION }}"
+          echo "::endgroup::"
+      
+      - name: What-If Analysis
+        if: github.event.inputs.action == 'validate' || github.event.inputs.action == 'deploy'
+        working-directory: infra/bicep
+        run: |
+          echo "::group::What-If Preview"
+          az deployment group what-if \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --template-file main.bicep \
+            --parameters baseName=${{ env.BICEP_BASE_NAME }} \
+            --parameters environment=${{ env.ENVIRONMENT }} \
+            --parameters location=${{ env.BICEP_LOCATION }} \
+            --parameters vnetAddressPrefix=${{ env.BICEP_VNET_ADDRESS_PREFIX }} \
+            --parameters appServiceSubnetPrefix=${{ env.BICEP_APP_SERVICE_SUBNET_PREFIX }} \
+            --parameters privateEndpointsSubnetPrefix=${{ env.BICEP_PRIVATE_ENDPOINTS_SUBNET_PREFIX }} \
+            --parameters acsDataLocation="${{ env.BICEP_ACS_DATA_LOCATION }}" \
+            --result-format FullResourcePayloads
+          echo "::endgroup::"
+      
+      - name: Deploy Infrastructure
+        if: github.event.inputs.action == 'deploy'
+        id: deploy
+        working-directory: infra/bicep
+        run: |
+          DEPLOYMENT_NAME="signalrchat-${{ env.ENVIRONMENT }}-$(date +%Y%m%d-%H%M%S)"
+          
+          echo "::group::Deploying Infrastructure"
+          az deployment group create \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --template-file main.bicep \
+            --parameters baseName=${{ env.BICEP_BASE_NAME }} \
+            --parameters environment=${{ env.ENVIRONMENT }} \
+            --parameters location=${{ env.BICEP_LOCATION }} \
+            --parameters vnetAddressPrefix=${{ env.BICEP_VNET_ADDRESS_PREFIX }} \
+            --parameters appServiceSubnetPrefix=${{ env.BICEP_APP_SERVICE_SUBNET_PREFIX }} \
+            --parameters privateEndpointsSubnetPrefix=${{ env.BICEP_PRIVATE_ENDPOINTS_SUBNET_PREFIX }} \
+            --parameters acsDataLocation="${{ env.BICEP_ACS_DATA_LOCATION }}" \
+            --name "$DEPLOYMENT_NAME" \
+            --output json > deployment-output.json
+          echo "::endgroup::"
+          
+          echo "::group::Deployment Outputs"
+          cat deployment-output.json | jq -r '.properties.outputs'
+          echo "::endgroup::"
+          
+          # Extract outputs for subsequent steps
+          APP_URL=$(cat deployment-output.json | jq -r '.properties.outputs.appUrl.value')
+          
+          echo "app_url=$APP_URL" >> $GITHUB_OUTPUT
+          
+          echo "✅ Deployment completed successfully!"
+          echo "🌐 App URL: $APP_URL"
+      
+      - name: Get Connection Strings
+        if: github.event.inputs.action == 'deploy'
+        id: connection-strings
+        run: |
+          echo "::group::Fetching Connection Strings"
+          
+          # Get Cosmos DB connection string
+          COSMOS_NAME=$(az cosmosdb list \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --query "[0].name" -o tsv)
+          
+          COSMOS_CONN_STRING=$(az cosmosdb keys list \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --name $COSMOS_NAME \
+            --type connection-strings \
+            --query "connectionStrings[0].connectionString" -o tsv)
+          
+          echo "::add-mask::$COSMOS_CONN_STRING"
+          echo "cosmos_connection_string=$COSMOS_CONN_STRING" >> $GITHUB_OUTPUT
+          
+          echo "✅ Connection strings retrieved"
+          echo "::endgroup::"
+      
+      - name: Seed Database
+        if: github.event.inputs.action == 'deploy'
+        env:
+          Cosmos__ConnectionString: ${{ steps.connection-strings.outputs.cosmos_connection_string }}
+        run: |
+          echo "::group::Seeding Database"
+          
+          # Dry run first
+          dotnet run --project tools/Chat.DataSeed -- \
+            --environment ${{ env.ENVIRONMENT }} \
+            --dry-run
+          
+          # Actual seeding
+          dotnet run --project tools/Chat.DataSeed -- \
+            --environment ${{ env.ENVIRONMENT }}
+          
+          echo "✅ Database seeded successfully"
+          echo "::endgroup::"
+      
+      - name: Post-Deployment Validation
+        if: github.event.inputs.action == 'deploy'
+        run: |
+          echo "::group::Validating Deployment"
+          
+          # Wait for App Service to be ready
+          sleep 30
+          
+          APP_URL="${{ steps.deploy.outputs.app_url }}"
+          
+          # Test health endpoint
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$APP_URL/health" || echo "000")
+          
+          if [ "$HTTP_STATUS" = "200" ]; then
+            echo "✅ Health check passed: $APP_URL/health"
+          else
+            echo "⚠️  Health check returned status: $HTTP_STATUS"
+            echo "App may still be starting up. Check Azure Portal for details."
+          fi
+          
+          echo "::endgroup::"
+      
+      - name: Teardown Infrastructure
+        if: github.event.inputs.action == 'teardown'
+        run: |
+          echo "::group::Deleting Resource Group"
+          echo "⚠️  WARNING: This will delete all resources in ${{ env.RESOURCE_GROUP }}"
+          
+          # List resources to be deleted
+          az resource list \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --query "[].{Name:name, Type:type, Location:location}" \
+            --output table || true
+          
+          # Delete resource group
+          az group delete \
+            --name ${{ env.RESOURCE_GROUP }} \
+            --yes \
+            --no-wait
+          
+          echo "✅ Deletion initiated (running in background)"
+          echo "::endgroup::"
+      
+      - name: Deployment Summary
+        if: always() && github.event.inputs.action == 'deploy'
+        run: |
+          echo "## 🚀 Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment:** ${{ env.ENVIRONMENT }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Resource Group:** ${{ env.RESOURCE_GROUP }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Location:** ${{ env.BICEP_LOCATION }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ steps.deploy.outputs.app_url }}" != "" ]; then
+            echo "**App URL:** ${{ steps.deploy.outputs.app_url }}" >> $GITHUB_STEP_SUMMARY
+          fi
