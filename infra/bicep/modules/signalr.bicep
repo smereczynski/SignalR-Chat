@@ -20,8 +20,6 @@ param environment string
 @description('Subnet ID for private endpoint (optional)')
 param privateEndpointSubnetId string = ''
 
-@description('Tags to apply to all resources')
-
 // ==========================================
 // Variables
 // ==========================================

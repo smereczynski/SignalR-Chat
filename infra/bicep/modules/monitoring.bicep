@@ -19,8 +19,6 @@ param location string = resourceGroup().location
 ])
 param environment string
 
-@description('Tags to apply to all resources')
-
 // ==========================================
 // Variables
 // ==========================================

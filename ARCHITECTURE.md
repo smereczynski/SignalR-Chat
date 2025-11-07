@@ -158,8 +158,8 @@ flowchart TB
       NSG1["NSG: appservice-subnet"]
       NSG2["NSG: privateendpoints-subnet"]
       
-      ASignalR["Azure SignalR Service<br/>(Free F1/Standard S1)"]
-      Redis["Azure Cache for Redis<br/>(Basic/Standard/Premium)"]
+      ASignalR["Azure SignalR Service<br/>(Standard S1)"]
+      Redis["Azure Managed Redis<br/>(Balanced B1/B3/B5)"]
       Cosmos["Cosmos DB (NoSQL)<br/>(Serverless/Standard)<br/>messages | users | rooms"]
       ACS["Azure Communication Services<br/>(Email/SMS)"]
       

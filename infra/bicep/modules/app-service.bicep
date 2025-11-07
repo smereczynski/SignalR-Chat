@@ -47,8 +47,6 @@ param signalRConnectionString string
 @secure()
 param acsConnectionString string
 
-@description('Tags to apply to all resources')
-
 // ==========================================
 // Variables
 // ==========================================

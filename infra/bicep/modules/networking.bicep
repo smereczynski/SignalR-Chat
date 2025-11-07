@@ -22,8 +22,6 @@ param appServiceSubnetPrefix string
 @description('The address prefix for the Private Endpoints subnet')
 param privateEndpointsSubnetPrefix string
 
-@description('Tags to apply to all resources')
-
 // ==========================================
 // Helper functions for subnet naming
 // ==========================================
