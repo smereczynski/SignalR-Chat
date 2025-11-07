@@ -29,9 +29,12 @@ param privateEndpointSubnetId string = ''
 // SKU: dev=Balanced_B1, staging=Balanced_B3, prod=Balanced_B5
 var skuName = environment == 'prod' ? 'Balanced_B5' : (environment == 'staging' ? 'Balanced_B3' : 'Balanced_B1')
 
-// High availability and zone redundancy: disabled for dev, enabled for staging/prod
+// High availability: disabled for dev, enabled for staging/prod
 var highAvailability = environment == 'dev' ? 'Disabled' : 'Enabled'
-var zoneRedundancy = environment == 'dev' ? 'Disabled' : 'Enabled'
+
+// Zone redundancy is configured via zones array (only for staging/prod)
+// Note: Balanced_B1 (dev) doesn't support zones
+var availabilityZones = environment == 'dev' ? [] : ['1', '2', '3']
 
 // ==========================================
 // Azure Managed Redis Cluster
@@ -42,6 +45,7 @@ resource redisEnterprise 'Microsoft.Cache/redisEnterprise@2025-07-01' = {
   sku: {
     name: skuName
   }
+  zones: availabilityZones
   identity: {
     type: 'None'
   }
@@ -49,7 +53,6 @@ resource redisEnterprise 'Microsoft.Cache/redisEnterprise@2025-07-01' = {
     minimumTlsVersion: '1.2'
     publicNetworkAccess: 'Enabled'
     highAvailability: highAvailability
-    zoneRedundancy: zoneRedundancy
   }
 }
 
