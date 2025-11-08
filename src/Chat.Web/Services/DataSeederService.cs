@@ -40,8 +40,6 @@ namespace Chat.Web.Services
         {
             try
             {
-                _logger.LogInformation("Checking if database needs seeding...");
-
                 // Check if any rooms exist
                 var existingRooms = _roomsRepo.GetAll()?.ToList();
                 var hasRooms = existingRooms != null && existingRooms.Any();
@@ -58,7 +56,7 @@ namespace Chat.Web.Services
                     return;
                 }
 
-                _logger.LogInformation("Database is empty - starting seed process");
+                _logger.LogInformation("Database is empty - seeding initial data");
 
                 await SeedRoomsAsync();
                 await SeedUsersAsync();
