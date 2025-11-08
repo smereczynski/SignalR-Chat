@@ -275,6 +275,17 @@ jobs:
         run: |
           echo "::group::Seeding Database"
           
+          # Validate that Chat.Web directory exists
+          if [ ! -d "src/Chat.Web" ]; then
+            echo "::error::Chat.Web directory not found at src/Chat.Web"
+            echo "Current directory: $(pwd)"
+            echo "Directory listing:"
+            ls -la
+            exit 1
+          fi
+          
+          echo "✅ Chat.Web directory validated: src/Chat.Web"
+          
           # Dry run first
           dotnet run --project tools/Chat.DataSeed -- \
             --environment ${{ env.ENVIRONMENT }} \
