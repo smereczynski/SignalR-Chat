@@ -32,10 +32,31 @@ class Program
 
         var builder = Host.CreateApplicationBuilder(args);
 
+        // Determine the correct path to Chat.Web directory
+        // This tool can be run from different locations:
+        // 1. From the tool directory: tools/Chat.DataSeed -> ../../src/Chat.Web
+        // 2. From the repository root: . -> ./src/Chat.Web
+        var currentDir = Directory.GetCurrentDirectory();
+        var chatWebPath = FindChatWebDirectory(currentDir);
+        
+        if (chatWebPath == null)
+        {
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.WriteLine("✗ ERROR: Could not locate Chat.Web directory");
+            Console.WriteLine($"  Current directory: {currentDir}");
+            Console.WriteLine($"  Expected path (from repo root): ./src/Chat.Web");
+            Console.WriteLine($"  Expected path (from tool dir): ../../src/Chat.Web");
+            Console.ResetColor();
+            return 1;
+        }
+
+        Console.WriteLine($"Using Chat.Web directory: {chatWebPath}");
+        Console.WriteLine();
+
         // Load configuration from Chat.Web settings
         builder.Configuration
-            .SetBasePath(Path.Combine(Directory.GetCurrentDirectory(), "../../src/Chat.Web"))
-            .AddJsonFile("appsettings.json", optional: false)
+            .SetBasePath(chatWebPath)
+            .AddJsonFile("appsettings.json", optional: true)
             .AddJsonFile($"appsettings.{builder.Environment.EnvironmentName}.json", optional: true)
             .AddEnvironmentVariables()
             .AddCommandLine(args);
@@ -88,6 +109,36 @@ class Program
             Console.WriteLine(ex.StackTrace);
             return 1;
         }
+    }
+
+    /// <summary>
+    /// Finds the Chat.Web directory, handling different working directories.
+    /// Returns the absolute path to Chat.Web directory, or null if not found.
+    /// </summary>
+    static string? FindChatWebDirectory(string currentDirectory)
+    {
+        // Try common paths relative to current directory
+        var possiblePaths = new[]
+        {
+            Path.Combine(currentDirectory, "src", "Chat.Web"),           // From repo root
+            Path.Combine(currentDirectory, "..", "..", "src", "Chat.Web"), // From tools/Chat.DataSeed
+        };
+
+        foreach (var path in possiblePaths)
+        {
+            var normalizedPath = Path.GetFullPath(path);
+            if (Directory.Exists(normalizedPath))
+            {
+                // Verify it's actually the Chat.Web directory by checking for a key file
+                var csprojPath = Path.Combine(normalizedPath, "Chat.Web.csproj");
+                if (File.Exists(csprojPath))
+                {
+                    return normalizedPath;
+                }
+            }
+        }
+
+        return null;
     }
 
     static void ConfigureServices(IServiceCollection services, IConfiguration configuration)
