@@ -141,7 +141,7 @@ jobs:
     - name: Deploy to Azure Web App
       uses: azure/webapps-deploy@v3
       with:
-        app-name: app-${{ vars.BICEP_BASE_NAME }}-${{ needs.determine-environment.outputs.environment }}-${{ vars.BICEP_SHORT_LOCATION }}
+        app-name: ${{ vars.BICEP_BASE_NAME }}-${{ needs.determine-environment.outputs.environment }}-${{ vars.BICEP_SHORT_LOCATION }}
         package: ./publish
     
     - name: Azure Logout
@@ -153,7 +153,7 @@ jobs:
         echo "## 🚀 Deployment Complete" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "**Environment:** ${{ needs.determine-environment.outputs.environment }}" >> $GITHUB_STEP_SUMMARY
-        echo "**App Service:** app-${{ vars.BICEP_BASE_NAME }}-${{ needs.determine-environment.outputs.environment }}-${{ vars.BICEP_SHORT_LOCATION }}" >> $GITHUB_STEP_SUMMARY
+        echo "**App Service:** ${{ vars.BICEP_BASE_NAME }}-${{ needs.determine-environment.outputs.environment }}-${{ vars.BICEP_SHORT_LOCATION }}" >> $GITHUB_STEP_SUMMARY
         echo "**Version:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
         echo "**Deployed at:** $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
         echo "**Deployed by:** ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
@@ -188,7 +188,7 @@ jobs:
         
         ### Deployment Info
         - **Environment**: Production
-        - **Azure App Service**: app-${{ vars.BICEP_BASE_NAME }}-prod-${{ vars.BICEP_SHORT_LOCATION }}
+        - **Azure App Service**: ${{ vars.BICEP_BASE_NAME }}-prod-${{ vars.BICEP_SHORT_LOCATION }}
         - **Build Number**: ${{ github.run_number }}
         - **Commit**: ${{ github.sha }}
         
