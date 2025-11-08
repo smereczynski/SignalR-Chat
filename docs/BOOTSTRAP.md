@@ -1,19 +1,20 @@
 # Bootstrap Guide
 
-This document explains how to deploy and initialize the SignalR Chat application infrastructure and data from scratch using Azure Bicep templates.
+This document explains how to deploy and initialize the SignalR Chat application infrastructure from scratch using Azure Bicep templates.
 
 ## Overview
 
-The Chat application deployment consists of two phases:
+The Chat application deployment consists of:
 
 1. **Infrastructure Provisioning** (Azure Bicep): Deploy all Azure resources (VNet, Cosmos DB, Redis, SignalR, App Service, etc.)
-2. **Data Seeding** (Chat.DataSeed tool): Initialize rooms and users in the provisioned database
+2. **Automatic Data Seeding**: The application automatically seeds initial rooms and users on first startup if the database is empty
 
 This on-demand approach provides:
 - ✅ **Reproducible infrastructure**: Deploy consistent environments across dev/staging/prod
 - ✅ **Version control**: Track infrastructure changes alongside application code
-- ✅ **Explicit control**: Infrastructure and data provisioning happen when YOU decide
-- ✅ **No accidental overwrites**: Production data is never auto-seeded
+- ✅ **Explicit control**: Infrastructure provisioning happens when YOU decide
+- ✅ **Automatic initialization**: Database seeds itself on first app startup
+- ✅ **No accidental overwrites**: Seeding only occurs if database is completely empty
 - ✅ **Clear audit trail**: All operations are deliberate and logged
 - ✅ **Environment isolation**: Separate VNets, connection strings, and resources per environment
 
@@ -177,114 +178,68 @@ az group delete --name rg-signalrchat-dev-polandcentral --yes --no-wait
 
 ---
 
-## Phase 2: Data Seeding (Chat.DataSeed)
+## Phase 2: Automatic Database Seeding
 
-After infrastructure is deployed, initialize the database with rooms and users using the standalone seeding tool.
+The application now automatically seeds initial data (rooms and users) during startup if the database is empty. **No manual seeding is required.**
 
-### Data Seeding Tool
+### How It Works
 
-**Location**: `tools/Chat.DataSeed/`
+**Automatic Seeding Service** (`src/Chat.Web/Services/DataSeederService.cs`):
+- Runs during application startup (before serving requests)
+- Checks if database is empty (no rooms AND no users)
+- Seeds initial data only if both conditions are true
+- Logs all operations for audit trail
+- Allows app to start even if seeding fails
 
-**Features**:
-- Works like database migrations - runs on demand, not part of runtime app
-- Reuses Chat.Web repositories and models
-- Supports Cosmos DB (extensible to other backends)
-- Command-line flags: `--clear`, `--dry-run`, `--environment`
+### What Gets Seeded
 
-### What It Seeds
-
-**Rooms**:
+**Rooms** (created directly in Cosmos):
 - `general` (id: 1)
 - `ops` (id: 2)
 - `random` (id: 3)
 
-**Users**:
-- `alice`: FixedRooms=["general", "ops"], DefaultRoom="general"
-- `bob`: FixedRooms=["general", "random"], DefaultRoom="general"
-- `charlie`: FixedRooms=["general"], DefaultRoom="general"
+**Users** (via IUsersRepository):
+- `alice`: FixedRooms=["general", "ops"], DefaultRoom="general", Email="alice@example.com"
+- `bob`: FixedRooms=["general", "random"], DefaultRoom="general", Email="bob@example.com"
+- `charlie`: FixedRooms=["general"], DefaultRoom="general", Email="charlie@example.com"
 
-### Seeding Development Environment
+### Verifying Seeding
+
+After deploying infrastructure and starting the app for the first time, check the logs:
 
 ```bash
-cd /Users/michal/Developer/SignalR-Chat
-
-# Option 1: Use connection string from deployment output
-export Cosmos__ConnectionString="<cosmos-connection-string-from-deployment>"
-
-# Option 2: Fetch connection string from Azure
-export Cosmos__ConnectionString=$(az cosmosdb keys list \
+# View App Service logs
+az webapp log tail \
   --resource-group rg-signalrchat-dev \
-  --name signalrchat-dev-cosmos-<suffix> \
-  --type connection-strings \
-  --query "connectionStrings[0].connectionString" -o tsv)
+  --name signalrchat-dev-app
 
-# Seed the database
-dotnet run --project tools/Chat.DataSeed -- --environment Development
-
-# Or preview what would be created (dry run)
-dotnet run --project tools/Chat.DataSeed -- --environment Development --dry-run
+# Look for these log messages:
+# "Checking if database needs seeding..."
+# "Database is empty - starting seed process"
+# "Seeding default rooms..."
+# "  ✓ Created room: general (ID: 1)"
+# "  ✓ Created room: ops (ID: 2)"
+# "  ✓ Created room: random (ID: 3)"
+# "Seeding default users..."
+# "  ✓ Created user: alice"
+# "  ✓ Created user: bob"
+# "  ✓ Created user: charlie"
+# "✓ Database seeding completed successfully"
 ```
 
-**Expected Output**:
+On subsequent app restarts, you'll see:
 ```
-=== Chat Data Seed Tool ===
-
-Using Cosmos DB repositories (Database: ChatDatabase)
-Starting data seed process...
-Seeding rooms...
-Room 'general' already exists (ID: 1) - skipping
-Room 'ops' already exists (ID: 2) - skipping
-Room 'random' already exists (ID: 3) - skipping
-Seeding users...
-Creating user: alice (Alice Johnson)
-  ✓ User 'alice' created successfully
-Creating user: bob (Bob Stone)
-  ✓ User 'bob' created successfully
-Creating user: charlie (Charlie Fields)
-  ✓ User 'charlie' created successfully
-Data seed process completed
-
-✓ Data seeding completed successfully!
+"Checking if database needs seeding..."
+"Database already contains data - skipping seed"
 ```
 
-### Seeding Staging/Production
+### Production Considerations
 
-**Security Note**: Production seeding should be run from CI/CD pipeline or Azure Container Instance with proper credential management.
-
-```bash
-# For staging
-export Cosmos__ConnectionString="<staging-cosmos-connection-string>"
-dotnet run --project tools/Chat.DataSeed -- --environment Staging
-
-# For production (use with caution)
-export Cosmos__ConnectionString="<prod-cosmos-connection-string>"
-dotnet run --project tools/Chat.DataSeed -- --environment Production --dry-run  # Preview first!
-dotnet run --project tools/Chat.DataSeed -- --environment Production  # After review
-```
-
-### CI/CD Integration
-
-Add seeding as a pipeline step after infrastructure deployment:
-
-**GitHub Actions Example**:
-```yaml
-- name: Seed Database
-  run: |
-    export Cosmos__ConnectionString="${{ secrets.COSMOS_CONNECTION_STRING }}"
-    dotnet run --project tools/Chat.DataSeed -- --environment Production
-```
-
-**Azure DevOps Example**:
-```yaml
-- task: DotNetCoreCLI@2
-  displayName: 'Seed Production Data'
-  inputs:
-    command: 'run'
-    projects: 'tools/Chat.DataSeed/Chat.DataSeed.csproj'
-    arguments: '-- --environment Production'
-  env:
-    Cosmos__ConnectionString: $(CosmosConnectionString)
-```
+- ✅ **Safe for production**: Seeding only occurs if database is completely empty
+- ✅ **Idempotent**: Safe to restart the app multiple times
+- ✅ **No data loss**: Existing data prevents seeding from running
+- ✅ **Automated**: No manual steps required in CI/CD pipeline
+- ✅ **Auditable**: All seeding operations are logged
 
 ---
 
@@ -327,27 +282,25 @@ The test fixture (`CustomWebApplicationFactory`) automatically initializes test 
 
 #### Option A: Deploy Full Azure Infrastructure (Recommended)
 
-Use Bicep templates to deploy a complete dev environment:
+Use Bicep templates to deploy a complete dev environment via GitHub Actions workflow:
 
 ```bash
-# 1. Deploy infrastructure
-cd infra/bicep
-./scripts/deploy.sh dev rg-signalrchat-dev eastus
+# 1. Configure GitHub environment variables for 'dev' environment:
+BICEP_BASE_NAME="signalrchat-dev"
+BICEP_LOCATION="eastus"
+BICEP_VNET_ADDRESS_PREFIX="10.0.0.0/26"
+BICEP_APP_SERVICE_SUBNET_PREFIX="10.0.0.0/27"
+BICEP_PRIVATE_ENDPOINTS_SUBNET_PREFIX="10.0.0.32/27"
+BICEP_ACS_DATA_LOCATION="Europe"
 
-# 2. Configure local app to use deployed resources
-# Create .env.local file in project root:
-cat > .env.local << EOF
-Cosmos__ConnectionString="<from-deployment-output>"
-Redis__ConnectionString="<from-deployment-output>"
-Azure__SignalR__ConnectionString="<from-deployment-output>"
-Acs__ConnectionString="<from-deployment-output>"
-EOF
+# 2. Trigger GitHub Actions workflow from GitHub UI:
+#    - Go to Actions → Infrastructure Deployment
+#    - Run workflow → Select 'dev' environment → Action: deploy
 
-# 3. Seed database
-export Cosmos__ConnectionString="<from-deployment-output>"
-dotnet run --project tools/Chat.DataSeed -- --environment Development
+# 3. After deployment completes, configure local app to use deployed resources
+# Create .env.local file in project root with connection strings from deployment output
 
-# 4. Run application
+# 4. Run application locally (database will auto-seed on first startup)
 bash -lc 'set -a; [ -f .env.local ] && source .env.local; export ASPNETCORE_ENVIRONMENT=Development; dotnet run --project ./src/Chat.Web --urls=https://localhost:5099'
 ```
 
@@ -356,10 +309,12 @@ bash -lc 'set -a; [ -f .env.local ] && source .env.local; export ASPNETCORE_ENVI
 - Full feature parity with production
 - Network isolation and security (VNet integration)
 - Realistic performance characteristics
+- **Automatic database seeding** on first app startup
 
 **Prerequisites**:
 - Azure subscription
-- Azure CLI configured
+- GitHub repository with Actions enabled
+- Azure credentials configured in GitHub
 - ~$50-100/month for dev resources
 
 #### Option B: In-Memory Mode (Quickest, Limited Features)
@@ -373,7 +328,7 @@ dotnet run --project ./src/Chat.Web --urls=http://localhost:5099
 
 When running with `Testing:InMemory=true` in `appsettings.Development.json`:
 - ✅ No Azure resources needed
-- ✅ No bootstrap/seeding required
+- ✅ No bootstrap/seeding required (test data initialized in-memory)
 - ✅ Fast startup
 - ❌ No real Cosmos DB (in-memory repositories)
 - ❌ No real Redis (in-memory OTP store)
@@ -385,93 +340,83 @@ When running with `Testing:InMemory=true` in `appsettings.Development.json`:
 
 ### 3. Staging Environment
 
-**Strategy**: Full Bicep deployment + CI/CD integration
+**Strategy**: Full Bicep deployment via GitHub Actions + automatic seeding
 
 #### Prerequisites
 
 1. Azure subscription
-2. GitHub repository with Actions enabled (or Azure DevOps)
-3. Service Principal with Contributor role
+2. GitHub repository with Actions enabled
+3. Azure credentials configured in GitHub (OIDC federation)
 
-#### Manual Deployment
+#### Deployment
 
 ```bash
-# 1. Deploy infrastructure
-cd infra/bicep
-./scripts/deploy.sh staging rg-signalrchat-staging eastus
+# 1. Configure GitHub environment variables for 'staging' environment:
+BICEP_BASE_NAME="signalrchat-staging"
+BICEP_LOCATION="eastus"
+BICEP_VNET_ADDRESS_PREFIX="10.1.0.0/26"
+BICEP_APP_SERVICE_SUBNET_PREFIX="10.1.0.0/27"
+BICEP_PRIVATE_ENDPOINTS_SUBNET_PREFIX="10.1.0.32/27"
+BICEP_ACS_DATA_LOCATION="Europe"
 
-# 2. Seed database (after deployment completes)
-export Cosmos__ConnectionString=$(az cosmosdb keys list \
-  --resource-group rg-signalrchat-staging \
-  --name signalrchat-staging-cosmos-<suffix> \
-  --type connection-strings \
-  --query "connectionStrings[0].connectionString" -o tsv)
+# 2. Trigger GitHub Actions workflow:
+#    - Go to Actions → Infrastructure Deployment
+#    - Run workflow → Select 'staging' environment → Action: deploy
 
-dotnet run --project tools/Chat.DataSeed -- --environment Staging
-
-# 3. Verify deployment
-APP_URL=$(az deployment group show \
-  --resource-group rg-signalrchat-staging \
-  --name <deployment-name> \
-  --query "properties.outputs.appUrl.value" -o tsv)
-
-curl -I $APP_URL
+# 3. App Service will automatically seed database on first startup
+# Check App Service logs to verify seeding completed successfully
 ```
 
-#### Automated Deployment (GitHub Actions)
+**Verification**:
+```bash
+# View App Service logs
+az webapp log tail \
+  --resource-group rg-signalrchat-staging \
+  --name signalrchat-staging-app
 
-See section "GitHub Actions Workflow" below for CI/CD automation.
+# Check deployment status
+APP_URL=$(az webapp show \
+  --resource-group rg-signalrchat-staging \
+  --name signalrchat-staging-app \
+  --query "defaultHostName" -o tsv)
+
+curl -I https://$APP_URL/healthz
+```
 
 ---
 
 ### 4. Production Environment
 
-**Strategy**: Bicep deployment + Automated seeding via CI/CD + Approval gates
+**Strategy**: Bicep deployment via GitHub Actions + Automatic seeding + Approval gates
 
 ⚠️ **PRODUCTION DEPLOYMENT CHECKLIST**:
-- [ ] Review what-if changes carefully
+- [ ] Review what-if changes carefully in GitHub Actions workflow
 - [ ] Schedule deployment during maintenance window
 - [ ] Have rollback plan ready
 - [ ] Monitor Application Insights during rollout
 - [ ] Test in staging first
 - [ ] Notify stakeholders
-- [ ] Backup critical data (if applicable)
+- [ ] Verify automatic database seeding in logs
 
-#### Manual Production Deployment
+#### Production Deployment via GitHub Actions
 
 ```bash
-# 1. Deploy infrastructure
-cd infra/bicep
-./scripts/deploy.sh prod rg-signalrchat-prod eastus
+# 1. Configure GitHub environment variables for 'prod' environment:
+BICEP_BASE_NAME="signalrchat-prod"
+BICEP_LOCATION="eastus"
+BICEP_VNET_ADDRESS_PREFIX="10.2.0.0/26"
+BICEP_APP_SERVICE_SUBNET_PREFIX="10.2.0.0/27"
+BICEP_PRIVATE_ENDPOINTS_SUBNET_PREFIX="10.2.0.32/27"
+BICEP_ACS_DATA_LOCATION="Europe"
 
-# Expected prompts:
-# - What-if analysis (review changes)
-# - Confirmation: "Do you want to proceed? (yes/no)"
+# 2. Trigger GitHub Actions workflow:
+#    - Go to Actions → Infrastructure Deployment
+#    - Run workflow → Select 'prod' environment → Action: deploy
+#    - Review what-if analysis output
+#    - Approve deployment (production requires manual approval)
 
-# 2. Seed database (after deployment completes)
-export Cosmos__ConnectionString=$(az cosmosdb keys list \
-  --resource-group rg-signalrchat-prod \
-  --name signalrchat-prod-cosmos-<suffix> \
-  --type connection-strings \
-  --query "connectionStrings[0].connectionString" -o tsv)
-
-# DRY RUN FIRST (highly recommended)
-dotnet run --project tools/Chat.DataSeed -- --environment Production --dry-run
-
-# Review dry-run output, then seed
-dotnet run --project tools/Chat.DataSeed -- --environment Production
-
-# 3. Post-deployment validation
-# See "Post-Deployment Validation" section below
-```
-
-#### Automated Production Deployment
-
-**GitHub Actions with Approval Gates** (recommended):
-
-```yaml
-# .github/workflows/deploy-infrastructure.yml
-name: Deploy Infrastructure
+# 3. App Service will automatically seed database on first startup
+# Monitor logs to verify seeding completed successfully
 
 on:
   workflow_dispatch:
@@ -484,6 +429,13 @@ on:
           - dev
           - staging
           - prod
+      action:
+        description: 'Action to perform'
+        required: true
+        type: choice
+        options:
+          - deploy
+          - teardown
 
 jobs:
   deploy:
@@ -493,22 +445,33 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       
-      - name: Azure Login
-        uses: azure/login@v1
+      - name: Azure Login via OIDC
+        uses: azure/login@v2
         with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
       
       - name: Deploy Infrastructure
+        if: github.event.inputs.action == 'deploy'
         run: |
           cd infra/bicep
-          ./scripts/deploy.sh ${{ github.event.inputs.environment }} \
-            rg-signalrchat-${{ github.event.inputs.environment }} \
-            eastus
+          az deployment group create \
+            --resource-group rg-signalrchat-${{ github.event.inputs.environment }} \
+            --template-file main.bicep \
+            --parameters baseName=${{ vars.BICEP_BASE_NAME }} \
+                         location=${{ vars.BICEP_LOCATION }} \
+                         vnetAddressPrefix=${{ vars.BICEP_VNET_ADDRESS_PREFIX }} \
+                         appServiceSubnetPrefix=${{ vars.BICEP_APP_SERVICE_SUBNET_PREFIX }} \
+                         privateEndpointsSubnetPrefix=${{ vars.BICEP_PRIVATE_ENDPOINTS_SUBNET_PREFIX }} \
+                         acsDataLocation=${{ vars.BICEP_ACS_DATA_LOCATION }}
       
-      - name: Seed Database
+      - name: Post-Deployment Validation
+        if: github.event.inputs.action == 'deploy'
         run: |
-          export Cosmos__ConnectionString="${{ secrets.COSMOS_CONNECTION_STRING }}"
-          dotnet run --project tools/Chat.DataSeed -- --environment Production
+          echo "✅ Infrastructure deployed successfully"
+          echo "ℹ️  Database will be automatically seeded on first app startup"
+          echo "Check App Service logs to verify seeding completed"
 ```
 
 **Configure GitHub Environment Protection**:
@@ -516,12 +479,15 @@ jobs:
 2. Create environment: `prod`
 3. Enable "Required reviewers"
 4. Add approvers (require 1-2 approvals)
+5. Configure environment variables (BICEP_* vars) for each environment
+
+**Note**: Database seeding happens automatically when the app starts for the first time. No separate seeding step is required in CI/CD.
 
 ---
 
 ## Post-Deployment Validation
 
-After deploying infrastructure and seeding data, verify the deployment:
+After deploying infrastructure, verify the deployment and check that automatic seeding completed:
 
 ### Infrastructure Validation
 
@@ -534,58 +500,70 @@ az network vnet subnet list \
   --output table
 
 # Expected output:
-# Name                      Prefix        Delegation
-# ------------------------  ------------  ------------------------
-# appservice-subnet         10.X.1.0/24   Microsoft.Web/serverFarms
-# privateendpoints-subnet   10.X.2.0/24   (null)
+# Name                         Prefix        Delegation
+# ---------------------------  ------------  ------------------------
+# appservice-subnet            10.X.0.0/27   Microsoft.Web/serverFarms
+# privateendpoints-subnet      10.X.0.32/27  (null)
 
 # 2. Verify App Service is running
 az webapp show \
-  --name signalrchat-<env>-app-<suffix> \
+  --name signalrchat-<env>-app \
   --resource-group rg-signalrchat-<env> \
-  --query "{State:state, HostName:defaultHostName, VNetIntegration:siteConfig.vnetName}" \
+  --query "{State:state, HostName:defaultHostName}" \
   --output table
 
 # 3. Verify Cosmos DB containers
 az cosmosdb sql container list \
-  --account-name signalrchat-<env>-cosmos-<suffix> \
+  --account-name signalrchat-<env>-cosmos \
   --resource-group rg-signalrchat-<env> \
-  --database-name ChatDatabase \
-  --query "[].name" \
-  --output table
-
+  --database-name chat \
 # Expected: messages, users, rooms
 
-# 4. Test App Service endpoint
-APP_URL=$(az deployment group show \
+# 4. Test App Service health endpoint
+APP_URL=$(az webapp show \
+  --name signalrchat-<env>-app \
   --resource-group rg-signalrchat-<env> \
-  --name <deployment-name> \
-  --query "properties.outputs.appUrl.value" -o tsv)
+  --query "defaultHostName" -o tsv)
 
-curl -I $APP_URL/health
+curl -I https://$APP_URL/healthz
 # Expected: HTTP/1.1 200 OK
 
 # 5. Verify Application Insights connection
 az monitor app-insights component show \
   --app signalrchat-<env>-appinsights \
   --resource-group rg-signalrchat-<env> \
-  --query "{Name:name, AppId:appId, ConnectionString:connectionString}" \
+  --query "{Name:name, AppId:appId}" \
   --output table
 ```
 
-### Data Validation
+### Automatic Seeding Verification
 
 ```bash
-# Verify seeded data using Azure Cosmos DB Data Explorer
-# Or query via Azure CLI (requires cosmos-db extension)
+# View App Service logs to confirm automatic seeding completed
+az webapp log tail \
+  --name signalrchat-<env>-app \
+  --resource-group rg-signalrchat-<env>
 
-# List users
-az cosmosdb sql container item list \
-  --account-name signalrchat-<env>-cosmos-<suffix> \
-  --database-name ChatDatabase \
+# Look for these log messages on first app startup:
+# "Checking if database needs seeding..."
+# "Database is empty - starting seed process"
+# "Seeding default rooms..."
+# "  ✓ Created room: general (ID: 1)"
+# "  ✓ Created room: ops (ID: 2)"
+# "  ✓ Created room: random (ID: 3)"
+# "Seeding default users..."
+# "  ✓ Created user: alice"
+# "  ✓ Created user: bob"
+# "  ✓ Created user: charlie"
+# "✓ Database seeding completed successfully"
+
+# Verify seeded data in Cosmos DB
+az cosmosdb sql container query \
+  --account-name signalrchat-<env>-cosmos \
+  --database-name chat \
   --container-name users \
   --resource-group rg-signalrchat-<env> \
-  --query "[].{UserName:userName, FixedRooms:fixedRooms}" \
+  --query-text "SELECT c.userName FROM c" \
   --output table
 
 # Expected: alice, bob, charlie
@@ -595,7 +573,7 @@ az cosmosdb sql container item list \
 
 ```bash
 # 1. Access the application URL
-open $APP_URL  # macOS
+open https://$APP_URL  # macOS
 # Or paste URL in browser
 
 # 2. Test OTP authentication
@@ -606,31 +584,39 @@ open $APP_URL  # macOS
 
 # 3. Test real-time messaging
 #    - Open two browser windows
-#    - Login as different users
-#    - Send messages
-#    - Verify real-time delivery
+#    - Login as different users (e.g., alice and bob)
+#    - Send messages in different rooms
+#    - Verify real-time delivery via SignalR
 
 # 4. Verify observability
 #    - Check Application Insights in Azure Portal
 #    - Confirm telemetry data is flowing
 #    - Review logs in Log Analytics
+#    - Verify custom metrics (chat.connections.active, chat.otp.requests)
 ```
 
 ---
 
 ## Infrastructure Teardown
 
-To delete an environment completely:
+To delete an environment completely via GitHub Actions:
 
 ```bash
-cd infra/bicep
-
-# Interactive deletion (requires confirmation)
-./scripts/teardown.sh rg-signalrchat-dev
-
-# Force deletion (no prompts - use with caution)
-./scripts/teardown.sh rg-signalrchat-dev --force
+# Trigger the teardown action from GitHub UI:
+# 1. Go to Actions → Infrastructure Deployment
+# 2. Run workflow → Select environment (dev/staging/prod) → Action: teardown
+# 3. Review resources to be deleted
+# 4. Confirm deletion (production requires approval)
 ```
+
+**Or manually via Azure CLI**:
+
+```bash
+# Delete resource group (deletes ALL resources)
+az group delete \
+  --name rg-signalrchat-<env> \
+  --yes \
+  --no-wait
 
 **⚠️ Warning**: This action is **IRREVERSIBLE**. All resources and data will be permanently deleted.
 
@@ -693,76 +679,90 @@ jobs:
         if: github.event.inputs.action == 'validate'
         run: |
           cd infra/bicep
-          chmod +x scripts/validate.sh
-          ./scripts/validate.sh ${{ github.event.inputs.environment }}
+          
+          # What-if analysis
+          az deployment group what-if \
+            --resource-group rg-signalrchat-${{ github.event.inputs.environment }} \
+            --template-file main.bicep \
+            --parameters baseName=${{ vars.BICEP_BASE_NAME }} \
+                         location=${{ vars.BICEP_LOCATION }} \
+                         vnetAddressPrefix=${{ vars.BICEP_VNET_ADDRESS_PREFIX }} \
+                         appServiceSubnetPrefix=${{ vars.BICEP_APP_SERVICE_SUBNET_PREFIX }} \
+                         privateEndpointsSubnetPrefix=${{ vars.BICEP_PRIVATE_ENDPOINTS_SUBNET_PREFIX }} \
+                         acsDataLocation=${{ vars.BICEP_ACS_DATA_LOCATION }}
       
       - name: Deploy Infrastructure
         if: github.event.inputs.action == 'deploy'
         id: deploy
         run: |
           cd infra/bicep
-          chmod +x scripts/deploy.sh
           
-          # Non-interactive deployment for CI/CD
-          export CONFIRM="yes"
-          
-          ./scripts/deploy.sh ${{ github.event.inputs.environment }} \
-            rg-signalrchat-${{ github.event.inputs.environment }} \
-            eastus
-      
-      - name: Seed Database
-        if: github.event.inputs.action == 'deploy'
-        env:
-          COSMOS_CONNECTION_STRING: ${{ secrets[format('COSMOS_CONNECTION_STRING_{0}', github.event.inputs.environment)] }}
-        run: |
-          export Cosmos__ConnectionString="${COSMOS_CONNECTION_STRING}"
-          
-          # Dry run first
-          dotnet run --project tools/Chat.DataSeed -- \
-            --environment ${{ github.event.inputs.environment }} \
-            --dry-run
-          
-          # Actual seeding
-          dotnet run --project tools/Chat.DataSeed -- \
-            --environment ${{ github.event.inputs.environment }}
+          az deployment group create \
+            --resource-group rg-signalrchat-${{ github.event.inputs.environment }} \
+            --template-file main.bicep \
+            --parameters baseName=${{ vars.BICEP_BASE_NAME }} \
+                         location=${{ vars.BICEP_LOCATION }} \
+                         vnetAddressPrefix=${{ vars.BICEP_VNET_ADDRESS_PREFIX }} \
+                         appServiceSubnetPrefix=${{ vars.BICEP_APP_SERVICE_SUBNET_PREFIX }} \
+                         privateEndpointsSubnetPrefix=${{ vars.BICEP_PRIVATE_ENDPOINTS_SUBNET_PREFIX }} \
+                         acsDataLocation=${{ vars.BICEP_ACS_DATA_LOCATION }}
       
       - name: Teardown Infrastructure
         if: github.event.inputs.action == 'teardown'
         run: |
-          cd infra/bicep
-          chmod +x scripts/teardown.sh
-          
-          # Force mode for automated teardown
-          ./scripts/teardown.sh rg-signalrchat-${{ github.event.inputs.environment }} --force
+          # Delete resource group (all resources)
+          az group delete \
+            --name rg-signalrchat-${{ github.event.inputs.environment }} \
+            --yes \
+            --no-wait
       
       - name: Post-Deployment Validation
         if: github.event.inputs.action == 'deploy'
         run: |
-          # Wait for App Service to be fully ready
+          # Wait for App Service to be ready and seeding to complete
+          echo "ℹ️  Database seeding happens automatically during first app startup"
           sleep 30
           
-          # Get App URL from deployment output
-          APP_URL=$(az deployment group show \
+          # Get App URL
+          APP_URL=$(az webapp show \
+            --name signalrchat-${{ github.event.inputs.environment }}-app \
             --resource-group rg-signalrchat-${{ github.event.inputs.environment }} \
-            --name signalrchat-${{ github.event.inputs.environment }}-$(date +%Y%m%d) \
-            --query "properties.outputs.appUrl.value" -o tsv)
+            --query "defaultHostName" -o tsv)
           
           # Test health endpoint
-          curl -f $APP_URL/health || exit 1
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://$APP_URL/healthz" || echo "000")
           
-          echo "✓ Deployment successful: $APP_URL"
+          if [ "$HTTP_STATUS" = "200" ]; then
+            echo "✅ Health check passed: https://$APP_URL/healthz"
+            echo "✅ Database seeding completed during app startup"
+          else
+            echo "⚠️  Health check returned status: $HTTP_STATUS"
+            echo "App may still be starting up or seeding data. Check Azure Portal logs."
+          fi
 ```
+
+### Configure GitHub Environment Variables
+
+In repository Settings → Environments → [environment] → Environment variables:
+
+| Variable Name | dev Example | staging Example | prod Example |
+|--------------|-------------|-----------------|--------------|
+| `BICEP_BASE_NAME` | `signalrchat-dev` | `signalrchat-staging` | `signalrchat-prod` |
+| `BICEP_LOCATION` | `eastus` | `eastus` | `eastus` |
+| `BICEP_VNET_ADDRESS_PREFIX` | `10.0.0.0/26` | `10.1.0.0/26` | `10.2.0.0/26` |
+| `BICEP_APP_SERVICE_SUBNET_PREFIX` | `10.0.0.0/27` | `10.1.0.0/27` | `10.2.0.0/27` |
+| `BICEP_PRIVATE_ENDPOINTS_SUBNET_PREFIX` | `10.0.0.32/27` | `10.1.0.32/27` | `10.2.0.32/27` |
+| `BICEP_ACS_DATA_LOCATION` | `Europe` | `Europe` | `Europe` |
 
 ### Configure GitHub Secrets
 
-In repository Settings → Secrets and variables → Actions, add:
+In repository Settings → Secrets and variables → Actions:
 
 | Secret Name | Value | Description |
 |-------------|-------|-------------|
-| `AZURE_CREDENTIALS` | `{"clientId":"...","clientSecret":"...","subscriptionId":"...","tenantId":"..."}` | Service Principal credentials |
-| `COSMOS_CONNECTION_STRING_dev` | `AccountEndpoint=https://...` | Dev Cosmos connection string |
-| `COSMOS_CONNECTION_STRING_staging` | `AccountEndpoint=https://...` | Staging Cosmos connection string |
-| `COSMOS_CONNECTION_STRING_prod` | `AccountEndpoint=https://...` | Production Cosmos connection string |
+| `AZURE_CLIENT_ID` | `<guid>` | Service Principal client ID (for OIDC) |
+| `AZURE_TENANT_ID` | `<guid>` | Azure AD tenant ID |
+| `AZURE_SUBSCRIPTION_ID` | `<guid>` | Azure subscription ID |
 
 ### Configure Environment Protection Rules
 
@@ -779,11 +779,11 @@ In repository Settings → Secrets and variables → Actions, add:
 
 | Environment | Infrastructure | Data Seeding | Command |
 |-------------|----------------|--------------|---------|
-| **Integration Tests** | None (in-memory) | Automatic | Run tests normally |
-| **Local Dev (In-Memory)** | None | Automatic | `dotnet run` with `Testing:InMemory=true` |
-| **Local Dev (Azure)** | Bicep deployment | Manual | `./scripts/deploy.sh dev ...` + `dotnet run --project tools/Chat.DataSeed` |
-| **Staging** | Bicep deployment | Manual/CI/CD | `./scripts/deploy.sh staging ...` + seeding |
-| **Production** | Bicep deployment | CI/CD with approval | GitHub Actions workflow |
+| **Integration Tests** | None (in-memory) | Automatic (in-memory) | Run tests normally |
+| **Local Dev (In-Memory)** | None | Automatic (in-memory) | `dotnet run` with `Testing:InMemory=true` |
+| **Local Dev (Azure)** | GitHub Actions | Automatic (on first startup) | Trigger workflow → run app locally |
+| **Staging** | GitHub Actions | Automatic (on first startup) | Trigger workflow for staging |
+| **Production** | GitHub Actions + approval | Automatic (on first startup) | Trigger workflow for prod (requires approval) |
 
 ---
 
@@ -796,13 +796,16 @@ In repository Settings → Secrets and variables → Actions, add:
 **Cause**: Cosmos DB, App Service, or Communication Services names must be globally unique.
 
 **Solution**: 
-- Modify `baseName` parameter in `.bicepparam` file
-- Or let Bicep generate unique suffix automatically (already implemented)
+- Modify `BICEP_BASE_NAME` environment variable to use a different base name
+- Bicep templates automatically append unique suffixes to avoid conflicts
 
 ```bash
-# Check deployment with what-if first
-cd infra/bicep
-./scripts/validate.sh <environment>
+# Check deployment with what-if first via GitHub Actions workflow
+# Or manually:
+az deployment group what-if \
+  --resource-group rg-signalrchat-<env> \
+  --template-file infra/bicep/main.bicep \
+  --parameters baseName=<your-base-name> location=eastus ...
 ```
 
 #### "VNet Integration Fails"
@@ -834,35 +837,41 @@ az deployment group show \
   --query "properties.provisioningState"
 ```
 
-### Seeding Issues
+### Automatic Seeding Issues
 
-#### "Database connection not configured"
+#### "Database not seeding on startup"
 
-**Cause**: Cosmos connection string not set or invalid.
+**Cause**: App Service may have started with existing data, or seeding failed silently.
 
 **Solution**:
 ```bash
-# Fetch connection string from Azure
-export Cosmos__ConnectionString=$(az cosmosdb keys list \
-  --resource-group rg-signalrchat-<env> \
-  --name signalrchat-<env>-cosmos-<suffix> \
-  --type connection-strings \
-  --query "connectionStrings[0].connectionString" -o tsv)
+# Check App Service logs for seeding messages
+az webapp log tail \
+  --name signalrchat-<env>-app \
+  --resource-group rg-signalrchat-<env>
 
-# Verify it's set
-echo $Cosmos__ConnectionString
+# Look for:
+# "Checking if database needs seeding..."
+# "Database is empty - starting seed process" OR "Database already contains data - skipping seed"
+
+# If seeding failed, check for error messages in logs
+# Restart app service to retry seeding if database is truly empty
+az webapp restart \
+  --name signalrchat-<env>-app \
+  --resource-group rg-signalrchat-<env>
 ```
 
-#### "User/Room already exists - skipping"
+#### "Users exist but rooms are missing"
 
-**Cause**: Data already seeded (idempotent behavior).
+**Cause**: Partial seeding completed (users seeded but rooms failed).
 
-**Solution**: This is expected. The seeding tool skips existing data.
-
-To re-seed from scratch:
+**Solution**: The seeding service only runs if BOTH rooms AND users are empty. You'll need to manually clear data or add rooms:
 ```bash
-# Clear existing data first (with confirmation)
-dotnet run --project tools/Chat.DataSeed -- --clear --environment Development
+# Option 1: Clear all data and restart app (will re-seed everything)
+# Use Azure Portal → Cosmos DB → Data Explorer to delete all documents
+
+# Option 2: Manually add rooms via Cosmos DB Data Explorer
+# Use the room document structure from DataSeederService.cs
 ```
 
 #### "Container not found"
@@ -872,11 +881,12 @@ dotnet run --project tools/Chat.DataSeed -- --clear --environment Development
 **Solution**: Verify containers exist:
 ```bash
 az cosmosdb sql container list \
-  --account-name signalrchat-<env>-cosmos-<suffix> \
+  --account-name signalrchat-<env>-cosmos \
   --resource-group rg-signalrchat-<env> \
-  --database-name ChatDatabase
+  --database-name chat
 
-# If missing, check Bicep deployment logs
+# Expected containers: messages, users, rooms
+# If missing, check Bicep deployment logs or redeploy infrastructure
 ```
 
 ### Runtime Issues
