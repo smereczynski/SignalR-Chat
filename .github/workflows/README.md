@@ -66,31 +66,26 @@ BICEP_ACS_DATA_LOCATION              # ACS data location (e.g., Europe)
 - ✅ Upload test results
 - ✅ Create and upload build artifacts (only for `main` branch and tags)
 
-### 3. CD Staging (`cd-staging.yml`)
+### 3. CD - Continuous Deployment (`cd.yml`)
 **Triggers:**
-- Push to `main` branch (after PR merge)
+- Push to `main` branch → Deploy to **dev**
+- Push tags matching `rc*` (e.g., `rc1.0.0`) → Deploy to **staging**
+- Push tags matching `v*.*.*` (e.g., `v1.0.0`) → Deploy to **prod** + Create GitHub Release
 
-**Purpose:** Automatically deploy to staging environment
+**Purpose:** Unified deployment pipeline with environment promotion
 
 **Jobs:**
+- **Determine Environment:** Automatically select target environment based on trigger
 - **Build:** Full CI pipeline (build + test)
-- **Deploy:** Deploy to Azure App Service (staging environment)
+- **Deploy:** Deploy to Azure App Service (dev/staging/prod)
+- **Release:** Create GitHub Release (production only)
 
-**Environment:** `staging` (no required reviewers)
+**Environment Selection:**
+- `main` branch → `dev` (automatic, no approval)
+- `rc*` tags → `staging` (optional approval)
+- `v*.*.*` tags → `prod` (required approval)
 
-### 4. CD Production (`cd-production.yml`)
-**Triggers:**
-- Push tags matching `v*.*.*` (e.g., `v1.0.0`, `v2.1.3`)
-
-**Purpose:** Deploy to production with approval gate
-
-**Jobs:**
-- **Build:** Full CI pipeline (build + test)
-- **Deploy:** Deploy to Azure App Service (production environment)
-
-**Environment:** `production` (requires reviewer approval)
-
-**Retention:** Production artifacts kept for 30 days
+**Artifact Retention:** 30 days for all environments
 
 ## 🔐 Authentication
 
@@ -107,26 +102,18 @@ AZURE_SUBSCRIPTION_ID   # Your Azure Subscription ID
 
 #### Environment Variables:
 
-**Infrastructure deployment (dev/staging/production environments):**
+**All environments (dev/staging/prod) - for both infrastructure and application deployment:**
 ```
-BICEP_BASE_NAME                        # Base name for resources (e.g., signalrchat)
-BICEP_LOCATION                         # Azure region (e.g., polandcentral)
-BICEP_SHORT_LOCATION                   # Short location code (e.g., plc for polandcentral)
+BICEP_BASE_NAME                        # Base name for resources (e.g., chatapp)
+BICEP_LOCATION                         # Azure region (e.g., westeurope)
+BICEP_SHORT_LOCATION                   # Short location code (e.g., weu for westeurope)
 BICEP_VNET_ADDRESS_PREFIX             # VNet CIDR /26 (e.g., 10.0.0.0/26, 10.1.0.0/26, 10.2.0.0/26)
 BICEP_APP_SERVICE_SUBNET_PREFIX       # First subnet /27 (e.g., 10.0.0.0/27, 10.1.0.0/27, 10.2.0.0/27)
 BICEP_PRIVATE_ENDPOINTS_SUBNET_PREFIX # Second subnet /27 (e.g., 10.0.0.32/27, 10.1.0.32/27, 10.2.0.32/27)
 BICEP_ACS_DATA_LOCATION              # ACS data location (e.g., Europe)
 ```
 
-**Application deployment (staging environment):**
-```
-AZURE_WEBAPP_NAME       # Azure App Service name for staging (e.g., signalrchat-staging-polandcentral)
-```
-
-**Application deployment (production environment):**
-```
-AZURE_WEBAPP_NAME       # Azure App Service name for production (e.g., signalrchat-prod-polandcentral)
-```
+**Note:** App Service name is automatically constructed as `app-{BICEP_BASE_NAME}-{environment}-{BICEP_SHORT_LOCATION}` matching Bicep naming convention.
 
 ### Azure Setup
 
@@ -146,9 +133,9 @@ In your Service Principal's **Certificates & secrets → Federated credentials**
 - Audience: `api://AzureADTokenExchange`
 
 **For Production:**
-- Name: `github-production`
+- Name: `github-prod`
 - Issuer: `https://token.actions.githubusercontent.com`
-- Subject identifier: `repo:smereczynski/SignalR-Chat:environment:production`
+- Subject identifier: `repo:smereczynski/SignalR-Chat:environment:prod`
 - Audience: `api://AzureADTokenExchange`
 
 #### 2. Grant Permissions
@@ -159,25 +146,23 @@ Ensure your Service Principal has:
 ## 🌍 GitHub Environments
 
 ### dev
-- **Purpose:** Infrastructure deployment only (manual trigger)
-- **Protection rules:** None
-- **Variables:** 7 BICEP_* variables (see Authentication section above)
+- **Purpose:** Development environment (infrastructure + application deployment)
+- **Protection rules:** None (auto-deploy on push to `main`)
+- **Variables:** 7 BICEP_* variables
 
 ### staging
-- **Purpose:** Infrastructure + application deployment
-- **Protection rules:** None (auto-deploy on push to main)
-- **Variables:** 
-  - 7 BICEP_* variables (for infrastructure)
-  - `AZURE_WEBAPP_NAME` (for application deployment)
+- **Purpose:** Staging environment (infrastructure + application deployment)
+- **Protection rules:** Optional reviewers
+- **Trigger:** Tag with `rc*` pattern (e.g., `rc1.0.0`)
+- **Variables:** 7 BICEP_* variables
 
-### production
-- **Purpose:** Infrastructure + application deployment
+### prod
+- **Purpose:** Production environment (infrastructure + application deployment)
 - **Protection rules:**
   - ✅ Required reviewers: 1-2 people
-  - ✅ Branch restriction: Only `main` branch tags
-- **Variables:**
-  - 7 BICEP_* variables (for infrastructure)
-  - `AZURE_WEBAPP_NAME` (for application deployment)
+  - ✅ Branch restriction: Only tags from `main` branch
+- **Trigger:** Tag with `v*.*.*` pattern (e.g., `v1.0.0`)
+- **Variables:** 7 BICEP_* variables
 
 ## 🚀 Deployment Workflow
 
@@ -220,18 +205,30 @@ gh workflow run deploy-infrastructure.yml -f environment=prod
 9. ✅ Seed database with initial data
 10. ✅ Output app URL and connection details
 
-### Deploy Application to Staging
+### Deploy Application to Development
 1. Create a feature branch: `git checkout -b feature/my-feature`
 2. Make changes and commit
 3. Push and create PR to `main`
 4. Wait for CI pipeline ✅
-5. Wait for SonarQube quality gate ✅
-6. Wait for CodeQL security scan ✅
-7. Merge PR → **Automatic deployment to staging** 🚀
+5. Merge PR → **Automatic deployment to dev** 🚀
 
-### Deploy to Production
+### Deploy Application to Staging
+1. Ensure dev is stable and tested
+2. Create a release candidate tag:
+   ```bash
+   git checkout main
+   git pull
+   git tag -a rc1.0.0 -m "Release candidate 1.0.0"
+   git push origin rc1.0.0
+   ```
+3. GitHub Actions workflow starts
+4. Build and test complete ✅
+5. (Optional) Manual approval ⏸️
+6. **Deploy to staging** 🚀
+
+### Deploy Application to Production
 1. Ensure staging is stable and tested
-2. Create a version tag:
+2. Create a production release tag:
    ```bash
    git checkout main
    git pull
@@ -242,6 +239,7 @@ gh workflow run deploy-infrastructure.yml -f environment=prod
 4. Build and test complete ✅
 5. **Manual approval required** ⏸️
 6. After approval → **Deploy to production** 🚀
+7. **GitHub Release created automatically** 📦
 
 ## 📊 Pipeline Permissions
 
@@ -255,7 +253,7 @@ permissions:
 ### CD Pipelines (Staging & Production)
 ```yaml
 permissions:
-  contents: read        # Read repository code
+  contents: write       # Required for creating GitHub releases (prod only)
   id-token: write       # Required for Azure OIDC federation
 ```
 
@@ -263,16 +261,13 @@ permissions:
 
 The following checks run automatically on PRs:
 - ✅ GitHub Actions CI (build + tests)
-- ✅ SonarQube quality gate
-- ✅ CodeQL security analysis
 
 PRs cannot be merged until all checks pass.
 
 ## 📦 Artifact Management
 
 - **CI builds:** Artifacts retained for 7 days
-- **Staging deployments:** Artifacts retained for 7 days
-- **Production deployments:** Artifacts retained for 30 days
+- **CD deployments:** Artifacts retained for 30 days (all environments)
 
 ## 🛠️ Technology Stack
 

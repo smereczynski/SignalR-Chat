@@ -244,29 +244,7 @@ jobs:
           
           echo "✅ Deployment completed successfully!"
           echo "🌐 App URL: $APP_URL"
-      
-      - name: Get Connection Strings
-        if: github.event.inputs.action == 'deploy'
-        id: connection-strings
-        run: |
-          echo "::group::Fetching Connection Strings"
-          
-          # Get Cosmos DB connection string
-          COSMOS_NAME=$(az cosmosdb list \
-            --resource-group ${{ env.RESOURCE_GROUP }} \
-            --query "[0].name" -o tsv)
-          
-          COSMOS_CONN_STRING=$(az cosmosdb keys list \
-            --resource-group ${{ env.RESOURCE_GROUP }} \
-            --name $COSMOS_NAME \
-            --type connection-strings \
-            --query "connectionStrings[0].connectionString" -o tsv)
-          
-          echo "::add-mask::$COSMOS_CONN_STRING"
-          echo "cosmos_connection_string=$COSMOS_CONN_STRING" >> $GITHUB_OUTPUT
-          
-          echo "✅ Connection strings retrieved"
-          echo "::endgroup::"
+          echo "ℹ️  All connection strings configured in App Service during deployment"
       
       - name: Post-Deployment Validation
         if: github.event.inputs.action == 'deploy'
