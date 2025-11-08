@@ -9,83 +9,78 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - **Infrastructure as Code Implementation**: Complete Azure Bicep templates for automated infrastructure deployment (#84)
-  - ⚠️ **WARNING**: Bicep templates and GitHub Actions workflow **NOT TESTED YET** - pending validation in dev/staging/prod environments
-  - **Deployment Strategy**: GitHub Actions-only workflow (no manual scripts) with environment variables
+  - ⚠️ **WARNING**: Bicep templates **NOT TESTED YET** - pending validation in dev/staging/prod environments
+  - **Deployment Strategy**: GitHub Actions-only workflow with environment variables
     - Manual workflow_dispatch trigger with environment selection (dev/staging/prod)
-    - 6 required environment variables per environment (BICEP_BASE_NAME, BICEP_LOCATION, BICEP_VNET_ADDRESS_PREFIX, BICEP_APP_SERVICE_SUBNET_PREFIX, BICEP_PRIVATE_ENDPOINTS_SUBNET_PREFIX, BICEP_ACS_DATA_LOCATION)
+    - 7 required environment variables per environment (BICEP_BASE_NAME, BICEP_LOCATION, BICEP_SHORT_LOCATION, BICEP_VNET_ADDRESS_PREFIX, BICEP_APP_SERVICE_SUBNET_PREFIX, BICEP_PRIVATE_ENDPOINTS_SUBNET_PREFIX, BICEP_ACS_DATA_LOCATION)
     - No parameter files used in deployment (samples provided for reference only)
     - What-if analysis before deployment for change preview
     - Manual approval gate for production deployments
-    - Automatic database seeding after infrastructure deployment
     - Post-deployment validation (verifies 2 subnets in VNet)
     - Optional teardown action for environment cleanup
   - **Bicep Modules Created**:
     - `networking.bicep`: VNet with 2 subnets (/27 each) + NSGs for App Service integration and Private Endpoints
     - `monitoring.bicep`: Log Analytics Workspace (30d/90d/365d retention) + Application Insights (workspace-based)
     - `cosmos-db.bicep`: Cosmos DB NoSQL with 3 containers (messages, users, rooms), serverless for dev/staging, geo-replication for prod, private endpoint
-    - `redis.bicep`: **Azure Managed Redis** (Microsoft.Cache/redisEnterprise, not Azure Cache for Redis), Balanced_B1/B3/B5 SKUs, port 10000, private endpoint
-    - `signalr.bicep`: Azure SignalR Service **always Standard_S1** (no Free tier for any environment), private endpoint
+    - `redis.bicep`: Azure Managed Redis (Microsoft.Cache/redisEnterprise), Balanced_B1/B3/B5 SKUs, port 10000, private endpoint
+    - `signalr.bicep`: Azure SignalR Service Standard_S1 for all environments, private endpoint
     - `communication.bicep`: Azure Communication Services with Europe data location
-    - `app-service.bicep`: App Service Plan (P0V4 PremiumV4 for all environments) + Web App with VNet integration, all connection strings configured
-    - `main.bicep`: Main orchestration template with symbolic references, no tags, no default parameter values
+    - `app-service.bicep`: App Service Plan (P0V4 PremiumV4 for all environments) + Web App with VNet integration, connection strings configured by Bicep
+    - `main.bicep`: Main orchestration template with symbolic references, no tags
   - **Networking Architecture**:
     - VNet with /26 CIDR block
-    - TWO dedicated /27 subnets per environment:
-      - Subnet 1 (10.x.0.0/27): App Service VNet integration
-      - Subnet 2 (10.x.0.32/27): Private Endpoints for data services
+    - TWO dedicated /27 subnets per environment (App Service integration + Private Endpoints)
     - IP-based subnet naming (e.g., `10-0-0-0--27`, `10-0-0-32--27`)
-    - Private endpoints for Cosmos DB (Sql), Redis (redisEnterprise), SignalR (signalr)
+    - Private endpoints for Cosmos DB, Redis, SignalR
     - Network Security Groups on both subnets
   - **Resource Naming Convention** (issue #84):
-    - Resource Group: `rg-{codename}-{env}-{location}`
-    - App Service Plan: `serverfarm-{codename}-{env}-{location}`
-    - App Service: `{codename}-{env}-{location}`
-    - Cosmos DB: `cdb-{codename}-{env}-{location}`
-    - Redis: `redis-{codename}-{env}-{location}`
-    - SignalR: `sigr-{codename}-{env}-{location}`
-    - Azure Communication Services: `acs-{codename}-{env}`
-    - Application Insights: `ai-{codename}-{env}-{location}`
-    - Log Analytics: `law-{codename}-{env}-{location}`
+    - Networking Resource Group: `rg-vnet-{baseName}-{env}-{shortLocation}`
+    - Application Resource Group: `rg-{baseName}-{env}-{shortLocation}`
+    - App Service: `app-{baseName}-{env}-{shortLocation}`
+    - Cosmos DB: `cdb-{baseName}-{env}-{shortLocation}`
+    - Redis: `redis-{baseName}-{env}-{shortLocation}`
+    - SignalR: `sigr-{baseName}-{env}-{shortLocation}`
     - Private Endpoint: `pe-{resourcename}`
-    - Private Endpoint NIC: `nic-pe-{resourcename}`
-  - **SKU Configuration**:
-    - App Service: P0V4 PremiumV4 for all environments (zone redundancy disabled for dev)
-    - Azure Managed Redis: Balanced_B1 (dev), Balanced_B3 (staging), Balanced_B5 (prod)
-    - SignalR Service: Standard_S1 with 1/1/5 units (dev/staging/prod) - **NO Free tier**
-    - Cosmos DB: Serverless with zone redundancy for dev/staging, Standard with geo-replication for prod
-  - **Configuration Management**:
-    - All tags removed from Bicep templates
-    - All default parameter values removed (environment variables only)
-    - infra/bicep/main.json added to .gitignore
-  - **GitHub Actions Workflow** (`.github/workflows/deploy-infrastructure.yml`):
-    - Azure OIDC authentication (federated credentials)
-    - Environment-based deployment (dev/staging/prod)
-    - Deployment time: ~20-35 minutes
-    - Automatic resource group creation
-    - Connection strings output for application configuration
   - **Documentation Updates**:
     - ARCHITECTURE.md: Infrastructure section updated with GitHub Actions deployment strategy
-    - BOOTSTRAP.md: Phase 1 replaced with GitHub Actions workflow instructions
-    - README.md: Quick start updated with GitHub Actions workflow
-    - .github/workflows/README.md: Infrastructure deployment workflow documentation
+    - BOOTSTRAP.md: Automatic database seeding strategy
+    - .github/workflows/README.md: Infrastructure and CD workflow documentation
     - infra/bicep/README.md: Comprehensive Bicep templates documentation
+- **Automatic Database Seeding**: Database initialization moved to main application startup
+  - Created `DataSeederService` that runs on app startup
+  - Seeds database only if empty (no rooms AND no users)
+  - Seeds 3 rooms (general, ops, random) and 3 users (alice, bob, charlie)
+  - Idempotent and production-safe
+- **Unified CD Workflow**: Single continuous deployment pipeline for all environments (#95)
+  - Environment promotion via git workflow:
+    - Push to `main` → auto-deploy to **dev**
+    - Tag `rc*` (e.g., rc1.0.0) → deploy to **staging** (optional approval)
+    - Tag `v*.*.*` (e.g., v1.0.0) → deploy to **prod** (required approval) + create GitHub Release
+  - Simplified configuration: same 7 BICEP_* variables for infrastructure and application deployment
+  - App Service name auto-constructed: `app-{BICEP_BASE_NAME}-{environment}-{BICEP_SHORT_LOCATION}`
+  - Consistent 30-day artifact retention across all environments
 
 ### Changed
-- **Azure Region**: Default location changed from `eastus` to `polandcentral` for all environments
-- **Azure Communication Services**: Data location changed from `United States` to `Europe`
-- **Redis Service**: Migrated from Azure Cache for Redis to **Azure Managed Redis** (Microsoft.Cache/redisEnterprise)
-  - Connection port changed from 6379 to 10000
-  - Two-tier resource structure (redisEnterprise + child databases)
-  - Enterprise-grade clustering and encryption
-- **SignalR Service**: Always uses Standard_S1 tier (removed Free_F1 option for dev environment)
-- **App Service**: Standardized on P0V4 PremiumV4 for all environments (removed B1 for dev)
-- **Deployment Method**: Shell scripts removed, **GitHub Actions-only** deployment strategy
+- **Database Seeding Strategy**: Moved from standalone tool to automatic application startup
+  - Seeding now happens automatically during first app startup if database is empty
+  - Removed manual seeding step from infrastructure deployment workflow
+  - More reliable and production-safe with idempotent checks
+- **CD/CD Architecture**: Unified deployment pipeline for simplified workflow management
+  - Replaced separate `cd-staging.yml` and `cd-production.yml` with single `cd.yml`
+  - Environment selection based on git workflow (main branch, rc tags, version tags)
+  - Removed `AZURE_WEBAPP_NAME` variable - App Service name auto-constructed from Bicep variables
+  - Eliminated redundant connection string management - Bicep configures everything during infrastructure deployment
+- **Azure Region**: Default location from `eastus` to `polandcentral` for all environments
+- **Azure Communication Services**: Data location from `United States` to `Europe`
+- **Redis Service**: Migrated from Azure Cache for Redis to Azure Managed Redis (Microsoft.Cache/redisEnterprise)
+- **SignalR Service**: Always uses Standard_S1 tier for all environments
+- **App Service**: Standardized on P0V4 PremiumV4 for all environments
 
 ### Removed
-- **Deployment Scripts**: Deleted all manual deployment shell scripts (deploy.sh, validate.sh, teardown.sh)
-- **Configuration**: Removed tags from all Bicep templates
-- **Configuration**: Removed default parameter values from main.bicep
-- **Legacy Scripts**: Removed `scripts/migrate-connection-strings.azcli` (superseded by Bicep)
+- **Chat.DataSeed Tool**: Removed standalone seeding tool (676 lines) - replaced with automatic seeding
+- **Separate CD Workflows**: Deleted `cd-staging.yml` and `cd-production.yml` - unified into `cd.yml`
+- **Deployment Scripts**: Deleted manual deployment shell scripts
+- **Configuration Complexity**: Removed `AZURE_WEBAPP_NAME` environment variable requirement
 
 ### Testing Status
 - ⚠️ **PENDING**: Infrastructure deployment to dev environment
