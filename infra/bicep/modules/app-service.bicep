@@ -164,7 +164,7 @@ resource webApp 'Microsoft.Web/sites@2024-11-01' = {
         }
         {
           name: 'ASPNETCORE_ENVIRONMENT'
-          value: environment == 'prod' ? 'Production' : (environment == 'staging' ? 'Staging' : 'Development')
+          value: environment == 'prod' ? 'Production' : (environment == 'staging' ? 'Production' : 'Development')
         }
         {
           name: 'Cosmos__Database'
