@@ -5,6 +5,10 @@
 // NOT Azure Cache for Redis (the legacy service)
 //
 // Azure Managed Redis uses Microsoft.Cache/redisEnterprise resource type
+//
+// IMPORTANT: listKeys is a DATABASE-level operation, not cluster-level
+// - Correct: redisEnterpriseDatabase.listKeys() ✅
+// - API: /databases/{databaseName}/listKeys
 
 @description('The name of the Azure Managed Redis cluster')
 param redisName string

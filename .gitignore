@@ -410,6 +410,3 @@ docs/notes/*
 # Bicep compiled JSON files
 infra/bicep/*.json
 infra/bicep/**/*.json
-# Exception: redis-arm.json is a source ARM template (workaround for Language Version 2.0 bug)
-!infra/bicep/modules/redis-arm.json
-infra/bicep/modules/redis-test-database-listkeys.json
