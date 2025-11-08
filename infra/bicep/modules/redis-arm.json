@@ -1,0 +1,132 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "description": "Azure Managed Redis Enterprise - Pure ARM Template (workaround for Language Version 2.0 bug)"
+  },
+  "parameters": {
+    "redisName": {
+      "type": "string",
+      "metadata": {
+        "description": "The name of the Azure Managed Redis cluster"
+      }
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]",
+      "metadata": {
+        "description": "The location for all resources"
+      }
+    },
+    "environment": {
+      "type": "string",
+      "allowedValues": [
+        "dev",
+        "staging",
+        "prod"
+      ],
+      "metadata": {
+        "description": "The environment (dev, staging, prod)"
+      }
+    },
+    "privateEndpointSubnetId": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Subnet ID for private endpoint (optional)"
+      }
+    }
+  },
+  "variables": {
+    "skuName": "[if(equals(parameters('environment'), 'prod'), 'Balanced_B5', if(equals(parameters('environment'), 'staging'), 'Balanced_B3', 'Balanced_B1'))]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Cache/redisEnterprise",
+      "apiVersion": "2025-07-01",
+      "name": "[parameters('redisName')]",
+      "location": "[parameters('location')]",
+      "sku": {
+        "name": "[variables('skuName')]"
+      },
+      "identity": {
+        "type": "None"
+      },
+      "properties": {
+        "minimumTlsVersion": "1.2",
+        "publicNetworkAccess": "Enabled"
+      }
+    },
+    {
+      "type": "Microsoft.Cache/redisEnterprise/databases",
+      "apiVersion": "2025-07-01",
+      "name": "[format('{0}/{1}', parameters('redisName'), 'default')]",
+      "properties": {
+        "clientProtocol": "Encrypted",
+        "port": 10000,
+        "clusteringPolicy": "OSSCluster",
+        "evictionPolicy": "NoEviction"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Cache/redisEnterprise', parameters('redisName'))]"
+      ]
+    },
+    {
+      "condition": "[not(equals(parameters('privateEndpointSubnetId'), ''))]",
+      "type": "Microsoft.Network/privateEndpoints",
+      "apiVersion": "2024-10-01",
+      "name": "[format('pe-{0}', parameters('redisName'))]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "subnet": {
+          "id": "[parameters('privateEndpointSubnetId')]"
+        },
+        "privateLinkServiceConnections": [
+          {
+            "name": "[format('pe-{0}-connection', parameters('redisName'))]",
+            "properties": {
+              "privateLinkServiceId": "[resourceId('Microsoft.Cache/redisEnterprise', parameters('redisName'))]",
+              "groupIds": [
+                "redisEnterprise"
+              ]
+            }
+          }
+        ],
+        "customNetworkInterfaceName": "[format('nic-pe-{0}', parameters('redisName'))]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Cache/redisEnterprise', parameters('redisName'))]"
+      ]
+    }
+  ],
+  "outputs": {
+    "redisId": {
+      "type": "string",
+      "metadata": {
+        "description": "The resource ID of the Redis Enterprise cluster"
+      },
+      "value": "[resourceId('Microsoft.Cache/redisEnterprise', parameters('redisName'))]"
+    },
+    "redisName": {
+      "type": "string",
+      "metadata": {
+        "description": "The name of the Redis Enterprise cluster"
+      },
+      "value": "[parameters('redisName')]"
+    },
+    "hostName": {
+      "type": "string",
+      "metadata": {
+        "description": "The hostname of the Redis Enterprise cluster"
+      },
+      "value": "[reference(resourceId('Microsoft.Cache/redisEnterprise', parameters('redisName')), '2025-07-01').hostName]"
+    },
+    "connectionString": {
+      "type": "securestring",
+      "metadata": {
+        "description": "The Redis connection string"
+      },
+      "value": "[format('{0}:{1},password={2},ssl=True,abortConnect=False', reference(resourceId('Microsoft.Cache/redisEnterprise', parameters('redisName')), '2025-07-01').hostName, reference(resourceId('Microsoft.Cache/redisEnterprise/databases', parameters('redisName'), 'default'), '2025-07-01').port, listKeys(resourceId('Microsoft.Cache/redisEnterprise', parameters('redisName')), '2025-07-01').primaryKey)]"
+    }
+  }
+}

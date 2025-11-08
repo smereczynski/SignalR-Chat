@@ -82,9 +82,11 @@ module cosmosDb './modules/cosmos-db.bicep' = {
 }
 
 // ==========================================
-// Module: Redis Cache
+// Module: Redis Enterprise (Pure ARM Template)
 // ==========================================
-module redis './modules/redis.bicep' = {
+// Using ARM template instead of Bicep to avoid Language Version 2.0 bug
+// See: https://learn.microsoft.com/en-us/azure/templates/microsoft.cache/redisenterprise
+module redis './modules/redis-arm.json' = {
   name: 'redis-deployment'
   params: {
     redisName: 'redis-${baseName}-${environment}-${shortLocation}'
