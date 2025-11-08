@@ -1,10 +1,8 @@
 // ==========================================
-// Azure Managed Redis Module
+// Redis Test - Database-level listKeys
 // ==========================================
-// This module creates Azure Managed Redis (redisEnterprise)
-// NOT Azure Cache for Redis (the legacy service)
-//
-// Azure Managed Redis uses Microsoft.Cache/redisEnterprise resource type
+// This is a test file to verify that using database-level listKeys
+// resolves the "localPath required" error
 
 @description('The name of the Azure Managed Redis cluster')
 param redisName string
@@ -26,13 +24,12 @@ param privateEndpointSubnetId string = ''
 // ==========================================
 // Variables
 // ==========================================
-// SKU: dev=Balanced_B1, staging=Balanced_B3, prod=Balanced_B5
 var skuName = environment == 'prod' ? 'Balanced_B5' : (environment == 'staging' ? 'Balanced_B3' : 'Balanced_B1')
 
 // ==========================================
 // Azure Managed Redis Cluster
 // ==========================================
-resource redisEnterprise 'Microsoft.Cache/redisEnterprise@2025-05-01-preview' = {
+resource redisEnterprise 'Microsoft.Cache/redisEnterprise@2025-07-01' = {
   name: redisName
   location: location
   sku: {
@@ -42,15 +39,15 @@ resource redisEnterprise 'Microsoft.Cache/redisEnterprise@2025-05-01-preview' = 
     type: 'None'
   }
   properties: {
-    highAvailability: 'Enabled'
     minimumTlsVersion: '1.2'
+    publicNetworkAccess: 'Enabled'
   }
 }
 
 // ==========================================
 // Redis Database
 // ==========================================
-resource redisEnterpriseDatabase 'Microsoft.Cache/redisEnterprise/databases@2025-05-01-preview' = {
+resource redisEnterpriseDatabase 'Microsoft.Cache/redisEnterprise/databases@2025-07-01' = {
   parent: redisEnterprise
   name: 'default'
   properties: {
@@ -58,7 +55,7 @@ resource redisEnterpriseDatabase 'Microsoft.Cache/redisEnterprise/databases@2025
     clientProtocol: 'Encrypted'
     port: 10000
     clusteringPolicy: 'OSSCluster'
-    modules: []
+    evictionPolicy: 'NoEviction'
   }
 }
 
@@ -88,7 +85,7 @@ resource privateEndpoint 'Microsoft.Network/privateEndpoints@2024-10-01' = if (p
 }
 
 // ==========================================
-// Outputs
+// Outputs - USING DATABASE-LEVEL listKeys
 // ==========================================
 @description('The resource ID of the Redis Enterprise cluster')
 output redisId string = redisEnterprise.id
@@ -99,6 +96,6 @@ output redisName string = redisEnterprise.name
 @description('The hostname of the Redis Enterprise cluster')
 output hostName string = redisEnterprise.properties.hostName
 
-@description('The Redis connection string')
+@description('The Redis connection string - USING DATABASE listKeys')
 @secure()
 output connectionString string = '${redisEnterprise.properties.hostName}:${redisEnterpriseDatabase.properties.port},password=${redisEnterpriseDatabase.listKeys().primaryKey},ssl=True,abortConnect=False'
