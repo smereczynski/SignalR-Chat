@@ -32,7 +32,7 @@ var skuName = environment == 'prod' ? 'Balanced_B5' : (environment == 'staging' 
 // ==========================================
 // Azure Managed Redis Cluster
 // ==========================================
-resource redisEnterprise 'Microsoft.Cache/redisEnterprise@2025-05-01-preview' = {
+resource redisEnterprise 'Microsoft.Cache/redisEnterprise@2025-07-01' = {
   name: redisName
   location: location
   sku: {
@@ -42,15 +42,15 @@ resource redisEnterprise 'Microsoft.Cache/redisEnterprise@2025-05-01-preview' = 
     type: 'None'
   }
   properties: {
-    highAvailability: 'Enabled'
     minimumTlsVersion: '1.2'
+    publicNetworkAccess: 'Enabled'
   }
 }
 
 // ==========================================
 // Redis Database
 // ==========================================
-resource redisEnterpriseDatabase 'Microsoft.Cache/redisEnterprise/databases@2025-05-01-preview' = {
+resource redisEnterpriseDatabase 'Microsoft.Cache/redisEnterprise/databases@2025-07-01' = {
   parent: redisEnterprise
   name: 'default'
   properties: {
@@ -58,7 +58,7 @@ resource redisEnterpriseDatabase 'Microsoft.Cache/redisEnterprise/databases@2025
     clientProtocol: 'Encrypted'
     port: 10000
     clusteringPolicy: 'OSSCluster'
-    modules: []
+    evictionPolicy: 'NoEviction'
   }
 }
 
