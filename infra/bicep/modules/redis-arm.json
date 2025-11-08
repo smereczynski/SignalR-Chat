@@ -127,7 +127,7 @@
       "metadata": {
         "description": "The Redis connection string"
       },
-      "value": "[format('{0}:{1},password={2},ssl=True,abortConnect=False', reference(resourceId('Microsoft.Cache/redisEnterprise', parameters('redisName')), '2025-07-01').hostName, reference(resourceId('Microsoft.Cache/redisEnterprise/databases', parameters('redisName'), 'default'), '2025-07-01').port, listKeys(resourceId('Microsoft.Cache/redisEnterprise', parameters('redisName')), '2025-07-01').primaryKey)]"
+      "value": "[format('{0}:{1},password={2},ssl=True,abortConnect=False', reference(resourceId('Microsoft.Cache/redisEnterprise', parameters('redisName')), '2025-07-01').hostName, reference(resourceId('Microsoft.Cache/redisEnterprise/databases', parameters('redisName'), 'default'), '2025-07-01').port, listKeys(resourceId('Microsoft.Cache/redisEnterprise/databases', parameters('redisName'), 'default'), '2025-07-01').primaryKey)]"
     }
   }
 }

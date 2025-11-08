@@ -6,11 +6,12 @@ This module uses a **pure ARM template** (array-based) instead of Bicep due to a
 
 ### The Bug
 
-**Issue**: Redis Enterprise Resource Provider has TWO critical bugs:
+**Issue**: Redis Enterprise Resource Provider has THREE critical bugs:
 1. Cannot parse ARM templates with `"languageVersion": "2.0"`
-2. **`listKeys` operation requires `accessKeysAuthentication: "Enabled"` on database** (defaults to `Disabled` in API @2025-07-01)
+2. `listKeys` operation requires `accessKeysAuthentication: "Enabled"` on database (defaults to `Disabled` in API @2025-07-01)
+3. **Cluster-level `listKeys` endpoint is BROKEN** - must use database-level endpoint instead
 
-**Affected API Versions**: ALL (including @2024-10-01, @2025-07-01)  
+**Affected API Versions**: ALL (including @2020-10-01-preview through @2025-07-01)  
 **Error Messages**: 
 - `"The localPath field is required."` (misleading - this property doesn't exist)
 - `"The ListKeys operation is not supported when access keys are disabled."`
@@ -18,6 +19,7 @@ This module uses a **pure ARM template** (array-based) instead of Bicep due to a
 **Root Causes**:
 1. When Bicep modules use outputs with symbolic name references (e.g., `redisEnterprise.properties.hostName`), Bicep compiles to Language Version 2.0 format where resources are stored as an object instead of an array. The Redis Enterprise Resource Provider cannot parse this format.
 2. API @2025-07-01 changed the default for `accessKeysAuthentication` from `Enabled` to `Disabled`, breaking `listKeys` operations unless explicitly set to `Enabled`.
+3. **Cluster-level listKeys endpoint (`/redisEnterprise/{name}/listKeys`) is completely broken**. The correct endpoint is `/redisEnterprise/{name}/databases/{dbName}/listKeys`.
 
 ### Evidence
 
