@@ -244,66 +244,15 @@ jobs:
           
           echo "✅ Deployment completed successfully!"
           echo "🌐 App URL: $APP_URL"
-      
-      - name: Get Connection Strings
-        if: github.event.inputs.action == 'deploy'
-        id: connection-strings
-        run: |
-          echo "::group::Fetching Connection Strings"
-          
-          # Get Cosmos DB connection string
-          COSMOS_NAME=$(az cosmosdb list \
-            --resource-group ${{ env.RESOURCE_GROUP }} \
-            --query "[0].name" -o tsv)
-          
-          COSMOS_CONN_STRING=$(az cosmosdb keys list \
-            --resource-group ${{ env.RESOURCE_GROUP }} \
-            --name $COSMOS_NAME \
-            --type connection-strings \
-            --query "connectionStrings[0].connectionString" -o tsv)
-          
-          echo "::add-mask::$COSMOS_CONN_STRING"
-          echo "cosmos_connection_string=$COSMOS_CONN_STRING" >> $GITHUB_OUTPUT
-          
-          echo "✅ Connection strings retrieved"
-          echo "::endgroup::"
-      
-      - name: Seed Database
-        if: github.event.inputs.action == 'deploy'
-        env:
-          Cosmos__ConnectionString: ${{ steps.connection-strings.outputs.cosmos_connection_string }}
-        run: |
-          echo "::group::Seeding Database"
-          
-          # Validate that Chat.Web directory exists
-          if [ ! -d "src/Chat.Web" ]; then
-            echo "::error::Chat.Web directory not found at src/Chat.Web"
-            echo "Current directory: $(pwd)"
-            echo "Directory listing:"
-            ls -la
-            exit 1
-          fi
-          
-          echo "✅ Chat.Web directory validated: src/Chat.Web"
-          
-          # Dry run first
-          dotnet run --project tools/Chat.DataSeed -- \
-            --environment ${{ env.ENVIRONMENT }} \
-            --dry-run
-          
-          # Actual seeding
-          dotnet run --project tools/Chat.DataSeed -- \
-            --environment ${{ env.ENVIRONMENT }}
-          
-          echo "✅ Database seeded successfully"
-          echo "::endgroup::"
+          echo "ℹ️  All connection strings configured in App Service during deployment"
       
       - name: Post-Deployment Validation
         if: github.event.inputs.action == 'deploy'
         run: |
           echo "::group::Validating Deployment"
           
-          # Wait for App Service to be ready
+          # Wait for App Service to be ready and database seeding to complete
+          echo "ℹ️  Initial database seeding happens automatically during first app startup"
           sleep 30
           
           APP_URL="${{ steps.deploy.outputs.app_url }}"
@@ -313,9 +262,10 @@ jobs:
           
           if [ "$HTTP_STATUS" = "200" ]; then
             echo "✅ Health check passed: $APP_URL/health"
+            echo "✅ Database seeding completed during app startup"
           else
             echo "⚠️  Health check returned status: $HTTP_STATUS"
-            echo "App may still be starting up. Check Azure Portal for details."
+            echo "App may still be starting up or seeding data. Check Azure Portal for details."
           fi
           
           echo "::endgroup::"
