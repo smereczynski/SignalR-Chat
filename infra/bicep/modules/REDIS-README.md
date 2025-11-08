@@ -6,11 +6,18 @@ This module uses a **pure ARM template** (array-based) instead of Bicep due to a
 
 ### The Bug
 
-**Issue**: Redis Enterprise Resource Provider cannot parse ARM templates with `"languageVersion": "2.0"`  
-**Affected API Versions**: ALL (including @2024-10-01, @2025-05-01-preview)  
-**Error Message**: `"The localPath field is required."` (misleading - this property doesn't exist in the schema)
+**Issue**: Redis Enterprise Resource Provider has TWO critical bugs:
+1. Cannot parse ARM templates with `"languageVersion": "2.0"`
+2. **`listKeys` operation requires `accessKeysAuthentication: "Enabled"` on database** (defaults to `Disabled` in API @2025-07-01)
 
-**Root Cause**: When Bicep modules use outputs with symbolic name references (e.g., `redisEnterprise.properties.hostName`), Bicep compiles to Language Version 2.0 format where resources are stored as an object instead of an array. The Redis Enterprise Resource Provider cannot parse this format.
+**Affected API Versions**: ALL (including @2024-10-01, @2025-07-01)  
+**Error Messages**: 
+- `"The localPath field is required."` (misleading - this property doesn't exist)
+- `"The ListKeys operation is not supported when access keys are disabled."`
+
+**Root Causes**:
+1. When Bicep modules use outputs with symbolic name references (e.g., `redisEnterprise.properties.hostName`), Bicep compiles to Language Version 2.0 format where resources are stored as an object instead of an array. The Redis Enterprise Resource Provider cannot parse this format.
+2. API @2025-07-01 changed the default for `accessKeysAuthentication` from `Enabled` to `Disabled`, breaking `listKeys` operations unless explicitly set to `Enabled`.
 
 ### Evidence
 
@@ -38,15 +45,16 @@ This module uses a **pure ARM template** (array-based) instead of Bicep due to a
 
 ### Template Details
 
-**API Version**: `2024-10-01` (latest stable compatible with ARM array format)
+**API Version**: `2025-07-01` (latest stable)
 
 **Features**:
 - ✅ Redis Enterprise cluster
 - ✅ Default database (port 10000)
 - ✅ Private endpoint support
 - ✅ Environment-based SKU (B1/B3/B5)
-- ❌ High Availability (not in @2024-10-01 schema)
-- ❌ Public Network Access control (not in @2024-10-01 schema)
+- ✅ Public Network Access control (`publicNetworkAccess: "Enabled"` - required in @2025-07-01)
+- ✅ **Access Keys Authentication** (`accessKeysAuthentication: "Enabled"` - CRITICAL for listKeys)
+- ❌ High Availability (property exists but causes Language Version 2.0 compilation issues)
 
 ### Usage
 

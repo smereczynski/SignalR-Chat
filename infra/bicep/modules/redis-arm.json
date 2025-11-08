@@ -62,6 +62,7 @@
       "apiVersion": "2025-07-01",
       "name": "[format('{0}/{1}', parameters('redisName'), 'default')]",
       "properties": {
+        "accessKeysAuthentication": "Enabled",
         "clientProtocol": "Encrypted",
         "port": 10000,
         "clusteringPolicy": "OSSCluster",
