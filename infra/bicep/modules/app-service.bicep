@@ -175,27 +175,27 @@ resource webApp 'Microsoft.Web/sites@2024-11-01' = {
           value: environment == 'prod' ? 'Production' : (environment == 'staging' ? 'Production' : 'Development')
         }
         {
-          name: 'Cosmos__Database'
+          name: 'Cosmos:Database'
           value: 'chat'
         }
         {
-          name: 'Cosmos__MessagesContainer'
+          name: 'Cosmos:MessagesContainer'
           value: 'messages'
         }
         {
-          name: 'Cosmos__RoomsContainer'
+          name: 'Cosmos:RoomsContainer'
           value: 'rooms'
         }
         {
-          name: 'Cosmos__UsersContainer'
+          name: 'Cosmos:UsersContainer'
           value: 'users'
         }
         {
-          name: 'Acs__EmailFrom'
+          name: 'Acs:EmailFrom'
           value: 'doNotReply@${split(split(acsConnectionString, 'endpoint=https://')[1], '.')[0]}.azurecomm.net'
         }
         {
-          name: 'Acs__SmsFrom'
+          name: 'Acs:SmsFrom'
           value: 'TRANSLATOR'
         }
         {
@@ -207,7 +207,7 @@ resource webApp 'Microsoft.Web/sites@2024-11-01' = {
           value: '7'
         }
         {
-          name: 'Testing__InMemory'
+          name: 'Testing:InMemory'
           value: 'false'
         }
       ]
