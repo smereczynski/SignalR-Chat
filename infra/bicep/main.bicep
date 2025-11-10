@@ -97,6 +97,7 @@ module cosmosDb './modules/cosmos-db.bicep' = {
     databaseName: 'chat'
     privateEndpointSubnetId: networking.outputs.privateEndpointsSubnetId
     privateEndpointStaticIp: cosmosPrivateIp
+    logAnalyticsWorkspaceId: monitoring.outputs.logAnalyticsWorkspaceId
   }
 }
 
@@ -113,6 +114,7 @@ module redis './modules/redis.bicep' = {
     environment: environment
     privateEndpointSubnetId: networking.outputs.privateEndpointsSubnetId
     privateEndpointStaticIp: redisPrivateIp
+    logAnalyticsWorkspaceId: monitoring.outputs.logAnalyticsWorkspaceId
   }
 }
 
@@ -130,6 +132,7 @@ module signalR './modules/signalr.bicep' = {
     allowedOrigins: [
       appServiceUrl
     ]
+    logAnalyticsWorkspaceId: monitoring.outputs.logAnalyticsWorkspaceId
   }
 }
 
@@ -141,6 +144,7 @@ module acs './modules/communication.bicep' = {
   params: {
     acsName: 'acs-${baseName}-${environment}'
     dataLocation: acsDataLocation
+    logAnalyticsWorkspaceId: monitoring.outputs.logAnalyticsWorkspaceId
   }
 }
 
@@ -160,6 +164,7 @@ module appService './modules/app-service.bicep' = {
     redisConnectionString: redis.outputs.connectionString
     signalRConnectionString: signalR.outputs.connectionString
     acsConnectionString: acs.outputs.connectionString
+    logAnalyticsWorkspaceId: monitoring.outputs.logAnalyticsWorkspaceId
   }
 }
 
