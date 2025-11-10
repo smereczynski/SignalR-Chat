@@ -233,7 +233,25 @@ namespace Chat.Web
                 {
                     cosmosOpts.MessagesTtlSeconds = ttlParsed;
                 }
-                services.AddSingleton(new CosmosClients(cosmosOpts));
+                // Initialize Cosmos DB clients with logging
+                services.AddSingleton(sp =>
+                {
+                    var logger = sp.GetRequiredService<ILogger<CosmosClients>>();
+                    try
+                    {
+                        logger.LogInformation("Initializing Cosmos DB clients for database '{Database}' with containers: Users={Users}, Rooms={Rooms}, Messages={Messages}",
+                            cosmosOpts.Database, cosmosOpts.UsersContainer, cosmosOpts.RoomsContainer, cosmosOpts.MessagesContainer);
+                        var clients = new CosmosClients(cosmosOpts);
+                        logger.LogInformation("Cosmos DB clients initialized successfully");
+                        return clients;
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogError(ex, "Failed to initialize Cosmos DB clients. ConnectionString configured: {HasConnectionString}, Database: {Database}",
+                            !string.IsNullOrWhiteSpace(cosmosOpts.ConnectionString), cosmosOpts.Database);
+                        throw;
+                    }
+                });
                 services.AddSingleton<IUsersRepository, CosmosUsersRepository>();
                 services.AddSingleton<IRoomsRepository, CosmosRoomsRepository>();
                 services.AddSingleton<IMessagesRepository, CosmosMessagesRepository>();
@@ -248,12 +266,52 @@ namespace Chat.Web
                     ?? Configuration["Redis:ConnectionString"];
                 redisConn = ConfigurationGuards.Require(redisConn, "Redis connection string");
                 
-                // Configure Redis with shorter timeouts for multi-instance scenarios
+                // Configure Redis with shorter timeouts for multi-instance scenarios and logging
                 var redisConfig = ConfigurationOptions.Parse(redisConn);
                 redisConfig.ConnectTimeout = 5000; // 5 seconds
                 redisConfig.SyncTimeout = 5000;
                 redisConfig.AbortOnConnectFail = false; // Don't fail startup if Redis is temporarily unavailable
-                services.AddSingleton<IConnectionMultiplexer>(sp => ConnectionMultiplexer.Connect(redisConfig));
+                
+                services.AddSingleton<IConnectionMultiplexer>(sp =>
+                {
+                    var logger = sp.GetRequiredService<ILogger<Startup>>();
+                    try
+                    {
+                        logger.LogInformation("Connecting to Redis at {Endpoints} (SSL: {UseSsl}, Timeout: {ConnectTimeout}ms)",
+                            string.Join(", ", redisConfig.EndPoints.Select(ep => ep.ToString())),
+                            redisConfig.Ssl,
+                            redisConfig.ConnectTimeout);
+                        
+                        var mux = ConnectionMultiplexer.Connect(redisConfig);
+                        
+                        // Log connection events
+                        mux.ConnectionFailed += (sender, args) =>
+                            logger.LogError("Redis connection failed: {EndPoint}, FailureType: {FailureType}, Exception: {Exception}",
+                                args.EndPoint, args.FailureType, args.Exception?.Message);
+                        
+                        mux.ConnectionRestored += (sender, args) =>
+                            logger.LogInformation("Redis connection restored: {EndPoint}", args.EndPoint);
+                        
+                        mux.ErrorMessage += (sender, args) =>
+                            logger.LogError("Redis error message: {EndPoint}, Message: {Message}", args.EndPoint, args.Message);
+                        
+                        mux.InternalError += (sender, args) =>
+                            logger.LogError(args.Exception, "Redis internal error: {EndPoint}", args.EndPoint);
+                        
+                        logger.LogInformation("Successfully connected to Redis. Status: {Status}, Endpoints: {Endpoints}",
+                            mux.IsConnected ? "Connected" : "Disconnected",
+                            string.Join(", ", mux.GetEndPoints().Select(ep => ep.ToString())));
+                        
+                        return mux;
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogError(ex, "Failed to connect to Redis. Endpoints: {Endpoints}, SSL: {UseSsl}",
+                            string.Join(", ", redisConfig.EndPoints.Select(ep => ep.ToString())),
+                            redisConfig.Ssl);
+                        throw;
+                    }
+                });
                 services.AddSingleton<IOtpStore, RedisOtpStore>();
                 services.AddSingleton<Services.IPresenceTracker, Services.RedisPresenceTracker>();
 
@@ -488,6 +546,9 @@ namespace Chat.Web
                 }
             }
 
+            // Global exception handler with comprehensive logging (all environments)
+            app.UseMiddleware<GlobalExceptionHandlerMiddleware>();
+            
             if (env.IsDevelopment())
             {
                 app.UseDeveloperExceptionPage();

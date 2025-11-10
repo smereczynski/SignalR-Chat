@@ -36,6 +36,10 @@ namespace Chat.Web
             var isDevelopment = string.Equals(envName, "Development", StringComparison.OrdinalIgnoreCase);
             var loggerConfig = new LoggerConfiguration()
                 .MinimumLevel.Override("Microsoft", isDevelopment ? LogEventLevel.Information : LogEventLevel.Warning)
+                .MinimumLevel.Override("Microsoft.Azure.Cosmos", LogEventLevel.Information) // Always log Cosmos operations
+                .MinimumLevel.Override("StackExchange.Redis", LogEventLevel.Information) // Always log Redis operations
+                .MinimumLevel.Override("Azure.Core", isDevelopment ? LogEventLevel.Information : LogEventLevel.Warning)
+                .MinimumLevel.Override("Azure.Messaging", isDevelopment ? LogEventLevel.Information : LogEventLevel.Warning)
                 .MinimumLevel.Is(isDevelopment ? LogEventLevel.Debug : LogEventLevel.Information)
                 .Enrich.WithEnvironmentName()
                 .Enrich.WithMachineName()
