@@ -261,6 +261,14 @@ namespace Chat.Web
                 services.AddHealthChecks()
                     .AddCheck<Chat.Web.Health.RedisHealthCheck>("redis", tags: new[] { "ready" }, timeout: TimeSpan.FromSeconds(3))
                     .AddCheck<Chat.Web.Health.CosmosHealthCheck>("cosmos", tags: new[] { "ready" }, timeout: TimeSpan.FromSeconds(5));
+                
+                // Register health check publisher for Application Insights logging
+                services.AddSingleton<IHealthCheckPublisher, Chat.Web.Health.ApplicationInsightsHealthCheckPublisher>();
+                services.Configure<HealthCheckPublisherOptions>(options =>
+                {
+                    options.Delay = TimeSpan.FromSeconds(2); // Initial delay before first publish
+                    options.Period = TimeSpan.FromSeconds(30); // Publish results every 30 seconds
+                });
             }
             
             // OTP sender: always use console mock in test mode, otherwise prefer ACS if configured
