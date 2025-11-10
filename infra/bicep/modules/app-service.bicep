@@ -88,9 +88,8 @@ resource appServicePlan 'Microsoft.Web/serverfarms@2024-11-01' = {
     tier: skuConfig.tier
     capacity: skuConfig.capacity
   }
-  kind: 'linux'
+  kind: 'windows'
   properties: {
-    reserved: true
     zoneRedundant: skuConfig.zoneRedundant
   }
 }
@@ -101,7 +100,7 @@ resource appServicePlan 'Microsoft.Web/serverfarms@2024-11-01' = {
 resource webApp 'Microsoft.Web/sites@2024-11-01' = {
   name: appName
   location: location
-  kind: 'app,linux'
+  kind: 'app'
   properties: {
     serverFarmId: appServicePlan.id
     httpsOnly: true
@@ -115,7 +114,6 @@ resource webApp 'Microsoft.Web/sites@2024-11-01' = {
       contentShareTraffic: true
     }
     siteConfig: {
-      linuxFxVersion: 'DOTNETCORE|9.0'
       netFrameworkVersion: 'v9.0'
       alwaysOn: true
       http20Enabled: true
