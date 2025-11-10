@@ -42,17 +42,22 @@ param networkingResourceGroupName string
 // Variables - Static IP Allocation
 // ==========================================
 // Calculate static IPs for private endpoints in the Private Endpoints subnet
-// Azure reserves the first 4 IPs (.0, .1, .2, .3), so we start from .4
-// Format: Extract base IP from subnet prefix and add offset
+// Azure reserves the first 4 IPs (.0, .1, .2, .3) in each subnet, so we start from subnet_base + 4
+// Format: Extract subnet IP (before CIDR), parse last octet, add offset (4, 5, 6, 7)
 
-// Helper: Parse subnet prefix to get base IP (e.g., "10.0.1.0/27" -> "10.0.1")
-var peSubnetBase = substring(privateEndpointsSubnetPrefix, 0, lastIndexOf(privateEndpointsSubnetPrefix, '.'))
+// Step 1: Extract subnet IP without CIDR (e.g., "10.50.8.32/27" -> "10.50.8.32")
+var peSubnetIp = substring(privateEndpointsSubnetPrefix, 0, indexOf(privateEndpointsSubnetPrefix, '/'))
 
-// Static IPs for each service (deterministic allocation)
-var cosmosPrivateIp = '${peSubnetBase}.4'
-var redisPrivateIp = '${peSubnetBase}.5'
-var signalRPrivateIp = '${peSubnetBase}.6'
-var appServicePrivateIp = '${peSubnetBase}.7'
+// Step 2: Extract base IP (first 3 octets) and last octet
+var peSubnetLastDotIndex = lastIndexOf(peSubnetIp, '.')
+var peSubnetBase = substring(peSubnetIp, 0, peSubnetLastDotIndex)
+var peSubnetLastOctet = int(substring(peSubnetIp, peSubnetLastDotIndex + 1, length(peSubnetIp) - peSubnetLastDotIndex - 1))
+
+// Step 3: Calculate static IPs by adding offset to subnet's last octet
+var cosmosPrivateIp = '${peSubnetBase}.${peSubnetLastOctet + 4}'
+var redisPrivateIp = '${peSubnetBase}.${peSubnetLastOctet + 5}'
+var signalRPrivateIp = '${peSubnetBase}.${peSubnetLastOctet + 6}'
+var appServicePrivateIp = '${peSubnetBase}.${peSubnetLastOctet + 7}'
 
 // App Service URL (deterministic, constructed before deployment)
 var appServiceUrl = 'https://${baseName}-${environment}-${shortLocation}.azurewebsites.net'
