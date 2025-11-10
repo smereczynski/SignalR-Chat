@@ -38,19 +38,6 @@ resource nsgAppService 'Microsoft.Network/networkSecurityGroups@2024-10-01' = {
   location: location
   properties: {
     securityRules: [
-      {
-        name: 'AllowHttpsOutbound'
-        properties: {
-          protocol: 'Tcp'
-          sourcePortRange: '*'
-          destinationPortRange: '443'
-          sourceAddressPrefix: 'VirtualNetwork'
-          destinationAddressPrefix: '*'
-          access: 'Allow'
-          priority: 100
-          direction: 'Outbound'
-        }
-      }
     ]
   }
 }
@@ -63,19 +50,6 @@ resource privateEndpointsNsg 'Microsoft.Network/networkSecurityGroups@2024-10-01
   location: location
   properties: {
     securityRules: [
-      {
-        name: 'AllowVnetInbound'
-        properties: {
-          protocol: '*'
-          sourcePortRange: '*'
-          destinationPortRange: '*'
-          sourceAddressPrefix: 'VirtualNetwork'
-          destinationAddressPrefix: 'VirtualNetwork'
-          access: 'Allow'
-          priority: 100
-          direction: 'Inbound'
-        }
-      }
     ]
   }
 }
@@ -84,7 +58,7 @@ resource privateEndpointsNsg 'Microsoft.Network/networkSecurityGroups@2024-10-01
 // Route Table for App Service Subnet
 // ==========================================
 resource appServiceRouteTable 'Microsoft.Network/routeTables@2024-10-01' = {
-  name: 'rt-${vnetName}-appservice'
+  name: 'rt-${appServiceSubnetName}'
   location: location
   properties: {
     routes: [
@@ -104,7 +78,7 @@ resource appServiceRouteTable 'Microsoft.Network/routeTables@2024-10-01' = {
 // Route Table for Private Endpoints Subnet
 // ==========================================
 resource privateEndpointsRouteTable 'Microsoft.Network/routeTables@2024-10-01' = {
-  name: 'rt-${vnetName}-pe'
+  name: 'rt-${privateEndpointsSubnetName}'
   location: location
   properties: {
     routes: []
