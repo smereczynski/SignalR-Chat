@@ -42,8 +42,8 @@ The infrastructure deploys the following Azure resources:
 | **Azure Cache for Redis** | Session storage and caching | dev, staging, prod |
 | **Azure SignalR Service** | Real-time communication hub | dev, staging, prod |
 | **Azure Communication Services** | Email and SMS capabilities | dev, staging, prod |
-| **App Service Plan** | Web application hosting | dev, staging, prod |
-| **App Service (Web App)** | SignalR Chat application | dev, staging, prod |
+| **App Service Plan** | Web application hosting (Windows, .NET 9.0) | dev, staging, prod |
+| **App Service (Web App)** | SignalR Chat application with VNet integration and outbound routing | dev, staging, prod |
 
 ### Network Architecture
 
@@ -53,6 +53,13 @@ Each environment has:
   1. **App Service Subnet**: Delegated to `Microsoft.Web/serverFarms` for VNet integration
   2. **Private Endpoints Subnet**: For secure Azure service connections
 
+- **VNet Integration & Outbound Routing**:
+  - App Service connected to VNet via App Service subnet
+  - `outboundVnetRouting.allTraffic = true` configured (routes ALL outbound traffic through VNet)
+  - Required for Windows App Services to use private endpoints
+  - Custom DNS configured for private endpoint resolution (hub DNS forwarder)
+  - All Azure service connections use private IP addresses (no public internet traffic)
+
 - **Network Security Groups** (NSGs):
   - App Service NSG: Allows HTTPS (443), HTTP (80) inbound
   - Private Endpoints NSG: Restrictive rules for internal traffic
@@ -61,7 +68,7 @@ Each environment has:
 
 **Cosmos DB Containers**:
 1. **messages** - Chat messages (partition key: `/roomId`)
-2. **users** - User profiles (partition key: `/id`, unique constraint on `/phoneNumber`)
+2. **users** - User profiles (partition key: `/userName`, unique constraint on `/phoneNumber`)
 3. **rooms** - Chat rooms (partition key: `/id`)
 
 **Consistency Level**: Session (balance of consistency, performance, availability)
