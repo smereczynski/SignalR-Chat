@@ -70,12 +70,7 @@ resource cosmosAccount 'Microsoft.DocumentDB/databaseAccounts@2024-11-15' = {
     enableAutomaticFailover: false
     enableMultipleWriteLocations: false
     publicNetworkAccess: privateEndpointSubnetId != '' ? 'Disabled' : 'Enabled'
-    networkAclBypass: 'AzureServices'
-    capabilities: environment == 'dev' ? [
-      {
-        name: 'EnableServerless'
-      }
-    ] : []
+    capabilities: []
   }
 }
 
@@ -88,6 +83,11 @@ resource database 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases@2024-11-15
   properties: {
     resource: {
       id: databaseName
+    }
+    options: {
+      autoscaleSettings: {
+        maxThroughput: environment == 'prod' ? 4000 : (environment == 'staging' ? 1000 : 400)
+      }
     }
   }
 }
