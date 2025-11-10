@@ -220,7 +220,7 @@ resource privateEndpoint 'Microsoft.Network/privateEndpoints@2024-10-01' = if (p
         properties: {
           privateIPAddress: privateEndpointStaticIp
           groupId: 'Sql'
-          memberName: 'Sql'
+          memberName: accountName
         }
       }
     ] : []
