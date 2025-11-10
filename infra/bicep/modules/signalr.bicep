@@ -103,7 +103,7 @@ resource privateEndpoint 'Microsoft.Network/privateEndpoints@2024-10-01' = if (p
         properties: {
           privateIPAddress: privateEndpointStaticIp
           groupId: 'signalr'
-          memberName: signalRName
+          memberName: 'signalr'
         }
       }
     ] : []

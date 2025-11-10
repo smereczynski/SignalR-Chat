@@ -49,7 +49,107 @@ BICEP_ACS_DATA_LOCATION              # ACS data location (e.g., Europe)
 - Azure SignalR Service (Standard_S1)
 - Azure Communication Services
 - Log Analytics Workspace + Application Insights
-- Private Endpoints in networking subnet (Cosmos DB, Redis, SignalR)
+- Private Endpoints in networking subnet (Cosmos DB, Redis, SignalR, App Service)
+
+### Private Endpoints DNS Configuration
+
+**⚠️ Important:** Private endpoints require **Private DNS zones** for proper name resolution. Without DNS configuration, applications will fail to connect to Azure services via private endpoints.
+
+**Required Private DNS Zones:**
+- Cosmos DB: `privatelink.documents.azure.com`
+- Redis: `privatelink.cache.azure.net`
+- SignalR: `privatelink.service.signalr.net`
+- App Service: `privatelink.azurewebsites.net`
+
+**Static IP Allocation Pattern:**
+
+Each private endpoint is assigned **deterministic static IP addresses** calculated from the Private Endpoints subnet prefix:
+
+| Service | IP Offset | Dev IPs (10.50.8.x) | Staging IPs (10.50.8.x) | Prod IPs (10.50.8.x) | Member Names |
+|---------|-----------|---------------------|-------------------------|----------------------|--------------|
+| Cosmos DB (ipconfig1) | +4 | .36 | .100 | .164 | `{accountName}` |
+| Cosmos DB (ipconfig2) | +5 | .37 | .101 | .165 | `{accountName}-{location}` |
+| Redis | +6 | .38 | .102 | .166 | `redisEnterprise` |
+| SignalR | +7 | .39 | .103 | .167 | `signalr` |
+| App Service | +8 | .40 | .104 | .168 | `sites` |
+
+**Multiple IP Configurations:**
+
+Only **Cosmos DB** uses multiple IP configurations to support regional endpoints:
+- **ipconfig1**: Primary global endpoint with static IP and account name memberName
+- **ipconfig2**: Regional endpoint with static IP and `{accountName}-{location}` memberName
+
+Redis, SignalR, and App Service each use a **single IP configuration** with generic memberNames.
+
+**DNS Zone Configuration Steps:**
+
+1. **Create Private DNS Zones** (one-time setup per Azure subscription):
+   ```bash
+   # Cosmos DB
+   az network private-dns zone create \
+     --resource-group rg-vnet-{baseName}-{env}-{shortLocation} \
+     --name privatelink.documents.azure.com
+
+   # Redis
+   az network private-dns zone create \
+     --resource-group rg-vnet-{baseName}-{env}-{shortLocation} \
+     --name privatelink.cache.azure.net
+
+   # SignalR
+   az network private-dns zone create \
+     --resource-group rg-vnet-{baseName}-{env}-{shortLocation} \
+     --name privatelink.service.signalr.net
+
+   # App Service
+   az network private-dns zone create \
+     --resource-group rg-vnet-{baseName}-{env}-{shortLocation} \
+     --name privatelink.azurewebsites.net
+   ```
+
+2. **Link DNS Zones to Virtual Network**:
+   ```bash
+   # Example for Cosmos DB (repeat for each zone)
+   az network private-dns link vnet create \
+     --resource-group rg-vnet-{baseName}-{env}-{shortLocation} \
+     --zone-name privatelink.documents.azure.com \
+     --name cosmos-dns-link \
+     --virtual-network vnet-{baseName}-{env}-{shortLocation} \
+     --registration-enabled false
+   ```
+
+3. **Private DNS Zone Groups** (auto-created with private endpoints):
+   - Azure automatically creates DNS A records for all IP configurations
+   - Each memberName gets its own A record pointing to the corresponding static IP
+   - Cosmos DB example: 
+     - `cdb-interpres-dev-plc.privatelink.documents.azure.com` → 10.50.8.36
+     - `cdb-interpres-dev-plc-polandcentral.privatelink.documents.azure.com` → 10.50.8.37
+   - Redis example: `redis-interpres-dev-plc.privatelink.cache.azure.net` → 10.50.8.38
+   - SignalR example: `sigr-interpres-dev-plc.privatelink.service.signalr.net` → 10.50.8.39
+   - App Service example: `app-interpres-dev-plc.privatelink.azurewebsites.net` → 10.50.8.40
+
+**Verification:**
+
+After deployment, verify DNS resolution from within the VNet:
+```bash
+# From a VM in the VNet
+nslookup cdb-{baseName}-{env}-{shortLocation}.documents.azure.com
+# Should resolve to private IP (e.g., 10.50.8.36 for primary, 10.50.8.37 for regional)
+
+nslookup redis-{baseName}-{env}-{shortLocation}.cache.azure.net
+# Should resolve to private IP (e.g., 10.50.8.38)
+
+nslookup sigr-{baseName}-{env}-{shortLocation}.service.signalr.net
+# Should resolve to private IP (e.g., 10.50.8.39)
+
+nslookup app-{baseName}-{env}-{shortLocation}.azurewebsites.net
+# Should resolve to private IP (e.g., 10.50.8.40)
+```
+
+**Important Notes:**
+- Private DNS zones should be created in the **networking resource group**
+- DNS zones can be shared across environments (dev/staging/prod) if using the same VNet
+- Without proper DNS configuration, services will attempt public endpoint access (which is disabled)
+- App Service uses the private endpoint for **outbound connections** to other Azure services
 
 ### 2. CI - Build and Test (`ci.yml`)
 **Triggers:**

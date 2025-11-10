@@ -26,8 +26,11 @@ param databaseName string = 'chat'
 @description('Subnet ID for private endpoint (optional)')
 param privateEndpointSubnetId string = ''
 
-@description('Static IP address for private endpoint (optional)')
-param privateEndpointStaticIp string = ''
+@description('Static IP address for private endpoint - ipconfig1 (optional)')
+param privateEndpointStaticIp1 string = ''
+
+@description('Static IP address for private endpoint - ipconfig2 (optional)')
+param privateEndpointStaticIp2 string = ''
 
 @description('Log Analytics Workspace ID for diagnostic logs')
 param logAnalyticsWorkspaceId string = ''
@@ -41,24 +44,15 @@ var consistencyPolicy = {
   maxStalenessPrefix: 100
 }
 
-var isProduction = environment == 'prod'
+// Zone redundancy: dev = false, staging/prod = true
+var isZoneRedundant = environment != 'dev'
 
-var locations = isProduction ? [
+// Single region deployment (polandcentral) for all environments
+var locations = [
   {
     locationName: location
     failoverPriority: 0
-    isZoneRedundant: true
-  }
-  {
-    locationName: location == 'polandcentral' ? 'germanywestcentral' : 'polandcentral'
-    failoverPriority: 1
-    isZoneRedundant: false
-  }
-] : [
-  {
-    locationName: location
-    failoverPriority: 0
-    isZoneRedundant: true
+    isZoneRedundant: isZoneRedundant
   }
 ]
 
@@ -73,11 +67,11 @@ resource cosmosAccount 'Microsoft.DocumentDB/databaseAccounts@2024-11-15' = {
     databaseAccountOfferType: 'Standard'
     consistencyPolicy: consistencyPolicy
     locations: locations
-    enableAutomaticFailover: isProduction
+    enableAutomaticFailover: false
     enableMultipleWriteLocations: false
     publicNetworkAccess: privateEndpointSubnetId != '' ? 'Disabled' : 'Enabled'
     networkAclBypass: 'AzureServices'
-    capabilities: !isProduction ? [
+    capabilities: environment == 'dev' ? [
       {
         name: 'EnableServerless'
       }
@@ -214,13 +208,21 @@ resource privateEndpoint 'Microsoft.Network/privateEndpoints@2024-10-01' = if (p
       }
     ]
     customNetworkInterfaceName: 'nic-pe-${accountName}'
-    ipConfigurations: privateEndpointStaticIp != '' ? [
+    ipConfigurations: privateEndpointStaticIp1 != '' ? [
       {
         name: 'ipconfig1'
         properties: {
-          privateIPAddress: privateEndpointStaticIp
+          privateIPAddress: privateEndpointStaticIp1
           groupId: 'Sql'
           memberName: accountName
+        }
+      }
+      {
+        name: 'ipconfig2'
+        properties: {
+          privateIPAddress: privateEndpointStaticIp2
+          groupId: 'Sql'
+          memberName: '${accountName}-${location}'
         }
       }
     ] : []

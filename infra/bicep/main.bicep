@@ -54,10 +54,15 @@ var peSubnetBase = substring(peSubnetIp, 0, peSubnetLastDotIndex)
 var peSubnetLastOctet = int(substring(peSubnetIp, peSubnetLastDotIndex + 1, length(peSubnetIp) - peSubnetLastDotIndex - 1))
 
 // Step 3: Calculate static IPs by adding offset to subnet's last octet
-var cosmosPrivateIp = '${peSubnetBase}.${peSubnetLastOctet + 4}'
-var redisPrivateIp = '${peSubnetBase}.${peSubnetLastOctet + 5}'
-var signalRPrivateIp = '${peSubnetBase}.${peSubnetLastOctet + 6}'
-var appServicePrivateIp = '${peSubnetBase}.${peSubnetLastOctet + 7}'
+// Cosmos DB: 2 IPs (global + regional endpoint)
+var cosmosPrivateIp1 = '${peSubnetBase}.${peSubnetLastOctet + 4}'
+var cosmosPrivateIp2 = '${peSubnetBase}.${peSubnetLastOctet + 5}'
+// Redis: 1 IP (generic endpoint only)
+var redisPrivateIp = '${peSubnetBase}.${peSubnetLastOctet + 6}'
+// SignalR: 1 IP (generic endpoint only)
+var signalRPrivateIp = '${peSubnetBase}.${peSubnetLastOctet + 7}'
+// App Service: 1 IP
+var appServicePrivateIp = '${peSubnetBase}.${peSubnetLastOctet + 8}'
 
 // App Service URL (deterministic, constructed before deployment)
 var appServiceUrl = 'https://${baseName}-${environment}-${shortLocation}.azurewebsites.net'
@@ -102,7 +107,8 @@ module cosmosDb './modules/cosmos-db.bicep' = {
     environment: environment
     databaseName: 'chat'
     privateEndpointSubnetId: networking.outputs.privateEndpointsSubnetId
-    privateEndpointStaticIp: cosmosPrivateIp
+    privateEndpointStaticIp1: cosmosPrivateIp1
+    privateEndpointStaticIp2: cosmosPrivateIp2
     logAnalyticsWorkspaceId: monitoring.outputs.logAnalyticsWorkspaceId
   }
 }
