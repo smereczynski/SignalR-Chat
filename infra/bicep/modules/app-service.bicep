@@ -108,8 +108,8 @@ resource webApp 'Microsoft.Web/sites@2024-11-01' = {
     publicNetworkAccess: 'Enabled'
     virtualNetworkSubnetId: vnetIntegrationSubnetId
     siteConfig: {
-      netFrameworkVersion: 'v9.0'
       vnetRouteAllEnabled: true
+      netFrameworkVersion: 'v9.0'
       alwaysOn: true
       http20Enabled: true
       minTlsVersion: '1.2'
