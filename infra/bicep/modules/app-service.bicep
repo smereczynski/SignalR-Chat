@@ -282,7 +282,7 @@ resource privateEndpoint 'Microsoft.Network/privateEndpoints@2023-05-01' = if (p
         properties: {
           privateIPAddress: privateEndpointStaticIp
           groupId: 'sites'
-          memberName: appName
+          memberName: 'sites'
         }
       }
     ] : []
