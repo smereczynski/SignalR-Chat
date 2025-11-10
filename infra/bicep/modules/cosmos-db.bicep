@@ -86,7 +86,7 @@ resource database 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases@2024-11-15
     }
     options: {
       autoscaleSettings: {
-        maxThroughput: environment == 'prod' ? 4000 : (environment == 'staging' ? 1000 : 400)
+        maxThroughput: environment == 'prod' ? 4000 : (environment == 'staging' ? 4000 : 1000)
       }
     }
   }
