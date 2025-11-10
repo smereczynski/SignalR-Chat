@@ -258,7 +258,7 @@ resource webAppDiagnostics 'Microsoft.Insights/diagnosticSettings@2021-05-01-pre
 // Private Endpoint
 // ==========================================
 resource privateEndpoint 'Microsoft.Network/privateEndpoints@2023-05-01' = if (privateEndpointSubnetId != '') {
-  name: '${appName}-pe'
+  name: 'pe-${appName}'
   location: location
   properties: {
     subnet: {
@@ -266,7 +266,7 @@ resource privateEndpoint 'Microsoft.Network/privateEndpoints@2023-05-01' = if (p
     }
     privateLinkServiceConnections: [
       {
-        name: '${appName}-pe-connection'
+        name: 'pe-${appName}-connection'
         properties: {
           privateLinkServiceId: webApp.id
           groupIds: [
@@ -275,6 +275,7 @@ resource privateEndpoint 'Microsoft.Network/privateEndpoints@2023-05-01' = if (p
         }
       }
     ]
+    customNetworkInterfaceName: 'nic-pe-${appName}'
     ipConfigurations: privateEndpointStaticIp != '' ? [
       {
         name: 'ipconfig1'
