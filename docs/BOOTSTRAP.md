@@ -191,6 +191,42 @@ The application now automatically seeds initial data (rooms and users) during st
 - Logs all operations for audit trail
 - Allows app to start even if seeding fails
 
+### Local Development Configuration
+
+When running locally, create a `.env.local` file in the project root (already in `.gitignore`):
+
+```bash
+# Azure MCP Authentication (for tooling)
+export AZURE_SUBSCRIPTION_ID="your-subscription-id"
+export AZURE_TENANT_ID="your-tenant-id"
+
+# Microsoft Entra ID (OpenID Connect)
+AzureAd__Instance=https://login.microsoftonline.com/
+AzureAd__Domain=your-domain.onmicrosoft.com
+AzureAd__TenantId=your-tenant-id
+AzureAd__ClientId=your-client-id
+AzureAd__CallbackPath=/signin-oidc
+
+# Cosmos DB
+Cosmos__ConnectionString='AccountEndpoint=https://...'
+Cosmos__Database=chat
+Cosmos__UsersContainer=users
+Cosmos__RoomsContainer=rooms
+Cosmos__MessagesContainer=messages
+
+# Redis (StackExchange.Redis)
+Redis__ConnectionString='your-redis-connection-string'
+
+# Azure SignalR (optional for local dev)
+# Azure__SignalR__ConnectionString='Endpoint=https://...'
+```
+
+The `.env.local` file is automatically loaded by VS Code tasks when running the application. You can also manually load it:
+
+```bash
+source .env.local
+```
+
 ### What Gets Seeded
 
 **Rooms** (created directly in Cosmos):
@@ -297,11 +333,15 @@ BICEP_ACS_DATA_LOCATION="Europe"
 #    - Go to Actions → Infrastructure Deployment
 #    - Run workflow → Select 'dev' environment → Action: deploy
 
-# 3. After deployment completes, configure local app to use deployed resources
-# Create .env.local file in project root with connection strings from deployment output
+# 3. After deployment completes, get connection strings from Azure Portal
+#    Copy .env.local.example to .env.local and fill in the values
 
 # 4. Run application locally (database will auto-seed on first startup)
-bash -lc 'set -a; [ -f .env.local ] && source .env.local; export ASPNETCORE_ENVIRONMENT=Development; dotnet run --project ./src/Chat.Web --urls=https://localhost:5099'
+#    The .env.local file will be automatically loaded by the VS Code task:
+dotnet run --project ./src/Chat.Web --urls=https://localhost:5099
+
+# Or use VS Code task: "Run Chat (Azure local env)" which automatically
+# loads .env.local via: bash -lc 'set -a; [ -f .env.local ] && source .env.local; ...'
 ```
 
 **Benefits**:
@@ -310,11 +350,13 @@ bash -lc 'set -a; [ -f .env.local ] && source .env.local; export ASPNETCORE_ENVI
 - Network isolation and security (VNet integration)
 - Realistic performance characteristics
 - **Automatic database seeding** on first app startup
+- **Auto-loading** of environment variables via `.env.local`
 
 **Prerequisites**:
 - Azure subscription
 - GitHub repository with Actions enabled
 - Azure credentials configured in GitHub
+- Create `.env.local` from `.env.local.example` template
 - ~$50-100/month for dev resources
 
 #### Option B: In-Memory Mode (Quickest, Limited Features)
