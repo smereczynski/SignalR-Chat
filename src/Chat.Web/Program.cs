@@ -31,23 +31,26 @@ namespace Chat.Web
             // Determine OTLP protocol from endpoint: default to gRPC unless port 4318 is used
             var useHttpProto = !string.IsNullOrWhiteSpace(otlpEndpoint) && otlpEndpoint.Contains(":4318", StringComparison.Ordinal);
 
+            // Development: verbose logging (Debug level) for easier troubleshooting
+            // Production: standard logging (Information level) to reduce noise
+            var isDevelopment = string.Equals(envName, "Development", StringComparison.OrdinalIgnoreCase);
             var loggerConfig = new LoggerConfiguration()
-                .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
-                .MinimumLevel.Information()
+                .MinimumLevel.Override("Microsoft", isDevelopment ? LogEventLevel.Information : LogEventLevel.Warning)
+                .MinimumLevel.Is(isDevelopment ? LogEventLevel.Debug : LogEventLevel.Information)
                 .Enrich.WithEnvironmentName()
                 .Enrich.WithMachineName()
                 .Enrich.WithThreadId()
                 .WriteTo.Console(outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {SourceContext} {Message:lj} {Properties:j}{NewLine}{Exception}");
 
-            // In Production, write to Application Insights if connection string available
-            if (string.Equals(envName, "Production", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(aiConnectionString))
+            // Write to Application Insights if connection string available (both Dev and Production)
+            if (!string.IsNullOrWhiteSpace(aiConnectionString))
             {
                 var telemetryConfig = TelemetryConfiguration.CreateDefault();
                 telemetryConfig.ConnectionString = aiConnectionString;
                 loggerConfig = loggerConfig.WriteTo.ApplicationInsights(telemetryConfig, TelemetryConverter.Traces);
             }
-            // Otherwise, if OTLP endpoint configured, use OpenTelemetry sink
-            else if (!string.IsNullOrWhiteSpace(otlpEndpoint))
+            // If OTLP endpoint configured, also use OpenTelemetry sink
+            if (!string.IsNullOrWhiteSpace(otlpEndpoint))
             {
                 loggerConfig = loggerConfig.WriteTo.OpenTelemetry(options =>
                 {
