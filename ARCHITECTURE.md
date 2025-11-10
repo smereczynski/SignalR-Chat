@@ -47,8 +47,8 @@ The application uses **Azure Bicep** templates for reproducible infrastructure d
 | **Azure SignalR Service** | Real-time communication hub | Standard_S1 for all environments (1/1/5 units) (deployed in application RG) |
 | **Azure Communication Services** | Email and SMS capabilities | Global resource, Europe data location (deployed in application RG) |
 | **App Service Plan** | Web application hosting | P0V4 PremiumV4 Windows for all environments (deployed in application RG) |
-| **App Service (Web App)** | SignalR Chat application | .NET 9.0 runtime, VNet integrated, HTTPS-only, TLS 1.2, identity disabled (deployed in application RG) |
-| **Private Endpoints** | Secure connections to Cosmos DB, Redis, SignalR | Deployed in private endpoints subnet (cross-RG references) |
+| **App Service (Web App)** | SignalR Chat application | .NET 9.0 runtime, Windows OS, VNet integrated with outbound routing, HTTPS-only, TLS 1.2, identity disabled (deployed in application RG) |
+| **Private Endpoints** | Secure connections to Cosmos DB, Redis, SignalR | Deployed in private endpoints subnet with DNS zone integration (cross-RG references) |
 
 ### Network Architecture (Critical Requirement)
 
@@ -99,6 +99,34 @@ Each environment has **TWO separate resource groups**:
 - Post-deployment validation (2 subnets check)
 - Database seeding after successful deployment
 - Optional teardown action for cleanup
+
+### VNet Integration and Private Endpoints
+
+The application uses **VNet integration with outbound traffic routing** to access Azure services through private endpoints instead of public internet:
+
+**App Service Configuration:**
+- **VNet Integration**: Connected to App Service subnet (delegated to Microsoft.Web/serverFarms)
+- **Outbound VNet Routing**: `outboundVnetRouting.allTraffic = true` (configured via Bicep)
+  - Routes ALL outbound traffic through the VNet (application, backup/restore, content share, image pull)
+  - Replaces deprecated `siteConfig.vnetRouteAllEnabled` property
+  - Required for Windows App Services to use private endpoints
+- **Custom DNS**: VNet configured with custom DNS server (hub DNS forwarder) for private endpoint resolution
+- **Result**: All connections to Cosmos DB, Redis, and SignalR use private IP addresses (10.x.x.x range)
+
+**Private Endpoint Configuration:**
+- **Cosmos DB**: Private endpoint in private endpoints subnet with static IPs (.36, .37)
+- **Redis**: Private endpoint with static IP (.38)
+- **SignalR**: Private endpoint with static IP (.39)
+- **DNS Integration**: Private endpoints use hub-managed private DNS zones
+  - Requires VNet link to hub private DNS zones (e.g., privatelink.documents.azure.com)
+  - Custom DNS server on VNet resolves private endpoint FQDNs to private IPs
+- **Network Policies**: `privateEndpointNetworkPolicies = Disabled` on both subnets
+
+**Security Benefits:**
+- No public internet exposure for backend service connections
+- Traffic stays within Azure backbone network
+- Cosmos DB firewall blocks all public internet access
+- Reduced attack surface and improved compliance posture
 
 **Environment Variables** (GitHub repository secrets/variables):
 All 7 parameters are configured per environment as GitHub variables:

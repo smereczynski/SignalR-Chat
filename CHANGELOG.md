@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **VNet Routing Configuration** (#TBD)
+  - Fixed App Service outbound traffic routing to use private endpoints instead of public internet
+  - Changed from deprecated `siteConfig.vnetRouteAllEnabled` to `outboundVnetRouting.allTraffic = true` (API version 2024-11-01)
+  - Required for Windows App Services to properly route traffic through VNet to private endpoints
+  - App now successfully connects to Cosmos DB, Redis, and SignalR via private IP addresses
+- **Cosmos DB Users Container Partition Key** (#TBD)
+  - Fixed partition key mismatch: changed from `/id` to `/userName` to match application expectations
+  - Resolves startup failures caused by partition key validation errors
+
 ### Added
 - **Infrastructure as Code Implementation**: Complete Azure Bicep templates for automated infrastructure deployment (#84)
   - ⚠️ **WARNING**: Bicep templates **NOT TESTED YET** - pending validation in dev/staging/prod environments
@@ -25,7 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - `redis.bicep`: Azure Managed Redis (Microsoft.Cache/redisEnterprise), Balanced_B1/B3/B5 SKUs, port 10000, private endpoint only
     - `signalr.bicep`: Azure SignalR Service Standard_S1 for all environments, network ACLs (dev: all traffic, staging/prod: ClientConnection only on public), private endpoint
     - `communication.bicep`: Azure Communication Services with Europe data location
-    - `app-service.bicep`: App Service Plan (P0V4 PremiumV4 Windows for all environments) + Web App (.NET 9.0 runtime) with VNet integration, dual access mode (public + private), connection strings configured by Bicep
+    - `app-service.bicep`: App Service Plan (P0V4 PremiumV4 Windows for all environments) + Web App (.NET 9.0 runtime, Windows OS) with VNet integration and outbound traffic routing, dual access mode (public + private), connection strings configured by Bicep
     - `main.bicep`: Main orchestration template with symbolic references, deterministic static IP allocation for private endpoints, no tags
   - **Networking Architecture**:
     - VNet with /26 CIDR block
