@@ -96,7 +96,14 @@ namespace Chat.Web.Repositories
 
         public CosmosClients(CosmosOptions options)
         {
-            Client = new CosmosClient(options.ConnectionString);
+            // Use Gateway mode for private endpoint compatibility
+            // Gateway mode uses HTTPS and respects DNS resolution for private endpoints
+            var clientOptions = new CosmosClientOptions
+            {
+                ConnectionMode = ConnectionMode.Gateway
+            };
+            
+            Client = new CosmosClient(options.ConnectionString, clientOptions);
             if (options.AutoCreate)
             {
                 Database = Client.CreateDatabaseIfNotExistsAsync(options.Database).GetAwaiter().GetResult();
