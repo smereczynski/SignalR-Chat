@@ -41,6 +41,7 @@ jobs:
       BICEP_APP_SERVICE_SUBNET_PREFIX: ${{ vars.BICEP_APP_SERVICE_SUBNET_PREFIX }}
       BICEP_PRIVATE_ENDPOINTS_SUBNET_PREFIX: ${{ vars.BICEP_PRIVATE_ENDPOINTS_SUBNET_PREFIX }}
       BICEP_ACS_DATA_LOCATION: ${{ vars.BICEP_ACS_DATA_LOCATION }}
+      BICEP_VNET_DNS_SERVERS: ${{ vars.BICEP_VNET_DNS_SERVERS }}
       ENVIRONMENT: ${{ github.event.inputs.environment }}
     
     steps:
@@ -183,6 +184,7 @@ jobs:
             --parameters location=${{ env.BICEP_LOCATION }} \
             --parameters shortLocation=${{ env.BICEP_SHORT_LOCATION }} \
             --parameters vnetAddressPrefix=${{ env.BICEP_VNET_ADDRESS_PREFIX }} \
+            --parameters vnetDnsServers="${{ env.BICEP_VNET_DNS_SERVERS }}" \
             --parameters appServiceSubnetPrefix=${{ env.BICEP_APP_SERVICE_SUBNET_PREFIX }} \
             --parameters privateEndpointsSubnetPrefix=${{ env.BICEP_PRIVATE_ENDPOINTS_SUBNET_PREFIX }} \
             --parameters acsDataLocation="${{ env.BICEP_ACS_DATA_LOCATION }}" \
@@ -202,6 +204,7 @@ jobs:
             --parameters location=${{ env.BICEP_LOCATION }} \
             --parameters shortLocation=${{ env.BICEP_SHORT_LOCATION }} \
             --parameters vnetAddressPrefix=${{ env.BICEP_VNET_ADDRESS_PREFIX }} \
+            --parameters vnetDnsServers="${{ env.BICEP_VNET_DNS_SERVERS }}" \
             --parameters appServiceSubnetPrefix=${{ env.BICEP_APP_SERVICE_SUBNET_PREFIX }} \
             --parameters privateEndpointsSubnetPrefix=${{ env.BICEP_PRIVATE_ENDPOINTS_SUBNET_PREFIX }} \
             --parameters acsDataLocation="${{ env.BICEP_ACS_DATA_LOCATION }}" \
@@ -225,6 +228,7 @@ jobs:
             --parameters location=${{ env.BICEP_LOCATION }} \
             --parameters shortLocation=${{ env.BICEP_SHORT_LOCATION }} \
             --parameters vnetAddressPrefix=${{ env.BICEP_VNET_ADDRESS_PREFIX }} \
+            --parameters vnetDnsServers="${{ env.BICEP_VNET_DNS_SERVERS }}" \
             --parameters appServiceSubnetPrefix=${{ env.BICEP_APP_SERVICE_SUBNET_PREFIX }} \
             --parameters privateEndpointsSubnetPrefix=${{ env.BICEP_PRIVATE_ENDPOINTS_SUBNET_PREFIX }} \
             --parameters acsDataLocation="${{ env.BICEP_ACS_DATA_LOCATION }}" \

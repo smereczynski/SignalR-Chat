@@ -22,6 +22,9 @@ param appServiceSubnetPrefix string
 @description('The address prefix for the Private Endpoints subnet')
 param privateEndpointsSubnetPrefix string
 
+@description('Custom DNS servers for the VNet (optional). If empty, uses Azure default DNS.')
+param dnsServers array = []
+
 // ==========================================
 // Helper functions for subnet naming
 // ==========================================
@@ -98,6 +101,9 @@ resource vnet 'Microsoft.Network/virtualNetworks@2024-10-01' = {
         vnetAddressPrefix
       ]
     }
+    dhcpOptions: !empty(dnsServers) ? {
+      dnsServers: dnsServers
+    } : null
     subnets: [
       {
         name: appServiceSubnetName
