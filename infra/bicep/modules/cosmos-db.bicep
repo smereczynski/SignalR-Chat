@@ -132,7 +132,7 @@ resource usersContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/cont
       id: 'users'
       partitionKey: {
         paths: [
-          '/id'
+          '/userName'
         ]
         kind: 'Hash'
       }
