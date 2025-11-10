@@ -107,14 +107,9 @@ resource webApp 'Microsoft.Web/sites@2024-11-01' = {
     clientAffinityEnabled: true
     publicNetworkAccess: 'Enabled'
     virtualNetworkSubnetId: vnetIntegrationSubnetId
-    outboundVnetRouting: {
-      allTraffic: false
-      applicationTraffic: false
-      imagePullTraffic: false
-      contentShareTraffic: true
-    }
     siteConfig: {
       netFrameworkVersion: 'v9.0'
+      vnetRouteAllEnabled: true
       alwaysOn: true
       http20Enabled: true
       minTlsVersion: '1.2'
