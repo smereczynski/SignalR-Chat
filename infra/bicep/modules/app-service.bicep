@@ -108,10 +108,10 @@ resource webApp 'Microsoft.Web/sites@2024-11-01' = {
     clientAffinityEnabled: true
     virtualNetworkSubnetId: vnetIntegrationSubnetId
     outboundVnetRouting: {
-      allTraffic: true
-      applicationTraffic: true
+      allTraffic: false
+      applicationTraffic: false
       imagePullTraffic: false
-      contentShareTraffic: false
+      contentShareTraffic: true
     }
     siteConfig: {
       linuxFxVersion: 'DOTNETCORE|9.0'
