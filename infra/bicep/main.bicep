@@ -52,6 +52,7 @@ var peSubnetBase = substring(privateEndpointsSubnetPrefix, 0, lastIndexOf(privat
 var cosmosPrivateIp = '${peSubnetBase}.4'
 var redisPrivateIp = '${peSubnetBase}.5'
 var signalRPrivateIp = '${peSubnetBase}.6'
+var appServicePrivateIp = '${peSubnetBase}.7'
 
 // App Service URL (deterministic, constructed before deployment)
 var appServiceUrl = 'https://${baseName}-${environment}-${shortLocation}.azurewebsites.net'
@@ -165,6 +166,8 @@ module appService './modules/app-service.bicep' = {
     signalRConnectionString: signalR.outputs.connectionString
     acsConnectionString: acs.outputs.connectionString
     logAnalyticsWorkspaceId: monitoring.outputs.logAnalyticsWorkspaceId
+    privateEndpointSubnetId: networking.outputs.privateEndpointsSubnetId
+    privateEndpointStaticIp: appServicePrivateIp
   }
 }
 
