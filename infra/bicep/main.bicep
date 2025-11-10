@@ -38,6 +38,9 @@ param acsDataLocation string
 @description('The networking resource group name')
 param networkingResourceGroupName string
 
+@description('Custom DNS servers for the VNet (optional, comma-separated). If empty, uses Azure default DNS.')
+param vnetDnsServers string = ''
+
 // ==========================================
 // Variables - Static IP Allocation
 // ==========================================
@@ -80,6 +83,7 @@ module networking './modules/networking.bicep' = {
     vnetAddressPrefix: vnetAddressPrefix
     appServiceSubnetPrefix: appServiceSubnetPrefix
     privateEndpointsSubnetPrefix: privateEndpointsSubnetPrefix
+    dnsServers: !empty(vnetDnsServers) ? split(vnetDnsServers, ',') : []
   }
 }
 
