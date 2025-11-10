@@ -50,6 +50,12 @@ param acsConnectionString string
 @description('Log Analytics Workspace ID for diagnostic logs')
 param logAnalyticsWorkspaceId string = ''
 
+@description('Subnet ID for private endpoint (optional)')
+param privateEndpointSubnetId string = ''
+
+@description('Static IP address for private endpoint (optional)')
+param privateEndpointStaticIp string = ''
+
 // ==========================================
 // Variables
 // ==========================================
@@ -246,6 +252,40 @@ resource webAppDiagnostics 'Microsoft.Insights/diagnosticSettings@2021-05-01-pre
         enabled: true
       }
     ]
+  }
+}
+
+// ==========================================
+// Private Endpoint
+// ==========================================
+resource privateEndpoint 'Microsoft.Network/privateEndpoints@2023-05-01' = if (privateEndpointSubnetId != '') {
+  name: '${appName}-pe'
+  location: location
+  properties: {
+    subnet: {
+      id: privateEndpointSubnetId
+    }
+    privateLinkServiceConnections: [
+      {
+        name: '${appName}-pe-connection'
+        properties: {
+          privateLinkServiceId: webApp.id
+          groupIds: [
+            'sites'
+          ]
+        }
+      }
+    ]
+    ipConfigurations: privateEndpointStaticIp != '' ? [
+      {
+        name: 'ipconfig1'
+        properties: {
+          privateIPAddress: privateEndpointStaticIp
+          groupId: 'sites'
+          memberName: 'sites'
+        }
+      }
+    ] : []
   }
 }
 
