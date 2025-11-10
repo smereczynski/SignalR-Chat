@@ -25,7 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - `redis.bicep`: Azure Managed Redis (Microsoft.Cache/redisEnterprise), Balanced_B1/B3/B5 SKUs, port 10000, private endpoint only
     - `signalr.bicep`: Azure SignalR Service Standard_S1 for all environments, network ACLs (dev: all traffic, staging/prod: ClientConnection only on public), private endpoint
     - `communication.bicep`: Azure Communication Services with Europe data location
-    - `app-service.bicep`: App Service Plan (P0V4 PremiumV4 for all environments) + Web App with VNet integration, dual access mode (public + private), connection strings configured by Bicep
+    - `app-service.bicep`: App Service Plan (P0V4 PremiumV4 Windows for all environments) + Web App (.NET 9.0 runtime) with VNet integration, dual access mode (public + private), connection strings configured by Bicep
     - `main.bicep`: Main orchestration template with symbolic references, deterministic static IP allocation for private endpoints, no tags
   - **Networking Architecture**:
     - VNet with /26 CIDR block

@@ -46,8 +46,8 @@ The application uses **Azure Bicep** templates for reproducible infrastructure d
 | **Azure Managed Redis** | OTP storage, session cache, presence tracking | Balanced_B1 (dev), Balanced_B3 (staging/prod) (deployed in application RG) |
 | **Azure SignalR Service** | Real-time communication hub | Standard_S1 for all environments (1/1/5 units) (deployed in application RG) |
 | **Azure Communication Services** | Email and SMS capabilities | Global resource, Europe data location (deployed in application RG) |
-| **App Service Plan** | Web application hosting | P0V4 PremiumV4 for all environments (deployed in application RG) |
-| **App Service (Web App)** | SignalR Chat application | VNet integrated, HTTPS-only, TLS 1.2, identity disabled (deployed in application RG) |
+| **App Service Plan** | Web application hosting | P0V4 PremiumV4 Windows for all environments (deployed in application RG) |
+| **App Service (Web App)** | SignalR Chat application | .NET 9.0 runtime, VNet integrated, HTTPS-only, TLS 1.2, identity disabled (deployed in application RG) |
 | **Private Endpoints** | Secure connections to Cosmos DB, Redis, SignalR | Deployed in private endpoints subnet (cross-RG references) |
 
 ### Network Architecture (Critical Requirement)
@@ -143,7 +143,7 @@ Examples:
 
 | Resource | Dev | Staging | Production |
 |----------|-----|---------|------------|
-| App Service Plan | P0V4 PremiumV4 (1 instance, no AZ) | P0V4 PremiumV4 (2 instances, AZ) | P0V4 PremiumV4 (3 instances, AZ) |
+| App Service Plan | P0V4 PremiumV4 Windows (1 instance, no AZ) | P0V4 PremiumV4 Windows (2 instances, AZ) | P0V4 PremiumV4 Windows (3 instances, AZ) |
 | Cosmos DB | Zone-redundant, single region | Zone-redundant, single region | Zone-redundant, multi-region (polandcentral + germanywestcentral) |
 | Redis Cache | Balanced_B1 (Azure Managed Redis) | Balanced_B3 (Azure Managed Redis) | Balanced_B5 (Azure Managed Redis) |
 | SignalR Service | Standard_S1 (1 unit) | Standard_S1 (1 unit) | Standard_S1 (5 units) |
