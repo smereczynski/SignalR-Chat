@@ -30,6 +30,9 @@ param privateEndpointSubnetId string = ''
 @description('Static IP address for private endpoint (optional)')
 param privateEndpointStaticIp string = ''
 
+@description('Log Analytics Workspace ID for diagnostic logs')
+param logAnalyticsWorkspaceId string = ''
+
 // ==========================================
 // Variables
 // ==========================================
@@ -101,6 +104,23 @@ resource privateEndpoint 'Microsoft.Network/privateEndpoints@2024-10-01' = if (p
         }
       }
     ] : []
+  }
+}
+
+// ==========================================
+// Diagnostic Settings
+// ==========================================
+resource diagnosticSettings 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = if (logAnalyticsWorkspaceId != '') {
+  name: 'diagnostics-${redisName}'
+  scope: redisEnterprise
+  properties: {
+    workspaceId: logAnalyticsWorkspaceId
+    logs: [
+      {
+        categoryGroup: 'allLogs'
+        enabled: true
+      }
+    ]
   }
 }
 

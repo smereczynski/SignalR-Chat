@@ -47,6 +47,9 @@ param signalRConnectionString string
 @secure()
 param acsConnectionString string
 
+@description('Log Analytics Workspace ID for diagnostic logs')
+param logAnalyticsWorkspaceId string = ''
+
 // ==========================================
 // Variables
 // ==========================================
@@ -96,7 +99,7 @@ resource webApp 'Microsoft.Web/sites@2024-11-01' = {
   properties: {
     serverFarmId: appServicePlan.id
     httpsOnly: true
-    clientAffinityEnabled: false
+    clientAffinityEnabled: true
     virtualNetworkSubnetId: vnetIntegrationSubnetId
     outboundVnetRouting: {
       allTraffic: true
@@ -226,6 +229,23 @@ resource webApp 'Microsoft.Web/sites@2024-11-01' = {
         }
       ]
     }
+  }
+}
+
+// ==========================================
+// Diagnostic Settings for Web App
+// ==========================================
+resource webAppDiagnostics 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = if (logAnalyticsWorkspaceId != '') {
+  name: 'diagnostics-${webApp.name}'
+  scope: webApp
+  properties: {
+    workspaceId: logAnalyticsWorkspaceId
+    logs: [
+      {
+        categoryGroup: 'allLogs'
+        enabled: true
+      }
+    ]
   }
 }
 

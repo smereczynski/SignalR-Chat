@@ -28,6 +28,9 @@ param acsName string
 ])
 param dataLocation string = 'Europe'
 
+@description('Log Analytics Workspace ID for diagnostic logs')
+param logAnalyticsWorkspaceId string = ''
+
 // ==========================================
 // Azure Communication Service
 // ==========================================
@@ -36,6 +39,23 @@ resource communicationService 'Microsoft.Communication/communicationServices@202
   location: 'global'
   properties: {
     dataLocation: dataLocation
+  }
+}
+
+// ==========================================
+// Diagnostic Settings
+// ==========================================
+resource diagnosticSettings 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = if (logAnalyticsWorkspaceId != '') {
+  name: 'diagnostics-${acsName}'
+  scope: communicationService
+  properties: {
+    workspaceId: logAnalyticsWorkspaceId
+    logs: [
+      {
+        categoryGroup: 'allLogs'
+        enabled: true
+      }
+    ]
   }
 }
 
