@@ -72,6 +72,21 @@ resource signalr 'Microsoft.SignalRService/signalR@2024-10-01-preview' = {
     publicNetworkAccess: 'Enabled'
     disableLocalAuth: false
     disableAadAuth: false
+    networkACLs: {
+      defaultAction: 'Deny'
+      publicNetwork: environment != 'dev' ? {
+        allow: [
+          'ClientConnection'
+        ]
+      } : {
+        allow: [
+          'ServerConnection'
+          'ClientConnection'
+          'RESTAPI'
+          'Trace'
+        ]
+      }
+    }
   }
 }
 
