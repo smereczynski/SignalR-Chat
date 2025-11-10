@@ -137,14 +137,14 @@ Resources follow the pattern: `{baseName}-{environment}-{resourceType}`
 
 | Resource | SKU/Tier | Configuration |
 |----------|----------|---------------|
-| VNet | Standard | 10.0.0.0/16 |
-| App Service Plan | B1 (Basic) | 1 instance, Linux |
-| Cosmos DB | Serverless | Single region |
-| Redis Cache | Basic C0 | 250 MB |
-| SignalR Service | Free F1 | 20 concurrent connections |
+| VNet | Standard | 10.50.8.0/26 |
+| App Service Plan | P0V4 PremiumV4 Windows | 1 instance, .NET 9.0 |
+| Cosmos DB | Autoscale (400 RU/s max) | Single region, zone-redundant |
+| Redis Cache | Balanced_B1 (Azure Managed Redis) | 2 GB |
+| SignalR Service | Standard_S1 | 1 unit |
 | Log Analytics | 30-day retention | 1 GB daily cap |
 
-**Cost Estimate**: ~$50-100/month
+**Cost Estimate**: ~$150-250/month
 
 ### Staging (staging)
 
@@ -152,14 +152,14 @@ Resources follow the pattern: `{baseName}-{environment}-{resourceType}`
 
 | Resource | SKU/Tier | Configuration |
 |----------|----------|---------------|
-| VNet | Standard | 10.1.0.0/16 |
-| App Service Plan | P0v3 (Premium) | 2 instances |
-| Cosmos DB | Serverless | Single region |
-| Redis Cache | Standard C1 | 1 GB |
-| SignalR Service | Standard S1 | 1,000 units (capacity 1) |
+| VNet | Standard | 10.50.8.64/26 |
+| App Service Plan | P0V4 PremiumV4 Windows | 2 instances (AZ), .NET 9.0 |
+| Cosmos DB | Autoscale (1000 RU/s max) | Single region, zone-redundant |
+| Redis Cache | Balanced_B3 (Azure Managed Redis) | 6 GB |
+| SignalR Service | Standard_S1 | 1 unit |
 | Log Analytics | 90-day retention | 5 GB daily cap |
 
-**Cost Estimate**: ~$200-400/month
+**Cost Estimate**: ~$350-500/month
 
 ### Production (prod)
 
@@ -167,14 +167,14 @@ Resources follow the pattern: `{baseName}-{environment}-{resourceType}`
 
 | Resource | SKU/Tier | Configuration |
 |----------|----------|---------------|
-| VNet | Standard | 10.2.0.0/16 |
-| App Service Plan | P0v3 (Premium) | 3 instances with AZ |
-| Cosmos DB | Standard (provisioned) | Multi-region (East US + West US) |
-| Redis Cache | Premium P1 | 6 GB with persistence |
-| SignalR Service | Standard S1 | 1,000 units (capacity 5) |
+| VNet | Standard | 10.50.8.128/26 |
+| App Service Plan | P0V4 PremiumV4 Windows | 3 instances with AZ, .NET 9.0 |
+| Cosmos DB | Autoscale (4000 RU/s max) | Multi-region (polandcentral + germanywestcentral), zone-redundant |
+| Redis Cache | Balanced_B5 (Azure Managed Redis) | 12 GB |
+| SignalR Service | Standard_S1 | 5 units |
 | Log Analytics | 365-day retention | 10 GB daily cap |
 
-**Cost Estimate**: ~$800-1500/month
+**Cost Estimate**: ~$1200-1800/month
 
 ## 🚀 Getting Started
 
