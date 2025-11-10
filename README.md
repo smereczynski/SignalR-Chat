@@ -283,7 +283,142 @@ A narrow REST POST endpoint (`POST /api/Messages`) exists solely to satisfy the
 It can be enabled by setting configuration key `Features:EnableRestPostMessages=true` (tests do this via the custom factory).
 In production the endpoint returns 404, encouraging clients to use only the SignalR hub path.
 
-## Telemetry & Metrics
+## 📊 Observability & Diagnostics
+
+The application implements comprehensive logging and monitoring for all dependencies and failure points, making it easy to debug issues in both Development and Production environments.
+
+### Health Checks
+
+Health checks monitor all critical dependencies and publish results to Application Insights:
+
+- **`/healthz`**: Liveness probe (always returns 200 OK)
+- **`/healthz/ready`**: Readiness probe (checks Cosmos DB, Redis, ACS configuration)
+- **`/healthz/metrics`**: Lightweight metrics snapshot
+
+**Health Check Logging**:
+- All health checks log to Application Insights via `ILogger` integration
+- `ApplicationInsightsHealthCheckPublisher` publishes results every 30 seconds
+- Logs include: service name, status (Healthy/Degraded/Unhealthy), duration, and failure reasons
+- Example log: `"Health check completed: Healthy in 5.35ms. All 4 checks passed."`
+- Failed checks log detailed error information for troubleshooting
+
+### Dependency Logging
+
+**Cosmos DB**:
+- Initialization logging: Database name, container names, connection success/failure
+- Exception logging with full stack traces for connection errors
+- Query and operation logging at Information level
+- Development environment uses Debug level for verbose output
+
+**Redis**:
+- Connection event handlers log all state changes:
+  - `ConnectionFailed`: Logs endpoint, failure type, and reason
+  - `ConnectionRestored`: Confirms reconnection to endpoint
+  - `ErrorMessage`: Logs Redis server errors
+  - `InternalError`: Logs internal StackExchange.Redis errors
+- OTP store operations logged with user context (GET, SET, INCR)
+- Cooldown events logged when entering rate-limited state
+- Example: `"Redis connection failed: redis-app-dev.polandcentral.redis.azure.net:10000, ConnectTimeout"`
+
+**Application Insights**:
+- Both Development and Production environments send logs to AI
+- Development: Debug level with verbose dependency logging
+- Production: Information level with targeted dependency logging
+- Configuration via `APPLICATIONINSIGHTS_CONNECTION_STRING` environment variable
+
+### Global Exception Handling
+
+`GlobalExceptionHandlerMiddleware` catches all unhandled exceptions and logs comprehensive context:
+- HTTP method and path
+- Authenticated user (or "Anonymous")
+- Remote IP address
+- User-Agent header
+- Exception type and message
+- Returns generic error response with trace ID for correlation
+
+Example log:
+```
+Unhandled exception in POST /api/messages/send. User: alice, RemoteIP: 10.0.0.5, 
+UserAgent: Mozilla/5.0..., ExceptionType: System.InvalidOperationException, 
+Message: Cosmos DB connection timeout
+```
+
+### Logging Configuration
+
+**Development Environment** (`appsettings.Development.json`):
+```json
+{
+  "Serilog": {
+    "MinimumLevel": {
+      "Default": "Debug",
+      "Override": {
+        "Chat.Web": "Debug",
+        "Chat.Web.Health": "Debug",
+        "Microsoft.Azure.Cosmos": "Information",
+        "StackExchange.Redis": "Information",
+        "Azure.Core": "Information"
+      }
+    }
+  }
+}
+```
+
+**Production Environment** (`appsettings.Production.json`):
+```json
+{
+  "Serilog": {
+    "MinimumLevel": {
+      "Default": "Information",
+      "Override": {
+        "Chat.Web": "Information",
+        "Chat.Web.Health": "Information",
+        "Microsoft.Azure.Cosmos": "Information",
+        "StackExchange.Redis": "Information",
+        "Azure.Core": "Information"
+      }
+    }
+  }
+}
+```
+
+### Troubleshooting Common Issues
+
+**Issue: Redis connection timeouts or failures**
+- **Symptom**: `ConnectionFailed` logs with `ConnectTimeout` or `UnableToConnect`
+- **Cause**: DNS resolution issues or private endpoint misconfiguration
+- **Solution**: 
+  1. Check DNS record points to correct private IP (e.g., 10.50.8.38)
+  2. Verify VNet integration is enabled on App Service
+  3. Confirm outbound routing uses VNet (`outboundVnetRouting.allTraffic = true`)
+  4. Check Redis connection string uses private endpoint hostname
+  5. Review logs: `az monitor app-insights query --app <app-name> --analytics-query "traces | where message contains 'Redis'"`
+
+**Issue: Cosmos DB partition key validation errors**
+- **Symptom**: `ArgumentException: Partition key definition is not compatible`
+- **Cause**: Container partition key doesn't match application expectations
+- **Solution**: 
+  1. Check container partition key in Azure Portal: `/userName` (not `/id`)
+  2. Review initialization logs for partition key mismatch errors
+  3. Recreate container with correct partition key if needed
+
+**Issue: Health checks showing Degraded/Unhealthy**
+- **Symptom**: `/healthz/ready` returns 503 Service Unavailable
+- **Solution**:
+  1. Check Application Insights logs for health check failures
+  2. Query: `traces | where message contains "Health check" | order by timestamp desc`
+  3. Review specific service logs (Cosmos, Redis) for root cause
+  4. Verify connection strings and private endpoint connectivity
+
+**Issue: No logs in Application Insights**
+- **Symptom**: Logs visible locally but not in Azure Monitor
+- **Cause**: `APPLICATIONINSIGHTS_CONNECTION_STRING` not configured or incorrect
+- **Solution**:
+  1. Verify environment variable is set in App Service Configuration
+  2. Check connection string format: `InstrumentationKey=...;IngestionEndpoint=...`
+  3. Confirm `ASPNETCORE_ENVIRONMENT` is set (Development or Production)
+  4. Review startup logs for Serilog sink initialization
+
+### OpenTelemetry & Metrics
 Exporter selection (in `Startup`) prioritizes: Azure Monitor (when Production + connection string) → OTLP endpoint → Console.
 
 Custom counters (Meter `Chat.Web`):

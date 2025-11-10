@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Comprehensive Dependency Logging**: Enhanced observability for all external dependencies
+  - Cosmos DB initialization logging: Database/container details, connection success/failure with exceptions
+  - Redis connection event logging: ConnectionFailed, ConnectionRestored, ErrorMessage, InternalError with endpoints and failure types
+  - RedisOtpStore enhanced logging: All operations (GET, SET, INCR) with user context, error types, cooldown status
+  - GlobalExceptionHandlerMiddleware: Centralized unhandled exception logging with full request context (method, path, user, IP, user-agent)
+  - Always log Cosmos/Redis at Information level, with verbose Development settings for troubleshooting
+- **Health Check Logging**: Complete visibility into health check results
+  - ILogger integration in all health checks (CosmosHealthCheck, RedisHealthCheck)
+  - ApplicationInsightsHealthCheckPublisher: Publishes health check results to Application Insights every 30 seconds
+  - Logs show which service failed, why, and latency for all checks
+  - Enables easy troubleshooting of dependency failures in Azure Monitor
+- **Application Insights Development Mode**: AI logging enabled for Development environment
+  - Previously only Production environment sent logs to Application Insights
+  - Development now uses Debug log level with verbose dependency logging for easier debugging
+  - Maintains Information level for Production with dependency-specific logging
+
 ### Fixed
 - **VNet Routing Configuration** (#TBD)
   - Fixed App Service outbound traffic routing to use private endpoints instead of public internet
@@ -16,6 +33,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Cosmos DB Users Container Partition Key** (#TBD)
   - Fixed partition key mismatch: changed from `/id` to `/userName` to match application expectations
   - Resolves startup failures caused by partition key validation errors
+- **Redis Private Endpoint DNS Resolution**: Fixed DNS record for Redis private endpoint
+  - Connection string used public endpoint but app needed private endpoint access
+  - DNS record updated to point to private IP address (10.50.8.38)
+  - Redis health check now passes with ~1ms latency via private endpoint
 
 ### Added
 - **Infrastructure as Code Implementation**: Complete Azure Bicep templates for automated infrastructure deployment (#84)
