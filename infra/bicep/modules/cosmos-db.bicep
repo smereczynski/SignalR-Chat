@@ -103,7 +103,7 @@ resource messagesContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/c
       id: 'messages'
       partitionKey: {
         paths: [
-          '/roomId'
+          '/roomName'
         ]
         kind: 'Hash'
       }
@@ -169,7 +169,7 @@ resource roomsContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/cont
       id: 'rooms'
       partitionKey: {
         paths: [
-          '/id'
+          '/name'
         ]
         kind: 'Hash'
       }
