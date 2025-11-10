@@ -100,7 +100,7 @@ resource privateEndpoint 'Microsoft.Network/privateEndpoints@2024-10-01' = if (p
         properties: {
           privateIPAddress: privateEndpointStaticIp
           groupId: 'redisEnterprise'
-          memberName: 'redisEnterprise'
+          memberName: redisName
         }
       }
     ] : []
@@ -110,14 +110,15 @@ resource privateEndpoint 'Microsoft.Network/privateEndpoints@2024-10-01' = if (p
 // ==========================================
 // Diagnostic Settings
 // ==========================================
+// Note: Logs are only available on the database resource, not the cluster
 resource diagnosticSettings 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = if (logAnalyticsWorkspaceId != '') {
-  name: 'diagnostics-${redisName}'
-  scope: redisEnterprise
+  name: 'diagnostics-${redisName}-db'
+  scope: redisEnterpriseDatabase
   properties: {
     workspaceId: logAnalyticsWorkspaceId
     logs: [
       {
-        categoryGroup: 'allLogs'
+        category: 'ConnectionEvents'
         enabled: true
       }
     ]
