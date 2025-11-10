@@ -20,6 +20,12 @@ param environment string
 @description('Subnet ID for private endpoint (optional)')
 param privateEndpointSubnetId string = ''
 
+@description('Static IP address for private endpoint (optional)')
+param privateEndpointStaticIp string = ''
+
+@description('Allowed CORS origins for SignalR (e.g., App Service URL)')
+param allowedOrigins array = ['*']
+
 // ==========================================
 // Variables
 // ==========================================
@@ -58,11 +64,9 @@ resource signalr 'Microsoft.SignalRService/signalR@2024-10-01-preview' = {
       }
     ]
     cors: {
-      allowedOrigins: [
-        '*'
-      ]
+      allowedOrigins: allowedOrigins
     }
-    publicNetworkAccess: privateEndpointSubnetId != '' ? 'Disabled' : 'Enabled'
+    publicNetworkAccess: 'Enabled'
     disableLocalAuth: false
     disableAadAuth: false
   }
@@ -90,6 +94,16 @@ resource privateEndpoint 'Microsoft.Network/privateEndpoints@2024-10-01' = if (p
       }
     ]
     customNetworkInterfaceName: 'nic-pe-${signalRName}'
+    ipConfigurations: privateEndpointStaticIp != '' ? [
+      {
+        name: 'ipconfig1'
+        properties: {
+          privateIPAddress: privateEndpointStaticIp
+          groupId: 'signalr'
+          memberName: 'signalr'
+        }
+      }
+    ] : []
   }
 }
 

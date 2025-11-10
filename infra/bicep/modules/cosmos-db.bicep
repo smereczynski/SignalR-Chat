@@ -26,6 +26,9 @@ param databaseName string = 'chat'
 @description('Subnet ID for private endpoint (optional)')
 param privateEndpointSubnetId string = ''
 
+@description('Static IP address for private endpoint (optional)')
+param privateEndpointStaticIp string = ''
+
 // ==========================================
 // Variables
 // ==========================================
@@ -208,6 +211,16 @@ resource privateEndpoint 'Microsoft.Network/privateEndpoints@2024-10-01' = if (p
       }
     ]
     customNetworkInterfaceName: 'nic-pe-${accountName}'
+    ipConfigurations: privateEndpointStaticIp != '' ? [
+      {
+        name: 'ipconfig1'
+        properties: {
+          privateIPAddress: privateEndpointStaticIp
+          groupId: 'Sql'
+          memberName: 'Sql'
+        }
+      }
+    ] : []
   }
 }
 

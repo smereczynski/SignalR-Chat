@@ -39,6 +39,24 @@ param acsDataLocation string
 param networkingResourceGroupName string
 
 // ==========================================
+// Variables - Static IP Allocation
+// ==========================================
+// Calculate static IPs for private endpoints in the Private Endpoints subnet
+// Azure reserves the first 4 IPs (.0, .1, .2, .3), so we start from .4
+// Format: Extract base IP from subnet prefix and add offset
+
+// Helper: Parse subnet prefix to get base IP (e.g., "10.0.1.0/27" -> "10.0.1")
+var peSubnetBase = substring(privateEndpointsSubnetPrefix, 0, lastIndexOf(privateEndpointsSubnetPrefix, '.'))
+
+// Static IPs for each service (deterministic allocation)
+var cosmosPrivateIp = '${peSubnetBase}.4'
+var redisPrivateIp = '${peSubnetBase}.5'
+var signalRPrivateIp = '${peSubnetBase}.6'
+
+// App Service URL (deterministic, constructed before deployment)
+var appServiceUrl = 'https://${baseName}-${environment}-${shortLocation}.azurewebsites.net'
+
+// ==========================================
 // Module: Networking (TWO Subnets)
 // ==========================================
 // Deploy to separate networking resource group
@@ -78,6 +96,7 @@ module cosmosDb './modules/cosmos-db.bicep' = {
     environment: environment
     databaseName: 'chat'
     privateEndpointSubnetId: networking.outputs.privateEndpointsSubnetId
+    privateEndpointStaticIp: cosmosPrivateIp
   }
 }
 
@@ -93,6 +112,7 @@ module redis './modules/redis.bicep' = {
     location: location
     environment: environment
     privateEndpointSubnetId: networking.outputs.privateEndpointsSubnetId
+    privateEndpointStaticIp: redisPrivateIp
   }
 }
 
@@ -106,6 +126,10 @@ module signalR './modules/signalr.bicep' = {
     location: location
     environment: environment
     privateEndpointSubnetId: networking.outputs.privateEndpointsSubnetId
+    privateEndpointStaticIp: signalRPrivateIp
+    allowedOrigins: [
+      appServiceUrl
+    ]
   }
 }
 
