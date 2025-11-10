@@ -21,18 +21,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Bicep Modules Created**:
     - `networking.bicep`: VNet with 2 subnets (/27 each) + NSGs for App Service integration and Private Endpoints
     - `monitoring.bicep`: Log Analytics Workspace (30d/90d/365d retention) + Application Insights (workspace-based)
-    - `cosmos-db.bicep`: Cosmos DB NoSQL with 3 containers (messages, users, rooms), serverless for dev/staging, geo-replication for prod, private endpoint
-    - `redis.bicep`: Azure Managed Redis (Microsoft.Cache/redisEnterprise), Balanced_B1/B3/B5 SKUs, port 10000, private endpoint
-    - `signalr.bicep`: Azure SignalR Service Standard_S1 for all environments, private endpoint
+    - `cosmos-db.bicep`: Cosmos DB NoSQL with 3 containers (messages, users, rooms), autoscale throughput (400/1000/4000 RU/s), single region with zone redundancy, private endpoint only
+    - `redis.bicep`: Azure Managed Redis (Microsoft.Cache/redisEnterprise), Balanced_B1/B3/B5 SKUs, port 10000, private endpoint only
+    - `signalr.bicep`: Azure SignalR Service Standard_S1 for all environments, network ACLs (dev: all traffic, staging/prod: ClientConnection only on public), private endpoint
     - `communication.bicep`: Azure Communication Services with Europe data location
-    - `app-service.bicep`: App Service Plan (P0V4 PremiumV4 for all environments) + Web App with VNet integration, connection strings configured by Bicep
-    - `main.bicep`: Main orchestration template with symbolic references, no tags
+    - `app-service.bicep`: App Service Plan (P0V4 PremiumV4 for all environments) + Web App with VNet integration, dual access mode (public + private), connection strings configured by Bicep
+    - `main.bicep`: Main orchestration template with symbolic references, deterministic static IP allocation for private endpoints, no tags
   - **Networking Architecture**:
     - VNet with /26 CIDR block
     - TWO dedicated /27 subnets per environment (App Service integration + Private Endpoints)
     - IP-based subnet naming (e.g., `10-0-0-0--27`, `10-0-0-32--27`)
-    - Private endpoints for Cosmos DB, Redis, SignalR
+    - Private endpoints with deterministic static IP allocation:
+      - Cosmos DB: .36 (global) + .37 (regional)
+      - Redis: .38
+      - SignalR: .39
+      - App Service: .40
     - Network Security Groups on both subnets
+  - **Network Access Control**:
+    - Cosmos DB: Private endpoint only (public access disabled)
+    - Redis: Private endpoint only (public access disabled)
+    - SignalR: Dual access with network ACLs
+      - Dev: All traffic types on public endpoint
+      - Staging/Prod: ClientConnection only on public endpoint
+      - Private endpoint: All traffic types (all environments)
+    - App Service: Dual access mode (public + private endpoints enabled)
   - **Resource Naming Convention** (issue #84):
     - Networking Resource Group: `rg-vnet-{baseName}-{env}-{shortLocation}`
     - Application Resource Group: `rg-{baseName}-{env}-{shortLocation}`

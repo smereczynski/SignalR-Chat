@@ -148,8 +148,14 @@ nslookup app-{baseName}-{env}-{shortLocation}.azurewebsites.net
 **Important Notes:**
 - Private DNS zones should be created in the **networking resource group**
 - DNS zones can be shared across environments (dev/staging/prod) if using the same VNet
-- Without proper DNS configuration, services will attempt public endpoint access (which is disabled)
-- App Service uses the private endpoint for **outbound connections** to other Azure services
+- Without proper DNS configuration, services will attempt public endpoint access
+- **Network Access Configuration**:
+  - **Cosmos DB**: Private endpoint only (public access disabled when PE configured)
+  - **Redis**: Private endpoint only (public access disabled when PE configured)
+  - **SignalR**: Dual access mode
+    - Public endpoint: ClientConnection only (staging/prod), all traffic types (dev)
+    - Private endpoint: All traffic types (all environments)
+  - **App Service**: Dual access mode (public + private endpoints enabled)
 
 ### 2. CI - Build and Test (`ci.yml`)
 **Triggers:**

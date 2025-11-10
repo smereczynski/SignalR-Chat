@@ -742,10 +742,24 @@ Benefits:
   - Expected header: `Strict-Transport-Security: max-age=31536000; includeSubDomains; preload`
   - Mitigates first-visit vulnerability and man-in-the-middle attacks
   - Certificate renewal must remain automated (Azure App Service handles this automatically)
+- **Network Access Control**:
+  - **Cosmos DB**: Private endpoint only (public access disabled when private endpoint configured)
+  - **Redis**: Private endpoint only (public access disabled when private endpoint configured)
+  - **SignalR**: Dual access mode with network ACLs
+    - Dev: All traffic types allowed on public endpoint (ServerConnection, ClientConnection, RESTAPI, Trace)
+    - Staging/Prod: Only ClientConnection allowed on public endpoint
+    - Private endpoint: All traffic types allowed (all environments)
+  - **App Service**: Dual access mode (public + private endpoints both enabled)
+  - All services use TLS 1.2 minimum
+- **Static IP Allocation**: Private endpoints use deterministic static IPs for reliable network configuration:
+  - Cosmos DB: .36 (global) + .37 (regional)
+  - Redis: .38
+  - SignalR: .39
+  - App Service: .40
 - OTP codes are stored hashed by default (Argon2id + salt + pepper). Legacy/plaintext verification is supported only when explicitly enabled for testing and uses constant-time comparison. Provide a high-entropy Base64 pepper per environment via `Otp__Pepper`.
 - Correlation IDs are opaque UUIDs (avoid embedding user data)
 - OTP endpoints are rate-limited.
- - Exception handling: Cosmos message `MarkRead` now rethrows with contextual information (message id and sanitized partition/room) instead of logging and rethrowing, aligning with static analysis guidance and improving diagnostics without exposing PII.
+- Exception handling: Cosmos message `MarkRead` now rethrows with contextual information (message id and sanitized partition/room) instead of logging and rethrowing, aligning with static analysis guidance and improving diagnostics without exposing PII.
 
 ## Future Roadmap (Prioritized)
 1. Typing indicators
