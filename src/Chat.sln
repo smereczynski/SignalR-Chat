@@ -9,6 +9,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Chat.Tests", "..\tests\Chat
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Chat.IntegrationTests", "..\tests\Chat.IntegrationTests\Chat.IntegrationTests.csproj", "{1A3B8E4A-AC4E-4E31-9C1C-6E0C2E9F4A11}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Chat.Web.Tests", "..\tests\Chat.Web.Tests\Chat.Web.Tests.csproj", "{F740D9E3-1A8A-4C0C-86F2-3F1A4D8EF1C4}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -55,6 +57,18 @@ Global
 		{1A3B8E4A-AC4E-4E31-9C1C-6E0C2E9F4A11}.Release|x64.Build.0 = Release|Any CPU
 		{1A3B8E4A-AC4E-4E31-9C1C-6E0C2E9F4A11}.Release|x86.ActiveCfg = Release|Any CPU
 		{1A3B8E4A-AC4E-4E31-9C1C-6E0C2E9F4A11}.Release|x86.Build.0 = Release|Any CPU
+		{F740D9E3-1A8A-4C0C-86F2-3F1A4D8EF1C4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F740D9E3-1A8A-4C0C-86F2-3F1A4D8EF1C4}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F740D9E3-1A8A-4C0C-86F2-3F1A4D8EF1C4}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{F740D9E3-1A8A-4C0C-86F2-3F1A4D8EF1C4}.Debug|x64.Build.0 = Debug|Any CPU
+		{F740D9E3-1A8A-4C0C-86F2-3F1A4D8EF1C4}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{F740D9E3-1A8A-4C0C-86F2-3F1A4D8EF1C4}.Debug|x86.Build.0 = Debug|Any CPU
+		{F740D9E3-1A8A-4C0C-86F2-3F1A4D8EF1C4}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F740D9E3-1A8A-4C0C-86F2-3F1A4D8EF1C4}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F740D9E3-1A8A-4C0C-86F2-3F1A4D8EF1C4}.Release|x64.ActiveCfg = Release|Any CPU
+		{F740D9E3-1A8A-4C0C-86F2-3F1A4D8EF1C4}.Release|x64.Build.0 = Release|Any CPU
+		{F740D9E3-1A8A-4C0C-86F2-3F1A4D8EF1C4}.Release|x86.ActiveCfg = Release|Any CPU
+		{F740D9E3-1A8A-4C0C-86F2-3F1A4D8EF1C4}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
