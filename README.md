@@ -568,13 +568,12 @@ All 55 tests passing ✅
 The project includes comprehensive test coverage across four test assemblies:
 
 ### Test Summary
-* **Total Tests**: 117 tests
+* **Total Tests**: 124 tests
 * **Status**: All passing ✅
 * **Test Projects**:
-  - `Chat.Tests` (80 tests): Unit tests including localization (55 tests), OTP hashing, configuration guards, unread notifications
-  - `Chat.DataSeed.Tests` (10 tests): Data seeding validation
-  - `Chat.IntegrationTests` (20 tests): End-to-end integration tests including OTP flow, rate limiting, room authorization, hub lifecycle
-  - `Chat.Web.Tests` (7 tests): Web-specific tests including security headers (CSP) and health endpoints
+  - `Chat.Tests` (93 tests): Unit tests including localization (55 tests), security (13 tests for log sanitization), OTP hashing, configuration guards, unread notifications
+  - `Chat.IntegrationTests` (22 tests): End-to-end integration tests including OTP flow, rate limiting, room authorization, hub lifecycle
+  - `Chat.Web.Tests` (9 tests): Web-specific tests including security headers (CSP), health endpoints
 
 ### Key Test Categories
 1. **Localization Tests** (55 tests in Chat.Tests)
@@ -583,7 +582,7 @@ The project includes comprehensive test coverage across four test assemblies:
    - Covers all 60+ resource keys across 9 cultures
    - Validates translation quality and completeness
 
-2. **Integration Tests** (20 tests in Chat.IntegrationTests)
+2. **Integration Tests** (22 tests in Chat.IntegrationTests)
    - `OtpAuthFlowTests`: Full OTP authentication workflow
    - `OtpAttemptLimitingTests`: Per-user failed attempt rate limiting (3 tests)
      - Validates blocking after N failed attempts
@@ -596,7 +595,7 @@ The project includes comprehensive test coverage across four test assemblies:
    - `MarkReadRateLimitingTests`: Read receipt rate limiting
    - `ImmediatePostAfterLoginTests`: REST fallback (feature-flagged)
 
-3. **Unit Tests** (25 tests in Chat.Tests, excluding localization)
+3. **Unit Tests** (38 tests in Chat.Tests, excluding localization)
    - `OtpHasherTests`: Argon2id hashing, salt, pepper verification
    - `ConfigurationGuardsTests`: Required configuration validation
    - `UnreadNotificationSchedulerTests`: Delayed notification logic

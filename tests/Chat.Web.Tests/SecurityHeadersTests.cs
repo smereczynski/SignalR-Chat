@@ -107,8 +107,10 @@ namespace Chat.Web.Tests
 
             // Act - Make two separate requests
             var response1 = await client.GetAsync("/login");
-            var response2 = await client.GetAsync("/login");
             var content1 = await response1.Content.ReadAsStringAsync();
+            
+            var response2 = await client.GetAsync("/login");
+            var content2 = await response2.Content.ReadAsStringAsync();
 
             // Assert
             var csp1 = response1.Headers.GetValues("Content-Security-Policy").First();
@@ -128,9 +130,24 @@ namespace Chat.Web.Tests
             Assert.NotEqual(nonce1, nonce2);
             
             // Verify the same nonce appears in the HTML (in script tag)
-            // Note: HTML-encoded as &quot; instead of "
-            Assert.True(content1.Contains($"nonce=&quot;{nonce1}&quot;") || content1.Contains($"nonce=\"{nonce1}\""),
-                $"Nonce {nonce1} should appear in HTML (either encoded or unencoded)");
+            // The nonce attribute in Razor pages uses @HttpContext.Items["csp-nonce"]
+            // In the rendered HTML, this could be either:
+            // 1. HTML-encoded as nonce=&quot;...&quot; (most common)
+            // 2. Unencoded as nonce="..." (less common)
+            // 3. Or the script tag might not have a nonce attribute if rendering failed
+            var hasNonce1 = content1.Contains($"nonce=&quot;{nonce1}&quot;") || 
+                           content1.Contains($"nonce=\"{nonce1}\"") ||
+                           content1.Contains($"nonce={nonce1}");
+            var hasNonce2 = content2.Contains($"nonce=&quot;{nonce2}&quot;") || 
+                           content2.Contains($"nonce=\"{nonce2}\"") ||
+                           content2.Contains($"nonce={nonce2}");
+            
+            Assert.True(hasNonce1,
+                $"Nonce '{nonce1}' should appear in HTML response 1. " +
+                $"Looking for patterns: nonce=&quot;{nonce1}&quot; or nonce=\"{nonce1}\" or nonce={nonce1}");
+            Assert.True(hasNonce2,
+                $"Nonce '{nonce2}' should appear in HTML response 2. " +
+                $"Looking for patterns: nonce=&quot;{nonce2}&quot; or nonce=\"{nonce2}\" or nonce={nonce2}");
         }
 
         private string ExtractNonceFromCSP(string cspHeader)
