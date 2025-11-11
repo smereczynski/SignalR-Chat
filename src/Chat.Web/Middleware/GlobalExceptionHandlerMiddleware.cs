@@ -2,6 +2,7 @@ using System;
 using System.Net;
 using System.Text.Json;
 using System.Threading.Tasks;
+using Chat.Web.Utilities;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 
@@ -30,18 +31,18 @@ namespace Chat.Web.Middleware
             }
             catch (Exception ex)
             {
-                // Log the exception with full context
+                // Log the exception with full context (sanitized to prevent log forgery)
                 _logger.LogError(ex,
                     "Unhandled exception in {Method} {Path}. " +
                     "User: {User}, RemoteIP: {RemoteIP}, UserAgent: {UserAgent}, " +
                     "ExceptionType: {ExceptionType}, Message: {Message}",
-                    context.Request.Method,
-                    context.Request.Path,
-                    context.User?.Identity?.Name ?? "Anonymous",
-                    context.Connection.RemoteIpAddress?.ToString() ?? "Unknown",
-                    context.Request.Headers["User-Agent"].ToString(),
+                    LogSanitizer.Sanitize(context.Request.Method),
+                    LogSanitizer.Sanitize(context.Request.Path.Value),
+                    LogSanitizer.Sanitize(context.User?.Identity?.Name ?? "Anonymous"),
+                    LogSanitizer.Sanitize(context.Connection.RemoteIpAddress?.ToString() ?? "Unknown"),
+                    LogSanitizer.Sanitize(context.Request.Headers["User-Agent"].ToString()),
                     ex.GetType().FullName,
-                    ex.Message);
+                    LogSanitizer.Sanitize(ex.Message));
 
                 // Return a generic error response
                 await HandleExceptionAsync(context, ex);
