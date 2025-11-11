@@ -104,11 +104,11 @@ namespace Chat.Web.Services
             var now = DateTimeOffset.UtcNow;
             if (now < _cooldownUntil)
             {
-                _logger.LogWarning("Skipping Redis SET for OTP due to cooldown (active until {Until}). User: {UserName}", _cooldownUntil, LogSanitizer.SanitizeWithReplacement(userName));
+                _logger.LogWarning("Skipping Redis SET for OTP due to cooldown (active until {Until}). User: [{UserName}]", _cooldownUntil, LogSanitizer.SanitizeWithReplacement(userName));
                 return Task.CompletedTask;
             }
             
-            _logger.LogDebug("Setting OTP in Redis for user: {UserName}, TTL: {Ttl}s", LogSanitizer.SanitizeWithReplacement(userName), ttl.TotalSeconds);
+            _logger.LogDebug("Setting OTP in Redis for user: [{UserName}], TTL: {Ttl}s", LogSanitizer.SanitizeWithReplacement(userName), ttl.TotalSeconds);
             
             return RetryHelper.ExecuteAsync(
                 _ => _db.StringSetAsync(Prefix + userName, code, ttl),
@@ -121,13 +121,13 @@ namespace Chat.Web.Services
                 {
                     if (t.IsFaulted)
                     {
-                        _logger.LogError(t.Exception?.GetBaseException(), "Redis SET failed for OTP store (user: {UserName}). Error: {ErrorType} - {Message}. Entering {Cooldown}s cooldown.",
+                        _logger.LogError(t.Exception?.GetBaseException(), "Redis SET failed for OTP store (user: [{UserName}]). Error: {ErrorType} - {Message}. Entering {Cooldown}s cooldown.",
                             LogSanitizer.SanitizeWithReplacement(userName), t.Exception?.GetBaseException()?.GetType().Name, LogSanitizer.SanitizeWithReplacement(t.Exception?.GetBaseException()?.Message), CooldownSeconds);
                         ArmCooldown();
                     }
                     else
                     {
-                        _logger.LogDebug("OTP set successfully in Redis for user: {UserName}", LogSanitizer.SanitizeWithReplacement(userName));
+                        _logger.LogDebug("OTP set successfully in Redis for user: [{UserName}]", LogSanitizer.SanitizeWithReplacement(userName));
                     }
                 });
         }
