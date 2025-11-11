@@ -12,7 +12,8 @@ namespace Chat.Web.Utilities
     {
         // Regex to match control characters that could be used for log forgery
         // Matches: \r, \n, \t, and other control characters (0x00-0x1F, 0x7F)
-        private static readonly Regex ControlCharsRegex = new Regex(@"[\r\n\t\x00-\x1F\x7F]", RegexOptions.Compiled);
+        // Timeout prevents ReDoS attacks
+        private static readonly Regex ControlCharsRegex = new Regex(@"[\r\n\t\x00-\x1F\x7F]", RegexOptions.Compiled, TimeSpan.FromMilliseconds(100));
 
         /// <summary>
         /// Sanitizes input by removing control characters that could forge log entries.
