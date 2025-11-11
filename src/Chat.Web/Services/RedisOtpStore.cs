@@ -104,7 +104,7 @@ namespace Chat.Web.Services
             var now = DateTimeOffset.UtcNow;
             if (now < _cooldownUntil)
             {
-                _logger.LogWarning("Skipping Redis SET for OTP due to cooldown (active until {Until}). User: [{UserName}]", _cooldownUntil, LogSanitizer.SanitizeWithReplacement(userName));
+                _logger.LogWarning("Skipping Redis SET for OTP due to cooldown (active until {Until}). User: [{UserName}]", _cooldownUntil, LogSanitizer.Sanitize(userName));
                 return Task.CompletedTask;
             }
             
