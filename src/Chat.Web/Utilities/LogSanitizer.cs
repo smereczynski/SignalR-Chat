@@ -44,12 +44,21 @@ namespace Chat.Web.Utilities
         /// <returns>Sanitized string with control characters replaced</returns>
         public static string SanitizeWithReplacement(string input, string replacement = "�")
         {
-            if (string.IsNullOrEmpty(input))
+            if (input == null)
             {
-                return input;
+                return "<null>";
             }
-
-            return ControlCharsRegex.Replace(input, replacement);
+            if (input.Length == 0)
+            {
+                return "<empty>";
+            }
+            if (string.IsNullOrWhiteSpace(input))
+            {
+                return "<whitespace>";
+            }
+            // Replace control characters, then wrap user input in visible delimiters to prevent confusion
+            var sanitized = ControlCharsRegex.Replace(input, replacement);
+            return $"<<<{sanitized}>>>";
         }
     }
 }
