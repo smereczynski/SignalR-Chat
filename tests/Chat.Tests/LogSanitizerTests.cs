@@ -77,7 +77,7 @@ namespace Chat.Tests
             var result = LogSanitizer.Sanitize(input);
 
             // Assert
-            Assert.Null(result);
+            Assert.Equal("<null>", result);
         }
 
         [Fact]
@@ -90,7 +90,7 @@ namespace Chat.Tests
             var result = LogSanitizer.Sanitize(input);
 
             // Assert
-            Assert.Equal("", result);
+            Assert.Equal("<empty>", result);
         }
 
         [Fact]
@@ -134,7 +134,7 @@ namespace Chat.Tests
             Assert.Contains("�", result);
             Assert.DoesNotContain("\r", result);
             Assert.DoesNotContain("\n", result);
-            Assert.Equal("user��INFO Fake entry", result);
+            Assert.Equal("<<<user��INFO Fake entry>>>", result);
         }
 
         [Fact]
@@ -148,7 +148,7 @@ namespace Chat.Tests
 
             // Assert
             Assert.Contains("[REMOVED]", result);
-            Assert.Equal("user[REMOVED]test", result);
+            Assert.Equal("<<<user[REMOVED]test>>>", result);
         }
 
         [Theory]
