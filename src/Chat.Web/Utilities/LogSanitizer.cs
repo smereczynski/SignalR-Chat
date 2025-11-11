@@ -16,17 +16,20 @@ namespace Chat.Web.Utilities
 
         /// <summary>
         /// Sanitizes input by removing control characters that could forge log entries.
-        /// Null or empty strings are returned as-is.
-        /// </summary>
+        /// If input is null, returns string "<null>"; if input is empty, returns "<empty>".
+        /// This ensures logs never contain ambiguous/empty user values.
         /// <param name="input">The input string to sanitize</param>
-        /// <returns>Sanitized string with control characters removed, or original if null/empty</returns>
+        /// <returns>Sanitized string with control characters removed, or a marker if null/empty</returns>
         public static string Sanitize(string input)
         {
-            if (string.IsNullOrEmpty(input))
+            if (input == null)
             {
-                return input;
+                return "<null>";
             }
-
+            if (input.Length == 0)
+            {
+                return "<empty>";
+            }
             // Replace control characters with empty string
             return ControlCharsRegex.Replace(input, "");
         }
