@@ -410,3 +410,9 @@ docs/notes/*
 # Bicep compiled JSON files
 infra/bicep/*.json
 infra/bicep/**/*.json
+
+# Documents
+*.docx
+*.pdf
+*.xlsx
+*.pptx
