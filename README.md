@@ -1,657 +1,313 @@
-# SignalR-Chat
+# SignalR Chat (v0.9.5)
 
-**Version**: 0.9.5
+A production-ready real-time chat application built with ASP.NET Core 9, SignalR, Azure Cosmos DB, and Redis. Features fixed chat rooms, OTP authentication, read receipts, presence tracking, and comprehensive observability.
 
-Real-time multi-room chat on .NET 9 using SignalR (in‑process hub), Azure Cosmos DB persistence, Redis for OTP codes (or in‑memory when testing), optional Azure SignalR (configured automatically when not in test mode), OpenTelemetry (traces + metrics + logs) and a small vanilla JavaScript client. OTP codes are stored hashed by default using Argon2id with a per-code salt and an environment-supplied pepper.
+> **Status**: Production-ready | **License**: [MIT](LICENSE) | **Tests**: 124 passing ✅
 
-The project intentionally keeps scope tight: fixed public rooms, text messages only, no editing/deleting, and OTP-based authentication.
+![Chat Application](docs/images/hero.gif)
+<!-- TODO: Add screenshot showing login, rooms, read receipts, reconnection -->
 
-## Table of Contents
+## Why This Project?
 
-- [Features](#implemented-features-current-state)
-- [Infrastructure](#infrastructure)
-- [Architecture](#architecture-overview)
-- [Configuration](#configuration)
-- [Local Development](#local-development)
-- [OTP Authentication](#otp-authentication-summary)
-- [Messaging Flow](#messaging-flow)
-- [Telemetry & Metrics](#telemetry--metrics)
-- [Notifications](#notifications-unread-messages)
-- [Security Notes](#security-notes)
-- [SignalR Authentication](#signalr-authentication-model)
-- [Health Endpoints](#health)
-- [Localization](#localization)
-- [Testing](#testing)
-- [License](#license)
+SignalR Chat demonstrates modern real-time web application patterns with production-grade security, scalability, and observability. Built for learning and as a foundation for real-time features.
 
----
+**What it does**:
+- 🚀 Real-time messaging with SignalR (WebSocket + Server-Sent Events fallback)
+- 🔐 Secure OTP authentication (Argon2id hashing, rate limiting)
+- 👥 Fixed chat rooms: General, Tech, Random, Sports (no DMs)
+- ✓ Read receipts, typing indicators, presence tracking
+- 🌍 9 languages supported (i18n with server-side + client-side resources)
+- 📊 Full observability (OpenTelemetry, Azure App Insights, health checks)
+- 🔒 Security headers (CSP with nonces, HSTS, frame protection)
 
-## Implemented Features (Current State)
-* Multi-room chat (fixed rooms: `general`, `ops`, `random`)
-* Text messages only (immutable after send)
-* Multi-language support: 9 locales with natural translations (en, pl-PL, de-DE, cs-CZ, sk-SK, uk-UA, be-BY, lt-LT, ru-RU)
-  * Culture resolution via cookie preference or Accept-Language header
-  * Client-side translations via REST API endpoint
-  * Culture switcher UI on login page
-* Optimistic send with client correlation IDs and reconciliation
-* Single ack-timeout per message (deduped by correlationId to avoid duplicate retries)
-* Incremental pagination (newest batch first; fetch older on upward scroll)
-* Client-side send pacing (basic rate limiting logic in JS)
-* Avatar initials (derived client-side with cache bust/refresh protection)
-* OTP authentication (cookie session)
-  * Users: `alice`, `bob`, `charlie`
-  * OTP code stored in Redis (or in-memory store under test flag)
-  * Hashed storage by default (Argon2id + salt + pepper) with a versioned format
-  * Console fallback delivery (ACS email/SMS supported only if configured)
-  * Per-user failed attempt rate limiting (default: 5 attempts per 5 minutes)
-    * Redis counter (`otp_attempts:{user}`) tracks failed verification attempts
-    * Automatic expiry synchronized with OTP TTL
-    * Defense-in-depth with endpoint rate limiting (20 req/5s per IP)
-* Connection & reconnect telemetry (duplicate start suppression + backoff attempts counter)
-* OpenTelemetry traces + metrics + logs; custom counters for chat domain events
-* Background-stable hub connection
-  * Infinite reconnect policy with exponential backoff
-  * Extended timeouts to tolerate background tab throttling (serverTimeout ~ 240s; keepAlive ~ 20s)
-  * Proactive reconnect on tab visibility change and when the browser comes back online
-* Attention cue: browser title blinking when a new message arrives while the tab is hidden (stops when visible)
-* Health endpoints: `/healthz` (liveness), `/healthz/ready` (readiness), `/healthz/metrics` (lightweight snapshot)
-* Outbox queue: pending messages buffered while disconnected and flushed after reconnect & room join
-* Duplicate hub start guard (prevents false reconnect storms)
-* SessionStorage backed optimistic message reconciliation
-* Read receipts: message ReadBy is persisted and broadcast so clients can show who has read each message
-* Delayed unread notifications: if a message remains unread after a configurable delay, send notification via email/SMS
-* Content Security Policy (CSP): Comprehensive security headers to protect against XSS attacks
-  * Nonce-based inline script security
-  * Strict CSP directives (script-src, style-src, connect-src)
-  * WebSocket (wss:) and HTTPS explicitly allowed for SignalR
-  * Additional security headers (X-Content-Type-Options, X-Frame-Options, Referrer-Policy)
-
-## Fixed Room Topology
-Rooms are static; there is no runtime CRUD. Rooms and initial users must be provisioned via the bootstrap process (see `docs/BOOTSTRAP.md` for details).
+**What it doesn't do** (non-goals):
+- ❌ No direct messages (DMs)
+- ❌ No message editing/deletion
+- ❌ No user registration (fixed users: alice, bob, charlie, dave, eve)
+- ❌ No file uploads or rich media
 
 ---
 
-## Infrastructure
+## 🚀 5-Minute Quickstart (No Azure Required)
 
-The application uses **Azure Bicep** templates for reproducible infrastructure deployments across dev, staging, and production environments. **All deployments are automated through GitHub Actions** - no manual scripts are supported.
-
-### Quick Start
+Run locally with in-memory storage (no external dependencies):
 
 ```bash
-# 1. Configure GitHub environment variables (via UI)
-#    Repository → Settings → Secrets and variables → Actions → Variables
-#    Required: BICEP_BASE_NAME, BICEP_LOCATION, BICEP_SHORT_LOCATION,
-#              BICEP_VNET_ADDRESS_PREFIX, BICEP_APP_SERVICE_SUBNET_PREFIX,
-#              BICEP_PRIVATE_ENDPOINTS_SUBNET_PREFIX, BICEP_ACS_DATA_LOCATION
+# Clone and build
+git clone https://github.com/smereczynski/SignalR-Chat.git
+cd SignalR-Chat
+dotnet build ./src/Chat.sln
 
-# 2. Deploy infrastructure via GitHub Actions
-#    Actions → Deploy Infrastructure → Run workflow → Select environment (dev/staging/prod)
-#    Or via CLI:
-gh workflow run deploy-infrastructure.yml -f environment=dev -f action=deploy
+# Run with in-memory mode
+dotnet run --project ./src/Chat.Web --urls=http://localhost:5099
 
-# 3. Access the deployed application
-#    URL displayed in workflow run summary:
-#    https://signalrchat-dev-plc.azurewebsites.net
+# Open browser: http://localhost:5099
+# Users: alice, bob, charlie, dave, eve
+# OTP codes are printed to console (6-digit codes)
 ```
 
-See **[Bootstrap Guide](docs/BOOTSTRAP.md)** for detailed deployment instructions.
+**What's running**:
+- In-memory OTP storage (no Redis)
+- In-memory session state (no Cosmos DB)
+- Direct SignalR connections (no Azure SignalR Service)
+- All features work except persistence across restarts
 
-### Infrastructure Components
-
-| Resource | Purpose | SKU (dev / staging / prod) |
-|----------|---------|----------------------------|
-| **Networking Resource Group** | Isolated networking infrastructure | Per environment |
-| **Virtual Network** | Network isolation with TWO subnets (/27 each) | /26 CIDR |
-| **Network Security Groups** | Security rules per subnet (`nsg-{subnetName}`) | Standard |
-| **Route Tables** | Traffic routing per subnet (`rt-{vnetName}-{type}`) | Standard |
-| **Application Resource Group** | Application services and dependencies | Per environment |
-| **App Service** | Web application hosting | P0V4 / P0V4 / P0V4+AZ |
-| **Cosmos DB** | NoSQL database (messages, users, rooms) | Serverless+AZ / Serverless+AZ / Standard+Geo+AZ |
-| **Azure Managed Redis** | OTP storage, session cache, presence | Balanced_B1 / Balanced_B3 / Balanced_B5 |
-| **SignalR Service** | Real-time communication hub | Standard_S1×1 / Standard_S1×1 / Standard_S1×5 |
-| **Communication Services** | Email and SMS capabilities | Global resource (Europe data location) |
-| **Application Insights** | APM and telemetry | Workspace-based |
-| **Log Analytics** | Centralized logging | 30d / 90d / 365d retention |
-| **Private Endpoints** | Secure service connections (cross-RG) | Cosmos DB, Redis, SignalR |
-
-### Network Architecture
-
-Each environment has **two separate resource groups**:
-
-**Networking Resource Group** (`rg-vnet-{baseName}-{env}-{shortLocation}`):
-- Virtual Network (/26 CIDR)
-- TWO subnets (/27 each):
-  - **App Service Subnet**: VNet integration, route table with Internet route
-  - **Private Endpoints Subnet**: Private endpoint connections, empty route table
-- Network Security Groups: `nsg-{subnetName}` (per subnet)
-- Route Tables: `rt-{vnetName}-appservice`, `rt-{vnetName}-pe`
-
-**Application Resource Group** (`rg-{baseName}-{env}-{shortLocation}`):
-- App Service Plan + Web App (VNet integrated to networking RG)
-- Cosmos DB + Private Endpoint (in networking RG subnet)
-- Redis + Private Endpoint (in networking RG subnet)
-- SignalR + Private Endpoint (in networking RG subnet)
-- Azure Communication Services
-- Monitoring (Log Analytics + Application Insights)
-
-**Security**:
-- NSGs on both subnets with restrictive rules
-- HTTPS-only App Service (TLS 1.2 minimum)
-- Private endpoints for all data services (cross-RG references)
-- Comprehensive security headers (CSP, HSTS, X-Frame-Options)
-- Route tables control traffic flow per subnet
-
-### Documentation
-
-- **[Infrastructure README](infra/bicep/README.md)**: Complete Bicep documentation with architecture diagrams, deployment steps, parameter descriptions, troubleshooting guide
-- **[Bootstrap Guide](docs/BOOTSTRAP.md)**: Step-by-step guide for infrastructure provisioning, data seeding, and GitHub Actions integration
-- **[Architecture](ARCHITECTURE.md)**: System architecture, infrastructure components, data schemas, security notes
-
-### Cost Estimates
-
-- **Development**: ~$150-250/month (Basic SKUs, single region, networking RG + application RG)
-- **Staging**: ~$350-500/month (Standard SKUs, 2 instances, dual RGs)
-- **Production**: ~$1200-1800/month (Premium SKUs, 3 instances with AZ, geo-replication, dual RGs)
+➡️ **Next**: [Full local setup with Azure resources](docs/getting-started/installation.md) | [Configuration guide](docs/getting-started/configuration.md)
 
 ---
 
-## Architecture Overview
-**Runtime**: ASP.NET Core 9 (Razor Pages + Controllers + SignalR Hub)  
-**Real-time**: SignalR hub (Azure SignalR automatically added when not running in in-memory test mode)  
-**Persistence**: Azure Cosmos DB with custom repository pattern (or in-memory repositories for testing)  
-**OTP / Cache**: Redis (or in-memory fallback) storing short-lived OTP codes (`otp:{user}`) and failed attempt counters (`otp_attempts:{user}`)  
-**Auth Flow**: Request code → store in OTP store → user enters code → cookie issued → hub connects  
-**Security**: Multi-layer rate limiting (endpoint: 20 req/5s per IP, user: 5 failed attempts per 5 minutes), Argon2id OTP hashing, CSP headers  
-**Localization**: ASP.NET Core Localization with 9 supported markets; culture via Cookie > Accept-Language; API endpoint for client translations  
-**Observability**: OpenTelemetry (trace + metric + log providers) with exporter priority (Azure Monitor > OTLP > Console) and domain counters  
-Serilog OTLP sink is enabled only when `OTel__OtlpEndpoint` is set to avoid startup issues in environments without an OTLP endpoint.  
-**Frontend**: Source JS in `wwwroot/js/` referenced directly by pages (`site.js`, `chat.js`, `login.js`). Minified bundles in `wwwroot/js/dist/` are optional and not required for development—pages do not reference `dist` by default.
+## 📚 Documentation
 
-**Auth & Redirects**: Dedicated `/login` page issues a cookie after OTP verification. Redirect targets are validated on the server with `Url.IsLocalUrl`; the verify API returns a server-approved `nextUrl` used by the client.
+| Category | Description | Link |
+|----------|-------------|------|
+| **Getting Started** | Installation, configuration, first run | [docs/getting-started/](docs/getting-started/) |
+| **Architecture** | System design, diagrams, decisions | [docs/architecture/](docs/architecture/) |
+| **Deployment** | Azure deployment, Bicep, CI/CD | [docs/deployment/](docs/deployment/) |
+| **Features** | Authentication, presence, i18n, real-time | [docs/features/](docs/features/) |
+| **Development** | Local setup, testing, debugging | [docs/development/](docs/development/) |
+| **Operations** | Monitoring, diagnostics, health checks | [docs/operations/](docs/operations/) |
+| **Reference** | API, configuration, telemetry | [docs/reference/](docs/reference/) |
 
-### Cosmos messages retention (TTL)
-If you run with Cosmos DB repositories enabled, the messages container can use a configurable TTL (time-to-live):
+---
 
-- Key: `Cosmos:MessagesTtlSeconds`
-- Values:
-  - Positive integer (seconds): items auto-expire after the given duration (e.g., `604800` for 7 days)
-  - `-1`: TTL is enabled but items never expire by default (Cosmos semantics)
-  - `null` or unset/empty: TTL is disabled entirely (container DefaultTimeToLive is cleared)
-- Reconciliation: On startup, the app reconciles the container's `DefaultTimeToLive` to match the configured value, updating or clearing it as needed.
+## 🏗️ Architecture Overview
 
-Environment variable examples (zsh):
-
-```
-# Disable TTL entirely
-export Cosmos__MessagesTtlSeconds=
-# or explicitly set the literal string "null"
-export Cosmos__MessagesTtlSeconds=null
-
-# Keep messages for 7 days
-export Cosmos__MessagesTtlSeconds=604800
-
-# Enable TTL but never expire by default
-export Cosmos__MessagesTtlSeconds=-1
-```
-
-## Configuration
-The app uses standard ASP.NET Core configuration with environment-specific overrides:
-
-* **`appsettings.Development.json`**: Development-time settings including relaxed CORS, in-memory testing flags, console telemetry, and development rate limits.
-* **`appsettings.Production.json`**: Production-ready settings with stricter rate limits, Azure Monitor telemetry integration, and production-grade security policies.
-
-Key configuration sections:
-* `Otp`: OTP hashing parameters (Argon2id memory, iterations, parallelism), TTL, hashing toggle, failed attempt limit (MaxAttempts)
-* `RateLimiting`: Per-endpoint rate limits (OTP request/verify, MarkRead operations)
-* `Cosmos`: Connection string (preferably in Azure Connection Strings section as `Cosmos`, fallback to `Cosmos:ConnectionString` in Application Settings), database/container names, messages TTL
-* `Redis`: Connection string (preferably in Azure Connection Strings section as `Redis`, fallback to `Redis:ConnectionString` in Application Settings) for OTP storage, attempt counters, and caching
-* `AzureSignalR`: Connection string (preferably in Azure Connection Strings section as `SignalR`, fallback to `Azure:SignalR:ConnectionString` in Application Settings, auto-added when not in test mode)
-* `Acs`: Azure Communication Services connection string (preferably in Azure Connection Strings section as `ACS`, fallback to `Acs:ConnectionString` in Application Settings) for email/SMS delivery
-* `Notifications`: Unread message notification delays and channels
-* `OTel`: OpenTelemetry exporter endpoints (Azure Monitor, OTLP)
-
-Environment variables override appsettings values using the standard colon-to-double-underscore mapping (e.g., `Otp__Pepper`, `Cosmos__MessagesTtlSeconds`). Azure App Service injects Connection Strings as `CUSTOMCONNSTR_{name}` environment variables (e.g., `CUSTOMCONNSTR_Cosmos`).
-
-## Local Development
-Prerequisites:
-* .NET 9 SDK
-* Redis (unless running with in-memory testing configuration)
-* (Optional) Azure Communication Services connection (email/SMS) for real OTP delivery
-
-### Build & Run (Manual)
-```
-dotnet build ./src/Chat.sln
-dotnet run --project ./src/Chat.Web --urls=http://localhost:5099
-```
-Navigate to: http://localhost:5099
-
-### VS Code Tasks (Automation)
-The workspace includes curated tasks (see `.vscode/tasks.json`). These are optional; the app runs without bundling because pages reference source JS. Key tasks:
-
-| Task Label | Purpose |
-|------------|---------|
-| npm install | Install frontend dependencies (esbuild, sass). |
-| bundle js (prod) | Optional: Build/minify JS + compile Sass (depends on npm install). |
-| dotnet build | Compile the .NET solution. |
-| build all | Full pipeline: npm install → bundle js (prod) → dotnet build. |
-| test | Run solution tests (`dotnet test --no-build`). |
-| Run Chat (Azure local env) | Load `.env.local` (if present), set Development environment, run app on http://localhost:5099. |
-| PROD Run Chat (Azure local env) | Same as above but forces `ASPNETCORE_ENVIRONMENT=Production`. |
-
-Recommended editing cycle:
-1. Modify source JS (`wwwroot/js/*.js`) and/or Razor pages
-2. Run `Run Chat (Azure local env)` task (or `dotnet run` as below)
-3. Refresh browser
-
-Note: If you choose to bundle for production testing, use the provided tasks. Dist files are generated but not referenced by default.
-
-## OTP Authentication (Summary)
-1. User selects identity and requests code
-2. Code persisted with TTL in configured OTP store; when hashing is enabled, the stored value has the format `OtpHash:v2:argon2id:...`
-3. User submits code; on success a cookie auth session is issued
-4. Client starts (or reuses) hub connection; queued optimistic messages (if any) flush
-
-Console output displays the OTP when ACS is not configured.
-
-### Hashing details
-- Algorithm: Argon2id (Isopoh.Cryptography.Argon2)
-- Format: `OtpHash:v2:argon2id:m={KB},t={it},p={par}:{saltB64}:{encoded}`
-- Preimage: `pepper || userName || ':' || salt || ':' || code`
-- Configuration via `Otp` options:
-  - `Otp:HashingEnabled` (default: true)
-  - `Otp:MemoryKB` (default: 65536), `Otp:Iterations` (default: 3), `Otp:Parallelism` (default: 1), `Otp:OutputLength` (default: 32)
-  - `Otp__Pepper` environment variable overrides `Otp:Pepper` and must be a Base64 string
-
-Testing notes:
-- Integration tests run with `Testing:InMemory=true` and a console OTP sender.
-- The verify endpoint isn’t invoked by tests due to a known test harness middleware interaction; tests assert storage format via the DI-resolved `IOtpStore`.
-
-## Messaging Flow
-1. User sends → client assigns `correlationId`, renders optimistic message
-2. Hub method persists & broadcasts canonical payload with same `correlationId`
-3. Client reconciles optimistic entry (replaces temp rendering)
-4. If offline/disconnected: message stored in sessionStorage outbox until reconnect & room join
-
-### Read receipts
-- Clients mark messages as read when they reach the bottom of the timeline or when messages come into view, debounced to reduce chatter.
-- Server persists the reader in each message's `ReadBy` set and broadcasts `messageRead` events for real-time UI updates.
-- REST fallback: `POST /api/messages/{id}/read` marks a message as read for the current user.
-
-### REST Fallback (Feature-Flagged)
-A narrow REST POST endpoint (`POST /api/Messages`) exists solely to satisfy the
-"immediate post after authentication" integration scenario and is **disabled by default**.
-It can be enabled by setting configuration key `Features:EnableRestPostMessages=true` (tests do this via the custom factory).
-In production the endpoint returns 404, encouraging clients to use only the SignalR hub path.
-
-## 📊 Observability & Diagnostics
-
-The application implements comprehensive logging and monitoring for all dependencies and failure points, making it easy to debug issues in both Development and Production environments.
-
-### Health Checks
-
-Health checks monitor all critical dependencies and publish results to Application Insights:
-
-- **`/healthz`**: Liveness probe (always returns 200 OK)
-- **`/healthz/ready`**: Readiness probe (checks Cosmos DB, Redis, ACS configuration)
-- **`/healthz/metrics`**: Lightweight metrics snapshot
-
-**Health Check Logging**:
-- All health checks log to Application Insights via `ILogger` integration
-- `ApplicationInsightsHealthCheckPublisher` publishes results every 30 seconds
-- Logs include: service name, status (Healthy/Degraded/Unhealthy), duration, and failure reasons
-- Example log: `"Health check completed: Healthy in 5.35ms. All 4 checks passed."`
-- Failed checks log detailed error information for troubleshooting
-
-### Dependency Logging
-
-**Cosmos DB**:
-- Initialization logging: Database name, container names, connection success/failure
-- Exception logging with full stack traces for connection errors
-- Query and operation logging at Information level
-- Development environment uses Debug level for verbose output
-
-**Redis**:
-- Connection event handlers log all state changes:
-  - `ConnectionFailed`: Logs endpoint, failure type, and reason
-  - `ConnectionRestored`: Confirms reconnection to endpoint
-  - `ErrorMessage`: Logs Redis server errors
-  - `InternalError`: Logs internal StackExchange.Redis errors
-- OTP store operations logged with user context (GET, SET, INCR)
-- Cooldown events logged when entering rate-limited state
-- Example: `"Redis connection failed: redis-app-dev.polandcentral.redis.azure.net:10000, ConnectTimeout"`
-
-**Application Insights**:
-- Both Development and Production environments send logs to AI
-- Development: Debug level with verbose dependency logging
-- Production: Information level with targeted dependency logging
-- Configuration via `APPLICATIONINSIGHTS_CONNECTION_STRING` environment variable
-
-### Global Exception Handling
-
-`GlobalExceptionHandlerMiddleware` catches all unhandled exceptions and logs comprehensive context:
-- HTTP method and path
-- Authenticated user (or "Anonymous")
-- Remote IP address
-- User-Agent header
-- Exception type and message
-- Returns generic error response with trace ID for correlation
-
-Example log:
-```
-Unhandled exception in POST /api/messages/send. User: alice, RemoteIP: 10.0.0.5, 
-UserAgent: Mozilla/5.0..., ExceptionType: System.InvalidOperationException, 
-Message: Cosmos DB connection timeout
+```mermaid
+graph TD
+    Browser[Browser<br/>Razor Pages + SignalR.js]
+    
+    subgraph "ASP.NET Core 9"
+        RazorPages[Razor Pages<br/>Login, UI]
+        SignalRHub[SignalR Hub<br/>ChatHub]
+        Auth[Cookie Authentication]
+        
+        RazorPages --> Auth
+        SignalRHub --> Auth
+    end
+    
+    Browser -->|HTTPS/WSS| RazorPages
+    Browser -->|WebSocket| SignalRHub
+    
+    Auth --> CosmosDB[(Cosmos DB<br/>Messages, Rooms<br/>Read Status)]
+    Auth --> Redis[(Redis<br/>OTP Codes<br/>Rate Limits)]
+    
+    SignalRHub --> CosmosDB
+    SignalRHub --> Redis
+    
+    subgraph "Optional Azure Services"
+        AzureSignalR[Azure SignalR Service<br/>Scale to 1000s]
+        ACS[Azure Communication Services<br/>SMS/Email]
+        AppInsights[Application Insights<br/>Telemetry]
+    end
+    
+    SignalRHub -.->|Optional| AzureSignalR
+    Auth -.->|Notifications| ACS
+    ASPNETCore -.->|Metrics/Logs| AppInsights
+    
+    style Browser fill:#e1f5ff
+    style CosmosDB fill:#ffe1e1
+    style Redis fill:#ffe1e1
+    style Auth fill:#fff4e1
 ```
 
-### Logging Configuration
+➡️ [Full architecture documentation](docs/architecture/overview.md)
 
-**Development Environment** (`appsettings.Development.json`):
-```json
-{
-  "Serilog": {
-    "MinimumLevel": {
-      "Default": "Debug",
-      "Override": {
-        "Chat.Web": "Debug",
-        "Chat.Web.Health": "Debug",
-        "Microsoft.Azure.Cosmos": "Information",
-        "StackExchange.Redis": "Information",
-        "Azure.Core": "Information"
-      }
-    }
-  }
-}
+---
+
+## 🛠️ Tech Stack
+
+| Layer | Technology | Purpose |
+|-------|------------|---------|
+| **Frontend** | Vanilla JS, Bootstrap 5, SignalR Client | UI, real-time updates |
+| **Backend** | ASP.NET Core 9, SignalR | Web server, WebSocket hub |
+| **Database** | Azure Cosmos DB (NoSQL) | Messages, rooms, read receipts |
+| **Cache** | Redis | OTP storage, rate limiting |
+| **Auth** | Cookie authentication + OTP | Secure login flow |
+| **Observability** | OpenTelemetry, App Insights | Metrics, traces, logs |
+| **Deployment** | Azure App Service, Bicep IaC | Infrastructure as Code |
+
+---
+
+## 📦 Project Structure
+
+```
+SignalR-Chat/
+├── src/
+│   ├── Chat.Web/              # Main ASP.NET Core application
+│   │   ├── Controllers/       # REST API endpoints
+│   │   ├── Hubs/             # SignalR ChatHub
+│   │   ├── Pages/            # Razor Pages (login, chat UI)
+│   │   ├── Services/         # OTP, presence, notifications
+│   │   ├── Repositories/     # Cosmos DB data access
+│   │   └── Middleware/       # Security headers, logging
+│   └── Chat.sln              # Solution file
+├── tests/
+│   ├── Chat.Tests/           # Unit tests (93 tests)
+│   ├── Chat.IntegrationTests/# Integration tests (22 tests)
+│   └── Chat.Web.Tests/       # Web/security tests (9 tests)
+├── infra/
+│   └── bicep/                # Azure infrastructure (Bicep)
+├── docs/                     # Documentation (detailed guides)
+├── .github/
+│   └── workflows/            # CI/CD pipelines
+└── README.md                 # This file
 ```
 
-**Production Environment** (`appsettings.Production.json`):
-```json
-{
-  "Serilog": {
-    "MinimumLevel": {
-      "Default": "Information",
-      "Override": {
-        "Chat.Web": "Information",
-        "Chat.Web.Health": "Information",
-        "Microsoft.Azure.Cosmos": "Information",
-        "StackExchange.Redis": "Information",
-        "Azure.Core": "Information"
-      }
-    }
-  }
-}
-```
+---
 
-### Troubleshooting Common Issues
+## 🧪 Testing
 
-**Issue: Redis connection timeouts or failures**
-- **Symptom**: `ConnectionFailed` logs with `ConnectTimeout` or `UnableToConnect`
-- **Cause**: DNS resolution issues or private endpoint misconfiguration
-- **Solution**: 
-  1. Check DNS record points to correct private IP (e.g., 10.50.8.38)
-  2. Verify VNet integration is enabled on App Service
-  3. Confirm outbound routing uses VNet (`outboundVnetRouting.allTraffic = true`)
-  4. Check Redis connection string uses private endpoint hostname
-  5. Review logs: `az monitor app-insights query --app <app-name> --analytics-query "traces | where message contains 'Redis'"`
+**124 tests** covering unit, integration, and web security:
 
-**Issue: Cosmos DB partition key validation errors**
-- **Symptom**: `ArgumentException: Partition key definition is not compatible`
-- **Cause**: Container partition key doesn't match application expectations
-- **Solution**: 
-  1. Check container partition key in Azure Portal: `/userName` (not `/id`)
-  2. Review initialization logs for partition key mismatch errors
-  3. Recreate container with correct partition key if needed
-
-**Issue: Health checks showing Degraded/Unhealthy**
-- **Symptom**: `/healthz/ready` returns 503 Service Unavailable
-- **Solution**:
-  1. Check Application Insights logs for health check failures
-  2. Query: `traces | where message contains "Health check" | order by timestamp desc`
-  3. Review specific service logs (Cosmos, Redis) for root cause
-  4. Verify connection strings and private endpoint connectivity
-
-**Issue: No logs in Application Insights**
-- **Symptom**: Logs visible locally but not in Azure Monitor
-- **Cause**: `APPLICATIONINSIGHTS_CONNECTION_STRING` not configured or incorrect
-- **Solution**:
-  1. Verify environment variable is set in App Service Configuration
-  2. Check connection string format: `InstrumentationKey=...;IngestionEndpoint=...`
-  3. Confirm `ASPNETCORE_ENVIRONMENT` is set (Development or Production)
-  4. Review startup logs for Serilog sink initialization
-
-### OpenTelemetry & Metrics
-Exporter selection (in `Startup`) prioritizes: Azure Monitor (when Production + connection string) → OTLP endpoint → Console.
-
-Custom counters (Meter `Chat.Web`):
-* `chat.messages.sent`
-* `chat.rooms.joined`
-* `chat.otp.requests`
-* `chat.otp.verifications`
-* `chat.reconnect.attempts`
-
-Client emits lightweight events for: reconnect attempts, duplicate start skips, message send outcomes, pagination fetches, queue flushes.
-Server logs use Serilog; OTLP export is conditionally enabled only when `OTel__OtlpEndpoint` is configured.
-
-## Notifications (Unread messages)
-When a message remains unread after a configurable delay, the app sends a lightweight notification to room members (excluding the sender and anyone who has already read it).
-
-- Delay: `Notifications:UnreadDelaySeconds` (default 60). After this delay, unread messages trigger notifications.
-- Recipient selection: primarily from `room.users`; when that list is missing, a fallback infers recipients from users' `fixedRooms`.
-- Channels: Email and SMS via Azure Communication Services when configured; otherwise a console fallback is used in development.
-- Formatting (required contract):
-  - Email subject: `New message`
-  - Email body: `New message in #<room>`
-  - SMS body: `New message in #<room>`
-  - No message content is included in notifications.
-
-Implementation details:
-- `UnreadNotificationScheduler` is an `IHostedService` that schedules a per-message delayed check and sends notifications if still unread.
-- `NotificationSender` constructs the notification payload; `AcsOtpSender` applies the email subject for notifications while preserving OTP-specific formatting for the authentication flow.
-
-## Security Notes
-* **HTTP Strict Transport Security (HSTS)**: Production-ready HSTS configuration to protect against downgrade attacks:
-  - 1-year max-age (31536000 seconds) for extended protection window
-  - `Preload` directive enabled for HSTS preload list eligibility (https://hstspreload.org/)
-  - `IncludeSubDomains` enabled to protect all subdomains
-  - Only applied in Production environment (not in test mode)
-  - Expected header: `Strict-Transport-Security: max-age=31536000; includeSubDomains; preload`
-  - Mitigates first-visit vulnerability and man-in-the-middle attacks
-  - Certificate renewal must remain automated (Azure App Service handles this automatically)
-* **Content Security Policy (CSP)**: Comprehensive security headers implemented to protect against XSS attacks:
-  - Nonce-based inline script security using cryptographically secure per-request nonces
-  - Strict CSP directives: `default-src 'self'`, `script-src 'self' 'nonce-{nonce}'`, `style-src 'self' 'unsafe-inline'`, `connect-src 'self' wss: https:`
-  - WebSocket (wss:) and HTTPS explicitly allowed for SignalR real-time communication
-  - Additional security headers: `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`
-  - Implementation: `SecurityHeadersMiddleware` generates unique nonces and applies headers to all responses
-* **OTP Security**:
-  - OTP codes are stored hashed by default (Argon2id + salt + pepper). To support legacy/testing scenarios, plaintext storage can be toggled with `Otp:HashingEnabled=false`.
-  - Provide a high-entropy Base64 pepper via `Otp__Pepper` in each environment. Keep this secret out of source control.
-  - **Failed Attempt Rate Limiting**: Per-user counter tracks failed verification attempts
-    - Default threshold: 5 attempts per 5 minutes (configurable via `Otp__MaxAttempts`)
-    - Redis key pattern: `otp_attempts:{user}` with atomic INCR operations
-    - Automatic expiry synchronized with OTP TTL (5 minutes)
-    - Counter increments only on verification failure, not on success
-    - Safe fallback on Redis errors (fail-open for availability)
-    - Generic 401 responses prevent username enumeration
-    - OpenTelemetry metric: `chat.otp.verifications.ratelimited`
-* **Rate Limiting**: Multi-layer protection
-  - Endpoint-level: 20 requests per 5 seconds per IP (prevents request flooding/DDoS)
-  - User-level: 5 failed OTP attempts per 5 minutes (prevents brute-force attacks)
-  - Applied to auth/OTP endpoints via fixed window limiter (configurable limits)
-* Redirect safety: server validates `ReturnUrl` with `Url.IsLocalUrl` and responds with a server-issued `nextUrl`; the client uses that value. Client also performs a basic path check as a secondary guard.
-* DOM XSS hardening: client code avoids `innerHTML` when rendering user-controlled content (uses `textContent` and element creation).
-* Log forging mitigation: request method and path are sanitized before logging in `RequestTracingMiddleware`.
-* Correlation IDs are random UUIDs (no sensitive data embedded).
-
-## SignalR Authentication Model
-- The chat hub (`Hubs/ChatHub.cs`) is decorated with `[Authorize]`; anonymous clients cannot connect.
-- In normal (non-testing) mode the app uses cookie authentication:
-  - Configured in `Startup.cs` via `AddAuthentication().AddCookie(...)` with Sliding Expiration and a 12h `ExpireTimeSpan`.
-  - The browser automatically sends the auth cookie during SignalR negotiate and WebSocket upgrade requests.
-- In testing (`Testing:InMemory=true`) a simple test auth scheme is used, but the hub still requires an authenticated principal.
-- The client connects with:
-  - `new signalR.HubConnectionBuilder().withUrl('/chatHub').withAutomaticReconnect(...).build()` (see `wwwroot/js/chat.js`).
-  - No explicit access token is passed; same-origin cookie auth is used.
-- Authorization inside the hub:
-  - `Join(roomName)` enforces membership in the user's `FixedRooms`. Being authenticated is required but not sufficient to join any room.
-- Anonymous access
-  - Not supported by default. To allow it, you'd remove `[Authorize]` (not recommended for this app) or switch to a JWT bearer model if cross-origin access without cookies is desired.
-
-## Health
-Endpoints:
-- `/healthz` — basic liveness (string "ok")
-- `/healthz/ready` — readiness including Redis/Cosmos and config checks
-- `/healthz/metrics` — lightweight in-process metrics snapshot (JSON)
-
-## Development Workflow Tips
-* Edit source JS/CSS directly; bundling is optional and not required by default.
-* Use `build all` only when you want to produce minified bundles alongside a .NET build.
-* Run the `test` task before pushing changes.
-* Consider adding a local `--watch` script if iterating frequently (not included by default).
-## Presence Tracking
-The application tracks user presence across multiple instances using a hybrid approach:
-* **Per-connection state**: Stored in `Context.Items` for instant access in hub methods (no Redis query needed for SendMessage/MarkRead)
-* **Distributed snapshot**: Redis hash (`presence:users`) stores user presence for cross-instance consistency
-* **Interfaces**: `IPresenceTracker` with `RedisPresenceTracker` (production) and `InMemoryPresenceTracker` (testing)
-* **Endpoints**: `GET /api/health/chat/presence` (authenticated) returns per-room user presence
-
-## Localization
-The application supports **9 markets** with natural, idiomatic translations:
-
-### Supported Cultures
-| Culture | Language | Notes |
-|---------|----------|-------|
-| `en` | English | Default/fallback |
-| `pl-PL` | Polish | |
-| `de-DE` | German | Formal style |
-| `cs-CZ` | Czech | Informal friendly |
-| `sk-SK` | Slovak | |
-| `uk-UA` | Ukrainian | Cyrillic, modern Ukrainian |
-| `be-BY` | Belarusian | Cyrillic, proper Belarusian |
-| `lt-LT` | Lithuanian | Baltic language, Latin script |
-| `ru-RU` | Russian | Cyrillic, standard contemporary |
-
-### Features
-* **Culture Resolution**: Cookie preference → Accept-Language header → Default (en)
-* **Client API**: `GET /api/localization/strings` returns JSON with 60+ translated strings
-* **Resource Files**: `SharedResources.[locale].resx` with comprehensive translations
-* **Culture Switcher**: UI component on login page for explicit culture selection
-* **Coverage**: Application UI, chat interface, authentication, errors, validation, notifications
-* **Translation Quality**: Natural, idiomatic translations (not literal machine translations)
-
-### Client Integration
-JavaScript code fetches translations on page load and populates `window.i18n` object:
-```javascript
-const response = await fetch('/api/localization/strings');
-window.i18n = await response.json();
-// Usage: window.i18n.Loading, window.i18n.Error, etc.
-```
-
-Razor pages use `IStringLocalizer<SharedResources>`:
-```csharp
-@inject IStringLocalizer<SharedResources> Localizer
-@Localizer["AppTitle"]
-```
-
-### Testing
-Comprehensive test coverage with 55 tests across all 9 locales:
-* Basic English localization tests (10 tests)
-* Multi-locale tests (45 tests = 5 test categories × 9 locales)
-  * App translations verification
-  * UI strings validation
-  * Authentication strings checking
-  * Complete key existence validation (60+ keys per locale)
-  * Parameterized string formatting
-
-All 55 tests passing ✅
-
-## Testing
-The project includes comprehensive test coverage across four test assemblies:
-
-### Test Summary
-* **Total Tests**: 124 tests
-* **Status**: All passing ✅
-* **Test Projects**:
-  - `Chat.Tests` (93 tests): Unit tests including localization (55 tests), security (13 tests for log sanitization), OTP hashing, configuration guards, unread notifications
-  - `Chat.IntegrationTests` (22 tests): End-to-end integration tests including OTP flow, rate limiting, room authorization, hub lifecycle
-  - `Chat.Web.Tests` (9 tests): Web-specific tests including security headers (CSP), health endpoints
-
-### Key Test Categories
-1. **Localization Tests** (55 tests in Chat.Tests)
-   - English default culture tests (10)
-   - Multi-locale comprehensive tests (45 = 5 categories × 9 locales)
-   - Covers all 60+ resource keys across 9 cultures
-   - Validates translation quality and completeness
-
-2. **Integration Tests** (22 tests in Chat.IntegrationTests)
-   - `OtpAuthFlowTests`: Full OTP authentication workflow
-   - `OtpAttemptLimitingTests`: Per-user failed attempt rate limiting (3 tests)
-     - Validates blocking after N failed attempts
-     - Ensures attempts within limit are allowed
-     - Verifies counter increments only on failure
-   - `RoomAuthorizationTests`: Room access control validation
-   - `RoomJoinPositiveTests`: Successful room join scenarios
-   - `ChatHubLifecycleTests`: SignalR hub connection/disconnection
-   - `RateLimitingTests`: OTP endpoint rate limiting
-   - `MarkReadRateLimitingTests`: Read receipt rate limiting
-   - `ImmediatePostAfterLoginTests`: REST fallback (feature-flagged)
-
-3. **Unit Tests** (38 tests in Chat.Tests, excluding localization)
-   - `OtpHasherTests`: Argon2id hashing, salt, pepper verification
-   - `ConfigurationGuardsTests`: Required configuration validation
-   - `UnreadNotificationSchedulerTests`: Delayed notification logic
-   - `UrlIsLocalUrlTests`: Redirect validation
-
-4. **Data Tests** (10 tests in Chat.DataSeed.Tests)
-   - Bootstrap data seeding validation
-   - User/Room/Message seed data integrity
-
-5. **Web Tests** (7 tests in Chat.Web.Tests)
-   - `SecurityHeadersTests`: Content Security Policy (CSP) headers validation (3 tests)
-     - Tests CSP presence on all endpoints (/login, /chat, /healthz, /api/localization/strings)
-     - Validates all required CSP directives (script-src, style-src, connect-src with WebSocket support)
-     - Verifies nonce uniqueness and HTML integration for inline script security
-   - `HealthEndpointsTests`: Health check endpoints validation (1 test)
-     - Tests in-memory mode health endpoints (/healthz, /healthz/ready)
-   - Additional Web.Tests: (3 tests - from before CSP implementation)
-
-### Running Tests
 ```bash
 # Run all tests
-dotnet test src/Chat.sln --nologo
+dotnet test src/Chat.sln
 
 # Run specific test project
-dotnet test tests/Chat.Tests/Chat.Tests.csproj --nologo
-
-# Run localization tests only
-dotnet test src/Chat.sln --filter "FullyQualifiedName~LocalizationTests" --nologo
-
-# Run integration tests only
-dotnet test tests/Chat.IntegrationTests/Chat.IntegrationTests.csproj --nologo
+dotnet test tests/Chat.Tests/
+dotnet test tests/Chat.IntegrationTests/
+dotnet test tests/Chat.Web.Tests/
 ```
 
-### VS Code Task
-Use the `test` task defined in `.vscode/tasks.json`:
+**Test coverage**:
+- ✅ 55 localization tests (9 languages × 6 categories)
+- ✅ 13 security tests (log sanitization, CSP)
+- ✅ 22 integration tests (OTP flow, rate limiting, SignalR lifecycle)
+- ✅ 9 web tests (security headers, health endpoints)
+
+➡️ [Testing guide](docs/development/testing.md)
+
+---
+
+## 🚀 Deployment
+
+### Azure (Production)
+
+Deploy to Azure using Bicep infrastructure as code:
+
 ```bash
-# Via VS Code: Tasks: Run Task → test
-# Or use the task runner
+cd infra/bicep
+
+# Deploy to dev environment
+az deployment sub create \
+  --location westeurope \
+  --template-file main.bicep \
+  --parameters main.parameters.dev.bicepparam
+
+# Deploy to production
+az deployment sub create \
+  --location westeurope \
+  --template-file main.bicep \
+  --parameters main.parameters.prod.bicepparam
 ```
 
-### Test Configuration
-- Integration tests use `CustomWebApplicationFactory` with in-memory repositories
-- `Testing:InMemory=true` flag enables in-memory OTP store and repositories
-- No external dependencies required (Redis/Cosmos mocked)
-- Tests run in isolation with separate DI containers
+**Automated CI/CD**: GitHub Actions workflows deploy on push to `main`
 
-### Recent Test Cleanup (v0.9.3)
-The following tests were removed as part of test suite cleanup:
-- **RoomsEndpointsTests** (entire file) - Removed 2 outdated tests that were checking for non-existent POST/DELETE endpoints on the read-only RoomsController
-- **HealthEndpointsTests.RealMode_Healthz_Ready_Returns200_WithOverriddenChecks** - Removed overly complex test that attempted to test "real mode" with fake configuration; the InMemoryMode test provides adequate coverage
+➡️ [Deployment guide](docs/deployment/azure.md) | [Production checklist](docs/deployment/production-checklist.md)
 
-## Future Enhancements (Not Implemented)
-* Typing indicators
-* Backplane scale-out metrics & multi-instance benchmarks
-* Additional anti-abuse policies for OTP attempts (per-user/IP counters in Redis)
-* Rich pagination UX (virtualization, skeleton loaders)
+---
 
-## License
-See `LICENSE` file.
+## 🔒 Security
+
+- ✅ **OTP Authentication**: Argon2id hashing with pepper, 3 failed attempts lockout
+- ✅ **CSP Headers**: Nonce-based Content Security Policy, prevents XSS
+- ✅ **HSTS**: HTTP Strict Transport Security in production
+- ✅ **Rate Limiting**: 5 OTP requests/min per user, 20/min per IP
+- ✅ **Input Sanitization**: Log forgery prevention (CWE-117)
+- ✅ **Private Endpoints**: VNet integration, no public database access
+
+➡️ [Security architecture](docs/architecture/security.md) | [Authentication guide](docs/features/authentication.md)
+
+---
+
+## 🌍 Localization
+
+Supports 9 languages with both server-side (.resx) and client-side (API) translations:
+
+**Languages**: English, Polish, Spanish, French, German, Italian, Portuguese, Japanese, Chinese
+
+```bash
+# Add new language key
+# 1. Edit Resources/SharedResources.resx (English default)
+# 2. Add to Resources/SharedResources.[culture].resx
+# 3. Rebuild to embed resources
+
+# Verify translations
+dotnet test tests/Chat.Tests/ --filter "Category=Localization"
+```
+
+➡️ [Localization guide](docs/features/localization.md)
+
+---
+
+## 📊 Observability
+
+**Metrics, Traces, Logs** via OpenTelemetry → Azure Application Insights
+
+**Custom Metrics**:
+- `chat.otp.requests` - OTP generation count
+- `chat.otp.verifications` - OTP verification attempts
+- `chat.messages.sent` - Messages sent per room
+- `chat.connections.active` - Active SignalR connections
+
+**Health Checks**:
+- `/healthz` - Liveness probe (responds 200 OK)
+- `/healthz/ready` - Readiness probe (checks Cosmos + Redis)
+
+➡️ [Monitoring guide](docs/operations/monitoring.md) | [Diagnostics](docs/operations/diagnostics.md)
+
+---
+
+## 🤝 Contributing
+
+We welcome contributions! Please read [CONTRIBUTING.md](CONTRIBUTING.md) for:
+- Code of conduct
+- How to set up your development environment
+- Running tests and linters
+- Commit message conventions
+- Pull request process
+
+**Quick start for contributors**:
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature/my-feature`
+3. Make changes and add tests
+4. Run tests: `dotnet test src/Chat.sln`
+5. Commit: `git commit -m "feat: add my feature"`
+6. Push and create a pull request
+
+---
+
+## 📝 License
+
+This project is licensed under the MIT License - see [LICENSE](LICENSE) file for details.
+
+---
+
+## 🔗 Links
+
+- **Documentation**: [docs/](docs/)
+- **Issues**: [GitHub Issues](https://github.com/smereczynski/SignalR-Chat/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/smereczynski/SignalR-Chat/discussions)
+- **Changelog**: [CHANGELOG.md](CHANGELOG.md)
+- **Original README**: [README.old.md](README.old.md) (archived, detailed reference)
+
+---
+
+## ⭐ Key Features Breakdown
+
+| Feature | Description | Implementation |
+|---------|-------------|----------------|
+| **Optimistic Send** | Messages appear instantly, confirmed async | SignalR invoke + server broadcast |
+| **Read Receipts** | Per-user read status per message | Cosmos DB `ReadReceipts` container |
+| **Typing Indicators** | "X is typing…" shown to room | SignalR `NotifyTyping` with debounce |
+| **Presence Tracking** | Online/offline status | Redis cache with TTL + SignalR events |
+| **Reconnection** | Auto-reconnect with exponential backoff | SignalR.js with custom retry policy |
+| **Pagination** | Load 50 messages, scroll to load more | Cosmos DB continuation token |
+| **Unread Badges** | "5 unread in Tech" notifications | Redis counter + SignalR updates |
+| **Rate Limiting** | Prevent OTP spam, abuse | ASP.NET Core rate limiter |
+
+---
+
+<p align="center">
+  Made with ❤️ using ASP.NET Core 9 & SignalR
+</p>

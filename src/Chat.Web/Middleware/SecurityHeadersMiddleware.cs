@@ -24,14 +24,20 @@ namespace Chat.Web.Middleware
         public async Task InvokeAsync(HttpContext context)
         {
             // Generate nonce for this request (used in inline scripts)
+            // IMPORTANT: This must be set BEFORE calling _next to ensure it's available during Razor page rendering
             var nonceBytes = RandomNumberGenerator.GetBytes(16);
             var nonce = Convert.ToBase64String(nonceBytes);
             context.Items["csp-nonce"] = nonce;
 
             // Set security headers just before the response starts
+            // NOTE: OnStarting is called after rendering begins but before headers are sent,
+            // which is why we set context.Items["csp-nonce"] earlier
             context.Response.OnStarting(() =>
             {
                 var headers = context.Response.Headers;
+
+                // Retrieve the nonce from context items (it should already be there)
+                var currentNonce = context.Items["csp-nonce"]?.ToString() ?? nonce;
 
                 // Content Security Policy (CSP)
                 // - default-src 'self': Only allow resources from same origin by default
@@ -45,7 +51,7 @@ namespace Chat.Web.Middleware
                 // - form-action 'self': Only allow form submissions to same origin
                 headers["Content-Security-Policy"] =
                     $"default-src 'self'; " +
-                    $"script-src 'self' 'nonce-{nonce}'; " +
+                    $"script-src 'self' 'nonce-{currentNonce}'; " +
                     $"style-src 'self' 'unsafe-inline'; " +
                     $"connect-src 'self' wss: https:; " +
                     $"img-src 'self' data: https:; " +

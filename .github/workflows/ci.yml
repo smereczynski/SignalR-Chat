@@ -15,7 +15,7 @@ permissions:
 jobs:
   build-and-test:
     name: Build and Test
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
     
     steps:
     - name: Checkout code
@@ -44,13 +44,30 @@ jobs:
     - name: Build .NET solution
       run: dotnet build src/Chat.sln --configuration Release --no-restore
     
+    - name: List test assemblies
+      run: |
+        echo "=== Test Projects ==="
+        find tests -name "*.csproj" -type f
+        echo "=== Built Test DLLs ==="
+        find . -path "*/bin/Release/net9.0/*.Tests.dll" -type f
+        echo "=== Test project bin directories ==="
+        ls -la tests/*/bin/Release/net9.0/ || echo "No test binaries found"
+    
     - name: Run tests
-      run: dotnet test src/Chat.sln --configuration Release --no-build --verbosity normal --logger trx --results-directory ./TestResults
+      run: |
+        dotnet test src/Chat.sln \
+          --configuration Release \
+          --no-build \
+          --verbosity normal \
+          --logger "trx;LogFileName=test-results.trx" \
+          --results-directory ./TestResults \
+          -- NUnit.NumberOfTestWorkers=1
       env:
         Testing__InMemory: "true"
         Acs__ConnectionString: "endpoint=https://test.communication.azure.com/;accesskey=dGVzdGtleQ=="
         Acs__EmailFrom: "test@example.com"
         Acs__SmsFrom: "+1234567890"
+      continue-on-error: false
     
     - name: Upload test results
       uses: actions/upload-artifact@v4
