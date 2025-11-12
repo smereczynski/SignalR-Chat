@@ -49,10 +49,19 @@ jobs:
         echo "=== Test Projects ==="
         find tests -name "*.csproj" -type f
         echo "=== Built Test DLLs ==="
-        find tests -path "*/bin/Release/net9.0/*.Tests.dll" -type f
+        find . -path "*/bin/Release/net9.0/*.Tests.dll" -type f
+        echo "=== Test project bin directories ==="
+        ls -la tests/*/bin/Release/net9.0/ || echo "No test binaries found"
     
     - name: Run tests
-      run: dotnet test src/Chat.sln --configuration Release --no-build --verbosity normal --logger "trx;LogFileName=test-results.trx" --results-directory ./TestResults
+      run: |
+        dotnet test src/Chat.sln \
+          --configuration Release \
+          --no-build \
+          --verbosity normal \
+          --logger "trx;LogFileName=test-results.trx" \
+          --results-directory ./TestResults \
+          -- NUnit.NumberOfTestWorkers=1
       env:
         Testing__InMemory: "true"
         Acs__ConnectionString: "endpoint=https://test.communication.azure.com/;accesskey=dGVzdGtleQ=="
