@@ -5,6 +5,7 @@ Deploy SignalR Chat to Azure using Infrastructure as Code (Bicep) and CI/CD pipe
 ## Deployment Options
 
 ### Azure Deployment (Recommended)
+- **[Bootstrap Guide](bootstrap.md)** - Complete deployment from scratch
 - **[Azure Deployment Guide](azure/)** - Deploy using Bicep templates
 - **[GitHub Actions CI/CD](github-actions.md)** - Automated deployment pipelines
 - **[Environments](environments.md)** - Dev, Staging, Production configurations
@@ -80,6 +81,7 @@ graph LR
 
 ## Documentation
 
+- [Bootstrap Guide](bootstrap.md) - Complete deployment from scratch
 - [Azure Deployment Guide](azure/) - Bicep templates and infrastructure
 - [GitHub Actions](github-actions.md) - CI/CD pipeline configuration
 - [Environments](environments.md) - Environment-specific settings
