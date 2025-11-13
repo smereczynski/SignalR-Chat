@@ -182,28 +182,29 @@ resource webApp 'Microsoft.Web/sites@2024-11-01' = {
           name: 'ASPNETCORE_ENVIRONMENT'
           value: environment == 'prod' ? 'Production' : (environment == 'staging' ? 'Production' : 'Development')
         }
+        // Linux requires __ (double underscore) instead of : (colon) in app setting names
         {
-          name: 'Cosmos:Database'
+          name: 'Cosmos__Database'
           value: 'chat'
         }
         {
-          name: 'Cosmos:MessagesContainer'
+          name: 'Cosmos__MessagesContainer'
           value: 'messages'
         }
         {
-          name: 'Cosmos:RoomsContainer'
+          name: 'Cosmos__RoomsContainer'
           value: 'rooms'
         }
         {
-          name: 'Cosmos:UsersContainer'
+          name: 'Cosmos__UsersContainer'
           value: 'users'
         }
         {
-          name: 'Acs:EmailFrom'
+          name: 'Acs__EmailFrom'
           value: 'doNotReply@${split(split(acsConnectionString, 'endpoint=https://')[1], '.')[0]}.azurecomm.net'
         }
         {
-          name: 'Acs:SmsFrom'
+          name: 'Acs__SmsFrom'
           value: 'TRANSLATOR'
         }
         {
@@ -215,7 +216,7 @@ resource webApp 'Microsoft.Web/sites@2024-11-01' = {
           value: '7'
         }
         {
-          name: 'Testing:InMemory'
+          name: 'Testing__InMemory'
           value: 'false'
         }
       ]
