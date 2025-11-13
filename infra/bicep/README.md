@@ -42,7 +42,7 @@ The infrastructure deploys the following Azure resources:
 | **Azure Cache for Redis** | Session storage and caching | dev, staging, prod |
 | **Azure SignalR Service** | Real-time communication hub | dev, staging, prod |
 | **Azure Communication Services** | Email and SMS capabilities | dev, staging, prod |
-| **App Service Plan** | Web application hosting (Windows, .NET 9.0) | dev, staging, prod |
+| **App Service Plan** | Web application hosting (Linux, .NET 9.0) | dev, staging, prod |
 | **App Service (Web App)** | SignalR Chat application with VNet integration and outbound routing | dev, staging, prod |
 
 ### Network Architecture
@@ -56,7 +56,7 @@ Each environment has:
 - **VNet Integration & Outbound Routing**:
   - App Service connected to VNet via App Service subnet
   - `outboundVnetRouting.allTraffic = true` configured (routes ALL outbound traffic through VNet)
-  - Required for Windows App Services to use private endpoints
+  - Required for App Services to use private endpoints
   - Custom DNS configured for private endpoint resolution (hub DNS forwarder)
   - All Azure service connections use private IP addresses (no public internet traffic)
 
@@ -145,7 +145,7 @@ Resources follow the pattern: `{baseName}-{environment}-{resourceType}`
 | Resource | SKU/Tier | Configuration |
 |----------|----------|---------------|
 | VNet | Standard | 10.50.8.0/26 |
-| App Service Plan | P0V4 PremiumV4 Windows | 1 instance, .NET 9.0 |
+| App Service Plan | P0V4 PremiumV4 Linux | 1 instance, .NET 9.0 |
 | Cosmos DB | Autoscale (400 RU/s max) | Single region, zone-redundant |
 | Redis Cache | Balanced_B1 (Azure Managed Redis) | 2 GB |
 | SignalR Service | Standard_S1 | 1 unit |
@@ -160,7 +160,7 @@ Resources follow the pattern: `{baseName}-{environment}-{resourceType}`
 | Resource | SKU/Tier | Configuration |
 |----------|----------|---------------|
 | VNet | Standard | 10.50.8.64/26 |
-| App Service Plan | P0V4 PremiumV4 Windows | 2 instances (AZ), .NET 9.0 |
+| App Service Plan | P0V4 PremiumV4 Linux | 2 instances (AZ), .NET 9.0 |
 | Cosmos DB | Autoscale (1000 RU/s max) | Single region, zone-redundant |
 | Redis Cache | Balanced_B3 (Azure Managed Redis) | 6 GB |
 | SignalR Service | Standard_S1 | 1 unit |
@@ -175,7 +175,7 @@ Resources follow the pattern: `{baseName}-{environment}-{resourceType}`
 | Resource | SKU/Tier | Configuration |
 |----------|----------|---------------|
 | VNet | Standard | 10.50.8.128/26 |
-| App Service Plan | P0V4 PremiumV4 Windows | 3 instances with AZ, .NET 9.0 |
+| App Service Plan | P0V4 PremiumV4 Linux | 3 instances with AZ, .NET 9.0 |
 | Cosmos DB | Autoscale (4000 RU/s max) | Multi-region (polandcentral + germanywestcentral), zone-redundant |
 | Redis Cache | Balanced_B5 (Azure Managed Redis) | 12 GB |
 | SignalR Service | Standard_S1 | 5 units |

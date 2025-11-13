@@ -124,7 +124,7 @@ graph TD
 | **Cache** | Redis | OTP storage, rate limiting |
 | **Auth** | Cookie authentication + OTP | Secure login flow |
 | **Observability** | OpenTelemetry, App Insights | Metrics, traces, logs |
-| **Deployment** | Azure App Service, Bicep IaC | Infrastructure as Code |
+| **Deployment** | Azure App Service (Linux), Bicep IaC | Infrastructure as Code |
 
 ---
 

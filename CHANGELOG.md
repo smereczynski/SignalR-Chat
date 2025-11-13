@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Azure App Service Platform Migration**: Migrated from Windows to Linux App Service (#TBD)
+  - **Platform**: Changed from Windows to Linux App Service (.NET 9.0 on Linux)
+  - **Bicep Changes**:
+    - App Service Plan: `kind: 'linux'` with `reserved: true` property
+    - Web App: `kind: 'app,linux'` with `linuxFxVersion: 'DOTNETCORE|9.0'`
+    - Removed Windows-only Application Insights agent extensions (9 settings)
+    - Changed app settings notation from colon (`:`) to double underscore (`__`) for Linux compatibility
+  - **Configuration Changes**:
+    - Linux requires `__` notation in Bicep: `Cosmos__Database` (not `Cosmos:Database`)
+    - ASP.NET Core automatically translates `__` → `:` when reading `Configuration["Cosmos:Database"]`
+    - Updated 7 hierarchical settings: Cosmos (4), Acs (2), Testing (1)
+  - **Validation**: All functionality tested and working on Linux platform
+  - **Documentation**: Created comprehensive migration guide in `docs/deployment/windows-to-linux-migration.md`
+  - **Benefits**: Cost optimization, better container support, improved performance
+
 ### Added
 - **Comprehensive Dependency Logging**: Enhanced observability for all external dependencies
   - Cosmos DB initialization logging: Database/container details, connection success/failure with exceptions
