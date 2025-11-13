@@ -187,8 +187,8 @@ graph TB
             end
             
             subgraph "Compute"
-                AppPlan[App Service Plan<br/>P0V4 Premium]
-                WebApp[Web App<br/>ASP.NET Core 9<br/>Windows]
+                AppPlan[App Service Plan<br/>P0V4 Premium<br/>Linux]
+                WebApp[Web App<br/>ASP.NET Core 9<br/>Linux]
             end
             
             subgraph "Data & Cache"
@@ -343,7 +343,7 @@ graph TD
 - **IaC**: Azure Bicep
 - **CI/CD**: GitHub Actions (federated identity)
 - **Monitoring**: OpenTelemetry + Azure Application Insights
-- **Deployment**: Azure App Service (Windows, .NET 9)
+- **Deployment**: Azure App Service (Linux, .NET 9)
 
 ## Scalability
 
