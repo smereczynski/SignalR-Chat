@@ -88,9 +88,11 @@ resource appServicePlan 'Microsoft.Web/serverfarms@2024-11-01' = {
     tier: skuConfig.tier
     capacity: skuConfig.capacity
   }
-  kind: 'windows'
+  // kind: 'windows'  // Windows App Service Plan
+  kind: 'linux'       // Linux App Service Plan
   properties: {
     zoneRedundant: skuConfig.zoneRedundant
+    reserved: true    // Required for Linux
   }
 }
 
@@ -100,18 +102,21 @@ resource appServicePlan 'Microsoft.Web/serverfarms@2024-11-01' = {
 resource webApp 'Microsoft.Web/sites@2024-11-01' = {
   name: appName
   location: location
-  kind: 'app'
+  // kind: 'app'        // Windows Web App
+  kind: 'app,linux'     // Linux Web App
   properties: {
     serverFarmId: appServicePlan.id
     httpsOnly: true
     clientAffinityEnabled: true
     publicNetworkAccess: 'Enabled'
     virtualNetworkSubnetId: vnetIntegrationSubnetId
+    // VNet routing - works for both Windows and Linux with API version 2024-11-01
     outboundVnetRouting: {
       allTraffic: true
     }
     siteConfig: {
-      netFrameworkVersion: 'v9.0'
+      // netFrameworkVersion: 'v9.0'  // Windows runtime
+      linuxFxVersion: 'DOTNETCORE|9.0'  // Linux runtime
       alwaysOn: true
       http20Enabled: true
       minTlsVersion: '1.2'
@@ -131,42 +136,48 @@ resource webApp 'Microsoft.Web/sites@2024-11-01' = {
           name: 'APPINSIGHTS_INSTRUMENTATIONKEY'
           value: appInsightsInstrumentationKey
         }
-        {
-          name: 'ApplicationInsightsAgent_EXTENSION_VERSION'
-          value: '~2'
-        }
-        {
-          name: 'APPINSIGHTS_PROFILERFEATURE_VERSION'
-          value: '1.0.0'
-        }
-        {
-          name: 'APPINSIGHTS_SNAPSHOTFEATURE_VERSION'
-          value: '1.0.0'
-        }
-        {
-          name: 'DiagnosticServices_EXTENSION_VERSION'
-          value: '~3'
-        }
-        {
-          name: 'InstrumentationEngine_EXTENSION_VERSION'
-          value: '~1'
-        }
-        {
-          name: 'SnapshotDebugger_EXTENSION_VERSION'
-          value: '~2'
-        }
-        {
-          name: 'XDT_MicrosoftApplicationInsights_BaseExtensions'
-          value: 'disabled'
-        }
-        {
-          name: 'XDT_MicrosoftApplicationInsights_Mode'
-          value: 'recommended'
-        }
-        {
-          name: 'XDT_MicrosoftApplicationInsights_Java'
-          value: '1'
-        }
+        // ===================================================================
+        // Windows-only Application Insights agent extensions (commented out for Linux)
+        // These are IIS-based extensions that don't exist on Linux
+        // Linux uses the Application Insights SDK directly (already in code)
+        // ===================================================================
+        // {
+        //   name: 'ApplicationInsightsAgent_EXTENSION_VERSION'
+        //   value: '~2'
+        // }
+        // {
+        //   name: 'APPINSIGHTS_PROFILERFEATURE_VERSION'
+        //   value: '1.0.0'
+        // }
+        // {
+        //   name: 'APPINSIGHTS_SNAPSHOTFEATURE_VERSION'
+        //   value: '1.0.0'
+        // }
+        // {
+        //   name: 'DiagnosticServices_EXTENSION_VERSION'
+        //   value: '~3'
+        // }
+        // {
+        //   name: 'InstrumentationEngine_EXTENSION_VERSION'
+        //   value: '~1'
+        // }
+        // {
+        //   name: 'SnapshotDebugger_EXTENSION_VERSION'
+        //   value: '~2'
+        // }
+        // {
+        //   name: 'XDT_MicrosoftApplicationInsights_BaseExtensions'
+        //   value: 'disabled'
+        // }
+        // {
+        //   name: 'XDT_MicrosoftApplicationInsights_Mode'
+        //   value: 'recommended'
+        // }
+        // {
+        //   name: 'XDT_MicrosoftApplicationInsights_Java'
+        //   value: '1'
+        // }
+        // ===================================================================
         {
           name: 'ASPNETCORE_ENVIRONMENT'
           value: environment == 'prod' ? 'Production' : (environment == 'staging' ? 'Production' : 'Development')
