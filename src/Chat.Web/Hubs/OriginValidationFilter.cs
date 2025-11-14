@@ -39,24 +39,21 @@ namespace Chat.Web.Hubs
 
                 // Only validate if Origin or Referer is present
                 // (Missing headers = same-origin request, which is allowed)
-                if (!string.IsNullOrEmpty(origin) || !string.IsNullOrEmpty(referer))
+                if ((!string.IsNullOrEmpty(origin) || !string.IsNullOrEmpty(referer)) && !IsValidOrigin(origin ?? referer))
                 {
-                    if (!IsValidOrigin(origin ?? referer))
-                    {
-                        var userId = context.User?.Identity?.Name ?? "anonymous";
-                        var connectionId = invocationContext.Context.ConnectionId;
+                    var userId = context.User?.Identity?.Name ?? "anonymous";
+                    var connectionId = invocationContext.Context.ConnectionId;
 
-                        _logger.LogWarning(
-                            "SECURITY: Blocked SignalR hub method '{Method}' from invalid origin. " +
-                            "Origin: {Origin}, Referer: {Referer}, User: {User}, ConnectionId: {ConnectionId}",
-                            invocationContext.HubMethodName,
-                            origin,
-                            referer,
-                            userId,
-                            connectionId);
+                    _logger.LogWarning(
+                        "SECURITY: Blocked SignalR hub method '{Method}' from invalid origin. " +
+                        "Origin: {Origin}, Referer: {Referer}, User: {User}, ConnectionId: {ConnectionId}",
+                        invocationContext.HubMethodName,
+                        origin,
+                        referer,
+                        userId,
+                        connectionId);
 
-                        throw new HubException("Origin not allowed.");
-                    }
+                    throw new HubException("Origin not allowed.");
                 }
             }
 
@@ -72,23 +69,20 @@ namespace Chat.Web.Hubs
                 var referer = httpContext.Request.Headers["Referer"].ToString();
 
                 // Validate origin on connection
-                if (!string.IsNullOrEmpty(origin) || !string.IsNullOrEmpty(referer))
+                if ((!string.IsNullOrEmpty(origin) || !string.IsNullOrEmpty(referer)) && !IsValidOrigin(origin ?? referer))
                 {
-                    if (!IsValidOrigin(origin ?? referer))
-                    {
-                        var userId = httpContext.User?.Identity?.Name ?? "anonymous";
-                        var connectionId = context.Context.ConnectionId;
+                    var userId = httpContext.User?.Identity?.Name ?? "anonymous";
+                    var connectionId = context.Context.ConnectionId;
 
-                        _logger.LogWarning(
-                            "SECURITY: Blocked SignalR hub connection from invalid origin. " +
-                            "Origin: {Origin}, Referer: {Referer}, User: {User}, ConnectionId: {ConnectionId}",
-                            origin,
-                            referer,
-                            userId,
-                            connectionId);
+                    _logger.LogWarning(
+                        "SECURITY: Blocked SignalR hub connection from invalid origin. " +
+                        "Origin: {Origin}, Referer: {Referer}, User: {User}, ConnectionId: {ConnectionId}",
+                        origin,
+                        referer,
+                        userId,
+                        connectionId);
 
-                        throw new HubException("Origin not allowed.");
-                    }
+                    throw new HubException("Origin not allowed.");
                 }
 
                 _logger.LogDebug(
