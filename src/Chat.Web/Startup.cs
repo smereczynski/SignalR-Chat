@@ -44,6 +44,7 @@ using OpenTelemetry.Instrumentation.Runtime;
 using OpenTelemetry.Instrumentation.StackExchangeRedis;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Chat.Web.Middleware;
+using Microsoft.AspNetCore.SignalR;
 
 namespace Chat.Web
 {
@@ -459,6 +460,61 @@ namespace Chat.Web
                         options.ReturnUrlParameter = "ReturnUrl";
                     });
             }
+
+            // ==========================================
+            // CORS Configuration
+            // ==========================================
+            var corsOptions = new CorsOptions();
+            Configuration.GetSection("Cors").Bind(corsOptions);
+
+            // Validation: Production MUST NOT allow all origins
+            if (!HostEnvironment.IsDevelopment() && corsOptions.AllowAllOrigins)
+            {
+                throw new InvalidOperationException(
+                    "Cors:AllowAllOrigins is set to true in non-Development environment. " +
+                    "This is a security risk. Set to false and configure Cors:AllowedOrigins instead.");
+            }
+
+            services.AddCors(options =>
+            {
+                options.AddPolicy("SignalRPolicy", builder =>
+                {
+                    if (corsOptions.AllowAllOrigins)
+                    {
+                        // Development only - allow all origins
+                        Console.WriteLine(
+                            "WARNING: CORS configured to allow ALL origins (Development mode). " +
+                            "This should NEVER be enabled in Production.");
+                        
+                        builder
+                            .SetIsOriginAllowed(_ => true)
+                            .AllowAnyHeader()
+                            .AllowAnyMethod()
+                            .AllowCredentials();
+                    }
+                    else
+                    {
+                        // Production/Staging - strict origin whitelist
+                        Console.WriteLine(
+                            $"INFO: CORS configured with allowed origins: {string.Join(", ", corsOptions.AllowedOrigins)}");
+
+                        builder
+                            .WithOrigins(corsOptions.AllowedOrigins)
+                            .AllowAnyHeader()
+                            .AllowAnyMethod()
+                            .AllowCredentials();
+                    }
+                });
+            });
+
+            // ==========================================
+            // Hub Filters (auto-discovered by SignalR from DI)
+            // ==========================================
+            services.AddSingleton<IHubFilter, OriginValidationFilter>();
+
+            // ==========================================
+            // CORS Configuration
+            // ==========================================
             // SignalR transport: use Azure in normal mode, in-memory during tests
             if (string.Equals(Configuration["Testing:InMemory"], "true", StringComparison.OrdinalIgnoreCase))
             {
@@ -572,6 +628,9 @@ namespace Chat.Web
 
             app.UseRouting();
 
+            // CORS middleware - MUST be after UseRouting, before UseAuthentication
+            app.UseCors("SignalRPolicy");
+
             app.UseRateLimiter();
 
             // Custom request tracing middleware (adds per-request Activity & trace headers)
@@ -596,7 +655,8 @@ namespace Chat.Web
             {
                 endpoints.MapRazorPages();
                 endpoints.MapControllers();
-                endpoints.MapHub<ChatHub>("/chatHub");
+                endpoints.MapHub<ChatHub>("/chatHub")
+                    .RequireCors("SignalRPolicy");  // Apply CORS policy to SignalR hub
                 endpoints.MapHealthChecks("/healthz");
                 endpoints.MapHealthChecks("/healthz/ready", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
                 {
