@@ -210,11 +210,49 @@ az deployment sub create \
 ## 🔒 Security
 
 - ✅ **OTP Authentication**: Argon2id hashing with pepper, 3 failed attempts lockout
+- ✅ **CORS Protection**: Origin validation on SignalR hub, prevents CSRF attacks
 - ✅ **CSP Headers**: Nonce-based Content Security Policy, prevents XSS
 - ✅ **HSTS**: HTTP Strict Transport Security in production
 - ✅ **Rate Limiting**: 5 OTP requests/min per user, 20/min per IP
 - ✅ **Input Sanitization**: Log forgery prevention (CWE-117)
 - ✅ **Private Endpoints**: VNet integration, no public database access
+
+### CORS Configuration
+
+The SignalR hub endpoint (`/chatHub`) enforces origin validation to prevent CSRF attacks. Configure allowed origins in `appsettings.json`:
+
+**Development** (`appsettings.Development.json`):
+```json
+{
+  "Cors": {
+    "AllowAllOrigins": true,
+    "AllowedOrigins": [
+      "http://localhost:5099",
+      "https://localhost:5099"
+    ]
+  }
+}
+```
+
+**Production** (`appsettings.Production.json`):
+```json
+{
+  "Cors": {
+    "AllowAllOrigins": false,
+    "AllowedOrigins": [
+      "https://signalrchat-prod-plc.azurewebsites.net"
+    ]
+  }
+}
+```
+
+**Azure App Service** (set via environment variables):
+```bash
+Cors__AllowedOrigins__0=https://yourdomain.com
+Cors__AllowAllOrigins=false
+```
+
+> ⚠️ **Security**: `AllowAllOrigins` MUST be `false` in production. The application will throw an exception if set to `true` in non-Development environments.
 
 ➡️ [Security architecture](docs/architecture/security.md) | [Authentication guide](docs/features/authentication.md)
 
