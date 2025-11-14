@@ -43,6 +43,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Benefits**: Cost optimization, better container support, improved performance
 
 ### Added
+- **Cosmos DB Continuous Backup Policy**: Production data protection with point-in-time restore (#104)
+  - **Production**: Continuous backup with 30-day retention (Continuous30Days tier)
+    - Automatic backups every 100 seconds
+    - Point-in-time restore to any second within last 30 days
+    - Near-zero RPO (Recovery Point Objective)
+    - Cost: ~20% additional RU/s charge (~$70/month for 4000 RU/s)
+  - **Dev/Staging**: Periodic backup (cost optimization)
+    - Backup interval: 4 hours
+    - Retention: 8 hours
+    - Local storage redundancy
+    - No additional cost
+  - **Benefits**: Accidental deletion protection, compliance, audit trail, disaster recovery
+  - **Configuration**: Environment-specific backup policy in `cosmos-db.bicep` module
 - **Comprehensive Dependency Logging**: Enhanced observability for all external dependencies
   - Cosmos DB initialization logging: Database/container details, connection success/failure with exceptions
   - Redis connection event logging: ConnectionFailed, ConnectionRestored, ErrorMessage, InternalError with endpoints and failure types
