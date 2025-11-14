@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+- **CORS Origin Validation for SignalR**: Implemented comprehensive origin validation to prevent CSRF attacks on `/chatHub` endpoint (#63)
+  - **CORS Policy**: Browser-enforced CORS policy named "SignalRPolicy"
+    - Validates `Origin` header on SignalR negotiate and connection requests
+    - Environment-specific configuration via `appsettings.{Environment}.json`
+    - Development: `AllowAllOrigins: true` with localhost whitelist for easier debugging
+    - Staging/Production: `AllowAllOrigins: false` with environment-specific allowed origins
+    - Startup validation: throws if `AllowAllOrigins: true` in Production
+  - **Hub Filter Defense**: Server-side `OriginValidationFilter` (defense-in-depth)
+    - Validates `Origin` and `Referer` headers on hub connection and method invocation
+    - Blocks unauthorized connections even if CORS policy bypassed
+    - Logs security warnings for blocked attempts with origin details
+  - **Configuration**:
+    - `Cors__AllowedOrigins`: Array of allowed origins (e.g., `["https://app-signalrchat-prod-weu.azurewebsites.net"]`)
+    - `Cors__AllowAllOrigins`: Boolean to allow all origins (dev only)
+    - Azure App Service: Set via environment variables `Cors__AllowedOrigins__0`, `Cors__AllowedOrigins__1`, etc.
+  - **Testing**: 5 integration tests covering allowed origins, blocked origins, preflight requests, same-origin, and health check endpoints
+  - **Documentation**: ADR 0001 documents decision rationale and alternatives considered
+
 ### Changed
 - **Azure App Service Platform Migration**: Migrated from Windows to Linux App Service (#TBD)
   - **Platform**: Changed from Windows to Linux App Service (.NET 9.0 on Linux)

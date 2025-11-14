@@ -172,6 +172,22 @@ resource webApp 'Microsoft.Web/sites@2024-11-01' = {
           name: 'Testing__InMemory'
           value: 'false'
         }
+        {
+          name: 'Cors__AllowAllOrigins'
+          value: environment == 'dev' ? 'true' : 'false'
+        }
+        {
+          name: 'Cors__AllowedOrigins__0'
+          value: 'https://${appName}.azurewebsites.net'
+        }
+        {
+          name: 'Cors__AllowedOrigins__1'
+          value: 'http://localhost:5099'
+        }
+        {
+          name: 'Cors__AllowedOrigins__2'
+          value: 'https://localhost:5099'
+        }
       ]
       connectionStrings: [
         {
