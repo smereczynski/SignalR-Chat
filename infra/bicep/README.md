@@ -73,6 +73,28 @@ Each environment has:
 
 **Consistency Level**: Session (balance of consistency, performance, availability)
 
+**Backup Policy** (Environment-Specific):
+- **Production**:
+  - **Mode**: Continuous backup with 30-day retention (Continuous30Days tier)
+  - **Frequency**: Automatic backups every 100 seconds
+  - **Restore**: Point-in-time restore to any second within last 30 days
+  - **RPO**: Near-zero (Recovery Point Objective)
+  - **Cost**: ~20% additional RU/s charge (~$70/month for 4000 RU/s)
+  - **Use Cases**: Accidental deletion recovery, data corruption rollback, compliance audits
+- **Dev/Staging**:
+  - **Mode**: Periodic backup (cost optimization)
+  - **Frequency**: Every 4 hours
+  - **Retention**: 8 hours
+  - **Storage**: Local redundancy
+  - **Cost**: No additional cost (default)
+
+**Restore Procedures**:
+1. Azure Portal → Cosmos DB account → "Point in Time Restore"
+2. Select restore timestamp (production: any second within 30 days)
+3. Choose scope: entire account, database, or specific container
+4. Specify new account name for restored data
+5. Validate and restore
+
 ## ✅ Prerequisites
 
 Before deploying, ensure you have:

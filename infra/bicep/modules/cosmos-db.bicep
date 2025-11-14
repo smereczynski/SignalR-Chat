@@ -56,6 +56,23 @@ var locations = [
   }
 ]
 
+// Backup policy: Continuous (30 days) for production, Periodic for dev/staging
+// - Production: Point-in-time restore to any second within last 30 days
+// - Dev/Staging: Periodic backup every 4 hours, 8-hour retention (cost optimization)
+var backupPolicy = environment == 'prod' ? {
+  type: 'Continuous'
+  continuousModeProperties: {
+    tier: 'Continuous30Days'
+  }
+} : {
+  type: 'Periodic'
+  periodicModeProperties: {
+    backupIntervalInMinutes: 240  // 4 hours
+    backupRetentionIntervalInHours: 8
+    backupStorageRedundancy: 'Local'
+  }
+}
+
 // ==========================================
 // Cosmos DB Account
 // ==========================================
@@ -71,6 +88,7 @@ resource cosmosAccount 'Microsoft.DocumentDB/databaseAccounts@2024-11-15' = {
     enableMultipleWriteLocations: false
     publicNetworkAccess: privateEndpointSubnetId != '' ? 'Disabled' : 'Enabled'
     capabilities: []
+    backupPolicy: backupPolicy
   }
 }
 
