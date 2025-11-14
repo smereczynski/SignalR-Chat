@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Chat.Web.Utilities;
 
 #nullable enable
 
@@ -48,8 +49,8 @@ namespace Chat.Web.Hubs
                         "SECURITY: Blocked SignalR hub method '{Method}' from invalid origin. " +
                         "Origin: {Origin}, Referer: {Referer}, User: {User}, ConnectionId: {ConnectionId}",
                         invocationContext.HubMethodName,
-                        origin,
-                        referer,
+                        LogSanitizer.Sanitize(origin),
+                        LogSanitizer.Sanitize(referer),
                         userId,
                         connectionId);
 
@@ -77,8 +78,8 @@ namespace Chat.Web.Hubs
                     _logger.LogWarning(
                         "SECURITY: Blocked SignalR hub connection from invalid origin. " +
                         "Origin: {Origin}, Referer: {Referer}, User: {User}, ConnectionId: {ConnectionId}",
-                        origin,
-                        referer,
+                        LogSanitizer.Sanitize(origin),
+                        LogSanitizer.Sanitize(referer),
                         userId,
                         connectionId);
 
@@ -87,7 +88,7 @@ namespace Chat.Web.Hubs
 
                 _logger.LogDebug(
                     "SignalR connection established. Origin: {Origin}, User: {User}, ConnectionId: {ConnectionId}",
-                    origin,
+                    LogSanitizer.Sanitize(origin),
                     httpContext.User?.Identity?.Name ?? "anonymous",
                     context.Context.ConnectionId);
             }

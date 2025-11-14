@@ -275,6 +275,38 @@ docs/
 - Validate room IDs against allowed list
 - Use anti-forgery tokens for forms
 
+### Log Sanitization
+**CRITICAL**: Never pass user-provided input directly to logs without sanitization.
+
+- **Always use `LogSanitizer.Sanitize()`** from `Chat.Web.Utilities` before logging any user input
+- **User input includes**: HTTP headers (Origin, Referer, User-Agent), form data, query parameters, route parameters, request body
+- **Why**: Prevents log injection attacks (CWE-117) where attackers inject newlines/control characters to forge log entries
+- **Examples of inputs to sanitize**:
+  - HTTP headers: `Origin`, `Referer`, `User-Agent`, `X-Forwarded-For`
+  - User-provided data: usernames, email addresses, phone numbers, messages, room names
+  - Request data: paths, query strings, form values
+
+**Bad** (vulnerable to log injection):
+```csharp
+_logger.LogWarning("Invalid origin: {Origin}", context.Request.Headers["Origin"]);
+```
+
+**Good** (sanitized):
+```csharp
+var origin = context.Request.Headers["Origin"].ToString();
+_logger.LogWarning("Invalid origin: {Origin}", LogSanitizer.Sanitize(origin));
+```
+
+**LogSanitizer methods**:
+- `Sanitize(string input)`: Removes control characters (newlines, tabs, etc.). Returns `<null>` or `<empty>` for null/empty input.
+- `SanitizeWithReplacement(string input, string replacement = "�")`: Replaces control characters with visible placeholder, wraps in `<<<...>>>`
+
+**When to use**:
+- ✅ Always sanitize before logging any HTTP header values
+- ✅ Always sanitize before logging any user-provided string
+- ✅ Always sanitize exception messages that may contain user input
+- ❌ No need to sanitize: numeric values, GUIDs, enums, boolean values, ConnectionId (system-generated)
+
 ### Secrets Management
 - NEVER commit secrets to Git
 - Use Azure Key Vault for production secrets
