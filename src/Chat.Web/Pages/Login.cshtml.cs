@@ -19,7 +19,14 @@ namespace Chat.Web.Pages
         [BindProperty(SupportsGet = true)]
         public string ReturnUrl { get; set; } = "/chat";
 
+        [BindProperty(SupportsGet = true)]
+        public string? Reason { get; set; }
+
+        [BindProperty(SupportsGet = true)]
+        public string? Error { get; set; }
+
         public bool EntraIdEnabled => _entraIdOptions.IsEnabled;
+        public bool OtpFallbackAllowed => _entraIdOptions.Fallback?.OtpForUnauthorizedUsers == true;
 
         public IActionResult OnGet()
         {

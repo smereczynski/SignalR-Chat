@@ -809,6 +809,9 @@ namespace Chat.Web
 
             app.UseRateLimiter();
 
+            // Silent SSO attempt before authentication (one-time prompt=none challenge)
+            app.UseMiddleware<SilentSsoMiddleware>();
+
             // Custom request tracing middleware (adds per-request Activity & trace headers)
             app.UseMiddleware<RequestTracingMiddleware>();
 

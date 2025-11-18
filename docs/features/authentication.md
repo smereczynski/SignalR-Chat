@@ -68,6 +68,51 @@ Enterprise users authenticate via **OpenID Connect** (OIDC) with Microsoft Entra
 - **UPN-Based Authorization**: Strict User Principal Name (UPN) matching (e.g., `alice@contoso.com`)
 - **No Auto-Provisioning**: Admin must pre-populate UPN in database before first login
 - **Profile Sync**: FullName, Country, Region automatically updated from token claims
+- **Automatic Silent SSO (Optional)**: One-time background attempt using `prompt=none` for frictionless entry
+
+### Automatic Silent SSO (Optional)
+
+If enabled, the application performs a **single silent SSO attempt** (OIDC `prompt=none`) on the first unauthenticated visit to `/` or any `/chat` path.
+
+**Behavior:**
+- Middleware sets a short-lived cookie (default: `sso_attempted`) to prevent repeated attempts or loops.
+- If the browser already holds an active Microsoft session, authentication succeeds transparently and the user is redirected to the originally requested page.
+- If user interaction is required (`interaction_required`, no session, or blocked pop-ups), the silent attempt fails and the user is redirected to `/login?reason=sso_failed`.
+- If Entra ID login succeeds but the UPN is **not authorized** (missing in database), redirect: `/login?reason=not_authorized`.
+- If OTP fallback is allowed (`Fallback:OtpForUnauthorizedUsers: true`), the login page shows a warning allowing OTP sign-in; otherwise a denial message is shown.
+
+**Query Parameters Used:**
+| Parameter | Meaning | UI Outcome |
+|-----------|---------|------------|
+| `reason=sso_failed` | Silent SSO could not complete (interaction needed) | Info alert: choose method |
+| `reason=not_authorized` | UPN not found / not permitted | Warning (OTP allowed) or Error (OTP disabled) |
+| `error=authentication_failed` | General OIDC auth failure | Error alert |
+
+**Configuration Block:**
+```jsonc
+{
+  "EntraId": {
+    // ... existing settings ...
+    "AutomaticSso": {
+      "Enable": true,                 // Master switch
+      "AttemptOncePerSession": true,  // Guard against loops
+      "AttemptCookieName": "sso_attempted" // Customizable cookie name
+    }
+  }
+}
+```
+
+**Implementation Components:**
+- `SilentSsoMiddleware`: Performs guarded silent challenge.
+- OIDC Events:
+  - `OnRedirectToIdentityProvider`: Injects `prompt=none` when silent flag present.
+  - `OnRemoteFailure`: Detects silent failure; redirects with `reason=sso_failed`.
+  - `OnTokenValidated`: Enforces strict UPN authorization; redirects with `reason=not_authorized` if user missing.
+
+**Operational Notes:**
+- Silent attempt only triggers for GET requests to `/`, `/chat`, or child paths.
+- Cookie lifetime (10 minutes) balances session freshness and loop prevention.
+- Safe to disable via `AutomaticSso:Enable=false` without code changes.
 
 ### Configuration
 
@@ -91,6 +136,11 @@ See **[Entra ID Multi-Tenant Setup Guide](../development/entra-id-multi-tenant-s
     "Fallback": {
       "EnableOtp": true,
       "OtpForUnauthorizedUsers": true
+    }
+    "AutomaticSso": {
+      "Enable": true,
+      "AttemptOncePerSession": true,
+      "AttemptCookieName": "sso_attempted"
     }
   }
 }
