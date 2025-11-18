@@ -48,6 +48,13 @@ namespace Chat.Web.Options
         public EntraIdFallbackOptions Fallback { get; set; } = new();
 
         /// <summary>
+        /// Automatic silent single sign-on (SSO) attempt options.
+        /// When enabled, the app will try a one-time OpenID Connect challenge with prompt=none
+        /// for already-signed-in Microsoft users hitting root/chat pages.
+        /// </summary>
+        public EntraIdAutomaticSsoOptions AutomaticSso { get; set; } = new();
+
+        /// <summary>
         /// Gets whether Entra ID authentication is enabled (ClientId configured).
         /// </summary>
         public bool IsEnabled => !string.IsNullOrWhiteSpace(ClientId);
@@ -92,5 +99,28 @@ namespace Chat.Web.Options
         /// If false, strict Entra ID enforcement (no fallback for unauthorized users).
         /// </summary>
         public bool OtpForUnauthorizedUsers { get; set; } = false;
+    }
+
+    /// <summary>
+    /// Automatic silent SSO attempt configuration.
+    /// </summary>
+    public class EntraIdAutomaticSsoOptions
+    {
+        /// <summary>
+        /// Enable automatic silent SSO attempt for first unauthenticated visit
+        /// to root ("/") or /chat pages. Default: false (explicit login page).
+        /// </summary>
+        public bool Enable { get; set; } = false;
+
+        /// <summary>
+        /// If true, attempt silent SSO only once per browser session (tracked via short-lived cookie).
+        /// Prevents loops or repeated OIDC round-trips. Default: true.
+        /// </summary>
+        public bool AttemptOncePerSession { get; set; } = true;
+
+        /// <summary>
+        /// Name of the guard cookie used to record an attempt. Default: sso_attempted.
+        /// </summary>
+        public string AttemptCookieName { get; set; } = "sso_attempted";
     }
 }

@@ -13,6 +13,42 @@
               <span id="currentLanguageFlag" class="flag-icon">🌐</span>
             </button>
           </div>
+
+          @* Silent SSO / authorization alerts *@
+          @if (!string.IsNullOrWhiteSpace(Model.Reason))
+          {
+            if (Model.Reason == "sso_failed")
+            {
+              <div class="alert alert-info py-2" role="alert">
+                @Localizer["SilentSsoAttemptedInteractionRequired", ""]
+                <span class="small d-block mt-1">@Localizer["PleaseChooseSignInMethod"]</span>
+              </div>
+            }
+            else if (Model.Reason == "not_authorized")
+            {
+              if (Model.OtpFallbackAllowed)
+              {
+                <div class="alert alert-warning py-2" role="alert">
+                  @Localizer["AccountNotAuthorizedUseOtp"]
+                </div>
+              }
+              else
+              {
+                <div class="alert alert-danger py-2" role="alert">
+                  @Localizer["AccountNotAuthorizedContactAdmin"]
+                </div>
+              }
+            }
+          }
+          @if (!string.IsNullOrWhiteSpace(Model.Error))
+          {
+            if (Model.Error == "authentication_failed")
+            {
+              <div class="alert alert-danger py-2" role="alert">
+                @Localizer["AuthenticationFailedPleaseRetry"]
+              </div>
+            }
+          }
           
           <!-- Microsoft Entra ID Sign-In (if configured) -->
           @if (Model.EntraIdEnabled)
