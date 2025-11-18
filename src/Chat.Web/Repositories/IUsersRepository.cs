@@ -9,6 +9,7 @@ namespace Chat.Web.Repositories
     public interface IUsersRepository
     {
         ApplicationUser GetByUserName(string userName);
+        ApplicationUser GetByUpn(string upn);
         IEnumerable<ApplicationUser> GetAll();
         void Upsert(ApplicationUser user);
     }

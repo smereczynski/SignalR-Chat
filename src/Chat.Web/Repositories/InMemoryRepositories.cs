@@ -19,6 +19,7 @@ namespace Chat.Web.Repositories
         }
         public IEnumerable<ApplicationUser> GetAll() => _users.Values;
         public ApplicationUser GetByUserName(string userName) => _users.TryGetValue(userName, out var user) ? user : null;
+        public ApplicationUser GetByUpn(string upn) => _users.Values.FirstOrDefault(u => u.Upn == upn);
         public void Upsert(ApplicationUser user)
         {
             if (user == null || string.IsNullOrWhiteSpace(user.UserName)) return;

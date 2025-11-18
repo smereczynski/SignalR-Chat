@@ -14,6 +14,9 @@ using Chat.Web.Repositories;
 using Chat.Web.Options;
 using Chat.Web.Services;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.Identity.Web;
+using Microsoft.Identity.Web.UI;
+using Microsoft.AspNetCore.Authorization;
 using StackExchange.Redis;
 using OpenTelemetry.Trace;
 using OpenTelemetry.Resources;
@@ -184,6 +187,7 @@ namespace Chat.Web
             services.Configure<RedisOptions>(Configuration.GetSection("Redis"));
             services.Configure<AcsOptions>(Configuration.GetSection("Acs"));
             services.Configure<OtpOptions>(Configuration.GetSection("Otp"));
+            services.Configure<EntraIdOptions>(Configuration.GetSection("EntraId"));
             services.Configure<Chat.Web.Options.NotificationOptions>(Configuration.GetSection("Notifications"));
             services.Configure<Chat.Web.Options.RateLimitingOptions>(Configuration.GetSection("RateLimiting:MarkRead"));
             services.PostConfigure<OtpOptions>(opts =>
@@ -440,6 +444,9 @@ namespace Chat.Web
                             QueueLimit = queueLimit
                         }));
             });
+            // ==========================================
+            // Authentication Configuration
+            // ==========================================
             if (string.Equals(Configuration["Testing:InMemory"], "true", StringComparison.OrdinalIgnoreCase))
             {
                 services.AddAuthentication("Test")
@@ -447,7 +454,38 @@ namespace Chat.Web
             }
             else
             {
-                services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
+                // Bind EntraIdOptions to check if Entra ID is configured
+                var entraIdOptions = new EntraIdOptions();
+                Configuration.GetSection("EntraId").Bind(entraIdOptions);
+                
+                // Get client secret from connection string if not in config
+                if (string.IsNullOrWhiteSpace(entraIdOptions.ClientSecret))
+                {
+                    var connectionString = Configuration.GetConnectionString("EntraId");
+                    if (!string.IsNullOrWhiteSpace(connectionString))
+                    {
+                        // Parse connection string format: "ClientId=<id>;ClientSecret=<secret>"
+                        var parts = connectionString.Split(';');
+                        foreach (var part in parts)
+                        {
+                            var keyValue = part.Split('=', 2);
+                            if (keyValue.Length == 2)
+                            {
+                                if (keyValue[0].Trim().Equals("ClientId", StringComparison.OrdinalIgnoreCase) &&
+                                    string.IsNullOrWhiteSpace(entraIdOptions.ClientId))
+                                {
+                                    entraIdOptions.ClientId = keyValue[1].Trim();
+                                }
+                                else if (keyValue[0].Trim().Equals("ClientSecret", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    entraIdOptions.ClientSecret = keyValue[1].Trim();
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                var authBuilder = services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
                     .AddCookie(options =>
                     {
                         // Redirect unauthenticated users to dedicated login page
@@ -459,6 +497,144 @@ namespace Chat.Web
                         // Preserve ReturnUrl to bounce back to the originally requested page (/chat by default)
                         options.ReturnUrlParameter = "ReturnUrl";
                     });
+                
+                // Add Entra ID authentication if configured
+                if (entraIdOptions.IsEnabled)
+                {
+                    authBuilder.AddMicrosoftIdentityWebApp(
+                        microsoftIdentityOptions =>
+                        {
+                            microsoftIdentityOptions.Instance = entraIdOptions.Instance;
+                            microsoftIdentityOptions.TenantId = entraIdOptions.TenantId;
+                            microsoftIdentityOptions.ClientId = entraIdOptions.ClientId;
+                            microsoftIdentityOptions.ClientSecret = entraIdOptions.ClientSecret;
+                            microsoftIdentityOptions.CallbackPath = entraIdOptions.CallbackPath;
+                            microsoftIdentityOptions.SignedOutCallbackPath = entraIdOptions.SignedOutCallbackPath;
+                            
+                            // Token validation
+                            microsoftIdentityOptions.TokenValidationParameters = new Microsoft.IdentityModel.Tokens.TokenValidationParameters
+                            {
+                                ValidateIssuer = true,
+                                ValidateAudience = true,
+                                ValidateLifetime = true,
+                                ValidateIssuerSigningKey = true,
+                                ClockSkew = TimeSpan.FromMinutes(5)
+                            };
+                            
+                            // Events for custom logic
+                            microsoftIdentityOptions.Events = new Microsoft.AspNetCore.Authentication.OpenIdConnect.OpenIdConnectEvents
+                            {
+                                OnTokenValidated = async context =>
+                                {
+                                    var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Startup>>();
+                                    var usersRepo = context.HttpContext.RequestServices.GetRequiredService<IUsersRepository>();
+                                    
+                                    // Extract claims
+                                    var upn = context.Principal?.FindFirst("preferred_username")?.Value;
+                                    var tenantId = context.Principal?.FindFirst("tid")?.Value;
+                                    var email = context.Principal?.FindFirst("email")?.Value ?? upn;
+                                    var displayName = context.Principal?.FindFirst("name")?.Value;
+                                    var country = context.Principal?.FindFirst("country")?.Value;
+                                    var region = context.Principal?.FindFirst("state")?.Value;
+                                    
+                                    if (string.IsNullOrWhiteSpace(upn))
+                                    {
+                                        logger.LogWarning("OnTokenValidated: UPN (preferred_username) claim is missing from token");
+                                        context.Fail("UPN claim is required");
+                                        return;
+                                    }
+                                    
+                                    // Validate tenant if configured
+                                    if (entraIdOptions.Authorization?.RequireTenantValidation == true &&
+                                        entraIdOptions.Authorization?.AllowedTenants?.Count > 0)
+                                    {
+                                        if (string.IsNullOrWhiteSpace(tenantId) ||
+                                            !entraIdOptions.Authorization.AllowedTenants.Contains(tenantId, StringComparer.OrdinalIgnoreCase))
+                                        {
+                                            logger.LogWarning(
+                                                "OnTokenValidated: Tenant {TenantId} is not in AllowedTenants list for UPN {Upn}",
+                                                Chat.Web.Utilities.LogSanitizer.Sanitize(tenantId ?? "<null>"),
+                                                Chat.Web.Utilities.LogSanitizer.Sanitize(upn));
+                                            context.Fail("Tenant is not authorized");
+                                            return;
+                                        }
+                                    }
+                                    
+                                    // Lookup user by UPN (STRICT MATCHING - no fallback to email/username)
+                                    // Admin MUST pre-populate the Upn field in database before user's first Entra ID login
+                                    // Example: UPDATE users SET upn = 'alice@contoso.com' WHERE username = 'alice'
+                                    var user = usersRepo.GetByUpn(upn);
+                                    if (user == null)
+                                    {
+                                        // User not found by UPN - DENY ACCESS (no auto-provisioning)
+                                        // Check if OTP fallback allows unauthorized users
+                                        if (entraIdOptions.Fallback?.OtpForUnauthorizedUsers == true)
+                                        {
+                                            logger.LogInformation(
+                                                "OnTokenValidated: User with UPN {Upn} not found in database. OTP fallback enabled - rejecting Entra ID login.",
+                                                Chat.Web.Utilities.LogSanitizer.Sanitize(upn));
+                                            context.Fail("User not found. Please use OTP login.");
+                                            return;
+                                        }
+                                        else
+                                        {
+                                            logger.LogWarning(
+                                                "OnTokenValidated: User with UPN {Upn} not found in database and OTP fallback disabled - rejecting login",
+                                                Chat.Web.Utilities.LogSanitizer.Sanitize(upn));
+                                            context.Fail("User not authorized");
+                                            return;
+                                        }
+                                    }
+                                    
+                                    // Update user with Entra ID claims (keep existing data)
+                                    user.Upn = upn;
+                                    user.TenantId = tenantId;
+                                    user.DisplayName = displayName;
+                                    // Update FullName from DisplayName on first Entra ID login
+                                    if (!string.IsNullOrWhiteSpace(displayName)) user.FullName = displayName;
+                                    if (!string.IsNullOrWhiteSpace(email)) user.Email = email;
+                                    if (!string.IsNullOrWhiteSpace(country)) user.Country = country;
+                                    if (!string.IsNullOrWhiteSpace(region)) user.Region = region;
+                                    
+                                    usersRepo.Upsert(user);
+                                    
+                                    logger.LogInformation(
+                                        "OnTokenValidated: User {UserName} authenticated via Entra ID (UPN: {Upn}, Tenant: {TenantId})",
+                                        Chat.Web.Utilities.LogSanitizer.Sanitize(user.UserName),
+                                        Chat.Web.Utilities.LogSanitizer.Sanitize(upn),
+                                        Chat.Web.Utilities.LogSanitizer.Sanitize(tenantId ?? "<null>"));
+                                    
+                                    // Add custom claim for app username (used throughout the app)
+                                    var identity = context.Principal?.Identity as ClaimsIdentity;
+                                    if (identity != null)
+                                    {
+                                        identity.AddClaim(new Claim(ClaimTypes.Name, user.UserName));
+                                        identity.AddClaim(new Claim("app_username", user.UserName));
+                                    }
+                                },
+                                OnAuthenticationFailed = context =>
+                                {
+                                    var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Startup>>();
+                                    logger.LogError(
+                                        context.Exception,
+                                        "OnAuthenticationFailed: Entra ID authentication failed: {ErrorMessage}",
+                                        Chat.Web.Utilities.LogSanitizer.Sanitize(context.Exception?.Message ?? "Unknown error"));
+                                    context.HandleResponse();
+                                    context.Response.Redirect("/login?error=authentication_failed");
+                                    return Task.CompletedTask;
+                                }
+                            };
+                        },
+                        cookieOptions =>
+                        {
+                            // Reuse the main cookie authentication scheme
+                            cookieOptions.LoginPath = "/login";
+                            cookieOptions.AccessDeniedPath = "/login";
+                            cookieOptions.SlidingExpiration = true;
+                            cookieOptions.ExpireTimeSpan = TimeSpan.FromHours(12);
+                        },
+                        openIdConnectScheme: "EntraId");
+                }
             }
 
             // ==========================================
