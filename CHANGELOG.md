@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Microsoft Entra ID Multi-Tenant Authentication** (#101)
+  - **Dual Authentication**: Users can authenticate via Microsoft Entra ID (Azure AD) OR OTP
+  - **UPN-Based Authorization**: Strict user lookup by User Principal Name (UPN) from Entra ID token
+  - **Multi-Tenant Support**: Configured for `organizations` (any Entra ID tenant)
+  - **Security**:
+    - `AllowedTenants` list for tenant validation (CRITICAL for multi-tenant security)
+    - Token validation: signature, issuer, audience, expiration
+    - UPN claim extraction from `preferred_username` token claim
+    - **Strict UPN matching**: No auto-provisioning or fallback to email/username
+  - **User Management**:
+    - **Pre-population required**: Admin MUST set `Upn` field in database before user's first Entra ID login
+    - Automatic user profile update on Entra ID login:
+      - **FullName synchronized with DisplayName** (chat displays Entra ID name)
+      - UPN, TenantId, Email updated from token claims
+      - **Country and Region** populated from `country` and `state` token claims
+    - `GetByUpn()` repository method for UPN-based user lookup
+    - Users without matching UPN are denied access (redirected to OTP if `OtpForUnauthorizedUsers: true`)
+  - **User Model Enhancements**:
+    - `DisplayName`: Entra ID display name from token (may differ from FullName)
+    - `Country`: ISO 3166-1 alpha-2 country code (e.g., "US", "PL")
+    - `Region`: State/province from Entra ID (e.g., "California", "Mazowieckie")
+    - **Chat Display**: Shows `FullName` (synced with Entra ID `DisplayName` on login, not seeded name)
+  - **Fallback Options**:
+    - `EnableOtp`: Always enabled for OTP fallback
+    - `OtpForUnauthorizedUsers`: Redirect unauthorized Entra ID users to OTP login
+  - **Configuration**:
+    - `EntraId__ClientId`, `EntraId__ClientSecret`: App registration credentials
+    - `EntraId__Authorization__AllowedTenants`: List of authorized tenant IDs
+    - `EntraId__Authorization__RequireTenantValidation`: Enforce tenant restrictions
+    - Connection string support: `ConnectionStrings__EntraId="ClientId=<id>;ClientSecret=<secret>"`
+  - **UI Changes**:
+    - Login page: "Sign in with Microsoft" button with Microsoft logo
+    - Divider: "or use one-time password" between authentication options
+    - Both authentication methods always visible (not either/or)
+  - **Documentation**: Comprehensive multi-tenant setup guide in `/docs/development/entra-id-multi-tenant-setup.md`
+  - **NuGet Packages**: Microsoft.Identity.Web 4.0.1, Microsoft.Identity.Web.UI 4.0.1
+
 ### Security
 - **CORS Origin Validation for SignalR**: Implemented comprehensive origin validation to prevent CSRF attacks on `/chatHub` endpoint (#63)
   - **CORS Policy**: Browser-enforced CORS policy named "SignalRPolicy"

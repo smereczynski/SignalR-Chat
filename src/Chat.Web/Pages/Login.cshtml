@@ -13,6 +13,30 @@
               <span id="currentLanguageFlag" class="flag-icon">🌐</span>
             </button>
           </div>
+          
+          <!-- Microsoft Entra ID Sign-In (if configured) -->
+          @if (Model.EntraIdEnabled)
+          {
+            <div class="mb-3">
+              <a href="/login/entra" class="btn btn-primary w-100 d-flex align-items-center justify-content-center">
+                <svg xmlns="http://www.w3.org/2000/svg" width="21" height="21" viewBox="0 0 21 21" class="me-2">
+                  <path fill="#f25022" d="M0 0h10v10H0z"/>
+                  <path fill="#00a4ef" d="M11 0h10v10H11z"/>
+                  <path fill="#7fba00" d="M0 11h10v10H0z"/>
+                  <path fill="#ffb900" d="M11 11h10v10H11z"/>
+                </svg>
+                @Localizer["SignInWithMicrosoft"]
+              </a>
+            </div>
+            
+            <div class="d-flex align-items-center my-3">
+              <hr class="flex-grow-1">
+              <span class="px-3 text-muted small">@Localizer["OrUseOtp"]</span>
+              <hr class="flex-grow-1">
+            </div>
+          }
+          
+          <!-- OTP Sign-In -->
           <div id="otpContainer" data-otp-timeout-ms="8000" data-otp-retry-cooldown-ms="5000" data-otp-resend-delay-ms="60000">
             <div id="otp-step1">
               <div class="mb-2">

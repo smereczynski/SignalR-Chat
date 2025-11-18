@@ -89,6 +89,12 @@
   <data name="SignIn" xml:space="preserve">
     <value>Sign in</value>
   </data>
+  <data name="SignInWithMicrosoft" xml:space="preserve">
+    <value>Sign in with Microsoft</value>
+  </data>
+  <data name="OrUseOtp" xml:space="preserve">
+    <value>or use one-time password</value>
+  </data>
   
   <!-- Chat Interface -->
   <data name="ChatRooms" xml:space="preserve">

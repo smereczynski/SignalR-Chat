@@ -13,7 +13,7 @@ SignalR Chat demonstrates modern real-time web application patterns with product
 
 **What it does**:
 - 🚀 Real-time messaging with SignalR (WebSocket + Server-Sent Events fallback)
-- 🔐 Secure OTP authentication (Argon2id hashing, rate limiting)
+- 🔐 Dual authentication: Microsoft Entra ID (enterprise) + OTP fallback (Argon2id hashing, rate limiting)
 - 👥 Fixed chat rooms: General, Tech, Random, Sports (no DMs)
 - ✓ Read receipts, typing indicators, presence tracking
 - 🌍 9 languages supported (i18n with server-side + client-side resources)
@@ -122,7 +122,7 @@ graph TD
 | **Backend** | ASP.NET Core 9, SignalR | Web server, WebSocket hub |
 | **Database** | Azure Cosmos DB (NoSQL) | Messages, rooms, read receipts |
 | **Cache** | Redis | OTP storage, rate limiting |
-| **Auth** | Cookie authentication + OTP | Secure login flow |
+| **Auth** | Cookie authentication + Entra ID/OTP | Dual authentication: enterprise SSO + guest OTP |
 | **Observability** | OpenTelemetry, App Insights | Metrics, traces, logs |
 | **Deployment** | Azure App Service (Linux), Bicep IaC | Infrastructure as Code |
 
@@ -209,11 +209,12 @@ az deployment sub create \
 
 ## 🔒 Security
 
-- ✅ **OTP Authentication**: Argon2id hashing with pepper, 3 failed attempts lockout
+- ✅ **Dual Authentication**: Microsoft Entra ID (SSO) + OTP fallback (Argon2id hashing with pepper)
+- ✅ **Multi-Tenant Support**: AllowedTenants validation, UPN-based authorization
 - ✅ **CORS Protection**: Origin validation on SignalR hub, prevents CSRF attacks
 - ✅ **CSP Headers**: Nonce-based Content Security Policy, prevents XSS
 - ✅ **HSTS**: HTTP Strict Transport Security in production
-- ✅ **Rate Limiting**: 5 OTP requests/min per user, 20/min per IP
+- ✅ **Rate Limiting**: Adaptive throttling for auth endpoints, 5 OTP attempts per 15 minutes
 - ✅ **Input Sanitization**: Log forgery prevention (CWE-117)
 - ✅ **Private Endpoints**: VNet integration, no public database access
 

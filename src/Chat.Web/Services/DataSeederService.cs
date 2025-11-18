@@ -114,7 +114,13 @@ namespace Chat.Web.Services
                     Enabled = true,
                     FixedRooms = new List<string> { "general", "ops" },
                     DefaultRoom = "general",
-                    Avatar = null
+                    Avatar = null,
+                    // Entra ID fields (placeholders for seeded users - will be populated on first Entra ID login)
+                    Upn = null,
+                    TenantId = null,
+                    DisplayName = null,
+                    Country = null,
+                    Region = null
                 },
                 new ApplicationUser
                 {
@@ -125,7 +131,13 @@ namespace Chat.Web.Services
                     Enabled = true,
                     FixedRooms = new List<string> { "general", "random" },
                     DefaultRoom = "general",
-                    Avatar = null
+                    Avatar = null,
+                    // Entra ID fields (placeholders for seeded users - will be populated on first Entra ID login)
+                    Upn = null,
+                    TenantId = null,
+                    DisplayName = null,
+                    Country = null,
+                    Region = null
                 },
                 new ApplicationUser
                 {
@@ -136,7 +148,13 @@ namespace Chat.Web.Services
                     Enabled = true,
                     FixedRooms = new List<string> { "general" },
                     DefaultRoom = "general",
-                    Avatar = null
+                    Avatar = null,
+                    // Entra ID fields (placeholders for seeded users - will be populated on first Entra ID login)
+                    Upn = null,
+                    TenantId = null,
+                    DisplayName = null,
+                    Country = null,
+                    Region = null
                 }
             };
 
