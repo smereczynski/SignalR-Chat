@@ -286,4 +286,39 @@
   <data name="ReadBy" xml:space="preserve">
     <value>Przeczytane przez</value>
   </data>
+  
+  <!-- Entra ID / Silent SSO Messages -->
+  <data name="SilentSsoAttemptedInteractionRequired" xml:space="preserve">
+    <value>Próbowaliśmy zalogować Cię automatycznie, ale wymagana jest interakcja.</value>
+  </data>
+  <data name="PleaseChooseSignInMethod" xml:space="preserve">
+    <value>Wybierz poniżej metodę logowania.</value>
+  </data>
+  <data name="AccountNotAuthorizedUseOtp" xml:space="preserve">
+    <value>Twoje konto nie jest uprawnione do logowania Microsoft. Użyj jednorazowego kodu.</value>
+  </data>
+  <data name="AccountNotAuthorizedContactAdmin" xml:space="preserve">
+    <value>Twoje konto nie jest uprawnione. Skontaktuj się z administratorem.</value>
+  </data>
+  <data name="AuthenticationFailedPleaseRetry" xml:space="preserve">
+    <value>Uwierzytelnianie nie powiodło się. Spróbuj ponownie.</value>
+  </data>
+  <data name="OrUseOtp" xml:space="preserve">
+    <value>albo użyj jednorazowego kodu</value>
+  </data>
+  <data name="Email" xml:space="preserve">
+    <value>Email</value>
+  </data>
+  <data name="EnterYourEmail" xml:space="preserve">
+    <value>Wprowadź swój email</value>
+  </data>
+  <data name="EnterEmailForOtp" xml:space="preserve">
+    <value>Wprowadź swój email, aby otrzymać kod weryfikacyjny.</value>
+  </data>
+  <data name="EmailRequired" xml:space="preserve">
+    <value>Email jest wymagany</value>
+  </data>
+  <data name="EmailAndCodeRequired" xml:space="preserve">
+    <value>Email i kod są wymagane</value>
+  </data>
 </root>

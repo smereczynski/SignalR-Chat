@@ -90,7 +90,12 @@ namespace Chat.Web.Services
                 try
                 {
                     await RetryHelper.ExecuteAsync(
-                    ct => _smsClient.SendAsync(from: _options.SmsFrom, to: destination, message: body, cancellationToken: ct),
+                    ct => _smsClient.SendAsync(
+                        from: _options.SmsFrom, 
+                        to: destination, 
+                        message: body, 
+                        options: new SmsSendOptions(enableDeliveryReport: true) { Tag = "SMS Sent" },
+                        cancellationToken: ct),
                     Transient.IsNetworkTransient,
                     _logger,
                     "acs.sms.send",

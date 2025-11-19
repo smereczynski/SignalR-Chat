@@ -46,7 +46,23 @@ Notifications__UnreadDelaySeconds=60
 Cosmos__DatabaseName=chat
 Cosmos__MessagesTtlSeconds=2592000
 
-# === Application Insights (Production) ===
+# === CORS Configuration (Production) ===
+Cors__AllowedOrigins__0=https://signalrchat-prod-plc.azurewebsites.net
+Cors__AllowAllOrigins=false
+
+# === Rate Limiting ===
+RateLimiting__MarkRead__MarkReadPermitLimit=100
+RateLimiting__MarkRead__MarkReadWindowSeconds=10
+
+# === Entra ID Automatic SSO ===
+EntraId__AutomaticSso__Enable=true
+EntraId__AutomaticSso__AttemptOncePerSession=true
+
+# === Host Filtering (Production) ===
+AllowedHosts=signalrchat-prod-plc.azurewebsites.net
+
+# === Logging ===
+Serilog__WriteToFile=false
 Logging__ApplicationInsights__LogLevel__Default=Information
 ```
 
@@ -182,6 +198,196 @@ Otp__TimeCost=6
 Otp__Parallelism=4
 ```
 
+#### OTP Hashing
+
+**Environment Variable**: `Otp__HashingEnabled`  
+**Default**: `true`
+
+```bash
+# Disable hashing (DEVELOPMENT ONLY - not recommended)
+Otp__HashingEnabled=false
+```
+
+**Purpose**: Controls whether OTP codes are hashed with Argon2id before storage.
+
+**Behavior**:
+- `true` (default): Codes hashed with Argon2id using pepper + salt (secure)
+- `false`: Codes stored in plaintext (insecure, for debugging only)
+
+⚠️ **Security Warning**: Never disable hashing in production environments.
+
+### CORS Configuration
+
+**Purpose**: Controls which origins can access the SignalR endpoints and API.
+
+#### Allowed Origins
+
+**Environment Variable**: `Cors__AllowedOrigins__0`, `Cors__AllowedOrigins__1`, etc.  
+**appsettings.json**: `Cors:AllowedOrigins` array
+
+```json
+{
+  "Cors": {
+    "AllowedOrigins": [
+      "https://signalrchat-prod-plc.azurewebsites.net",
+      "https://app.contoso.com"
+    ]
+  }
+}
+```
+
+**Environment variable format**:
+```bash
+Cors__AllowedOrigins__0=https://signalrchat-prod-plc.azurewebsites.net
+Cors__AllowedOrigins__1=https://app.contoso.com
+```
+
+#### Allow All Origins (Development Only)
+
+**Environment Variable**: `Cors__AllowAllOrigins`  
+**Default**: `false` (Production), `true` (Development)
+
+```json
+{
+  "Cors": {
+    "AllowAllOrigins": true
+  }
+}
+```
+
+⚠️ **Security Warning**: 
+- `AllowAllOrigins: true` should **ONLY** be used in Development
+- **NEVER** enable in Production - exposes your API to CSRF attacks
+- Use explicit `AllowedOrigins` list instead
+
+**Behavior**:
+- `true`: Accepts requests from any origin (development convenience)
+- `false`: Only accepts requests from origins in `AllowedOrigins` list
+
+### Rate Limiting Configuration
+
+**Purpose**: Protects against abuse by limiting request frequency.
+
+#### Mark Read Rate Limiting
+
+**Environment Variables**:
+- `RateLimiting__MarkRead__MarkReadPermitLimit`
+- `RateLimiting__MarkRead__MarkReadWindowSeconds`
+
+**Defaults**:
+- Permit Limit: `100` requests
+- Window: `10` seconds
+
+```bash
+# Allow 50 mark-read requests per 5 seconds
+RateLimiting__MarkRead__MarkReadPermitLimit=50
+RateLimiting__MarkRead__MarkReadWindowSeconds=5
+```
+
+**appsettings.json**:
+```json
+{
+  "RateLimiting": {
+    "MarkRead": {
+      "MarkReadPermitLimit": 100,
+      "MarkReadWindowSeconds": 10
+    }
+  }
+}
+```
+
+**Behavior**:
+- Limits `/api/messages/{id}/read` endpoint calls per user
+- After exceeding limit: HTTP 429 (Too Many Requests)
+- Counter resets after window expires
+- Prevents flooding with read receipt updates
+
+### Entra ID Configuration
+
+See [Authentication Guide](../features/authentication.md) for complete Entra ID setup.
+
+#### Automatic Silent SSO
+
+**Purpose**: Attempts seamless authentication using existing Microsoft session.
+
+**Environment Variables**:
+- `EntraId__AutomaticSso__Enable`
+- `EntraId__AutomaticSso__AttemptOncePerSession`
+- `EntraId__AutomaticSso__AttemptCookieName`
+
+**Defaults**:
+- Enable: `true`
+- AttemptOncePerSession: `true`
+- AttemptCookieName: `sso_attempted_v2`
+
+```bash
+# Enable automatic silent SSO
+EntraId__AutomaticSso__Enable=true
+EntraId__AutomaticSso__AttemptOncePerSession=true
+EntraId__AutomaticSso__AttemptCookieName=sso_attempted_v2
+```
+
+**appsettings.json**:
+```json
+{
+  "EntraId": {
+    "AutomaticSso": {
+      "Enable": true,
+      "AttemptOncePerSession": true,
+      "AttemptCookieName": "sso_attempted_v2"
+    }
+  }
+}
+```
+
+**Behavior**:
+- When enabled: First visit to `/` or `/chat` triggers silent authentication attempt
+- Uses OIDC `prompt=none` to avoid user interaction
+- If successful: User logged in seamlessly
+- If failed: Redirected to `/login?reason=sso_failed`
+- Cookie prevents repeated attempts (10-minute expiration)
+
+**When to disable**:
+- ❌ Pure OTP-only deployments (no Entra ID)
+- ❌ Debugging authentication flows
+- ✅ Keep enabled for hybrid Entra ID + OTP setups
+
+### Host Filtering Configuration
+
+**Purpose**: Protects against host header injection attacks.
+
+#### Allowed Hosts
+
+**Environment Variable**: `AllowedHosts`  
+**Default**: `*` (all hosts)
+
+```bash
+# Production: Specify exact hostnames
+AllowedHosts=signalrchat-prod-plc.azurewebsites.net;app.contoso.com
+
+# Development: Allow all (convenient but less secure)
+AllowedHosts=*
+```
+
+**appsettings.json**:
+```json
+{
+  "AllowedHosts": "signalrchat-prod-plc.azurewebsites.net;app.contoso.com"
+}
+```
+
+**Format**: Semicolon-separated list of allowed hostnames
+
+**Behavior**:
+- `*`: Accepts requests with any `Host` header (development/staging)
+- Specific hostnames: Only accepts requests matching listed hosts
+- Invalid host: HTTP 400 (Bad Request)
+
+**Recommendations**:
+- ✅ Development: `*` (convenience)
+- ✅ Production: Explicit hostname list (security)
+- ✅ Include all expected hostnames (app domain, CDN, reverse proxy)
+
 ### Cosmos DB Configuration
 
 #### Database Name
@@ -254,6 +460,32 @@ Notifications__UnreadDelaySeconds=120
 ```
 
 **Purpose**: Delay before sending email/SMS for unread messages (prevents spam during active conversations)
+
+### Logging Configuration
+
+#### File Logging (Optional)
+
+**Environment Variable**: `Serilog__WriteToFile`  
+**Default**: `false` (disabled)
+
+```bash
+# Enable file logging for troubleshooting
+Serilog__WriteToFile=true
+```
+
+**Behavior**:
+- When enabled: Logs written to `logs/chat-YYYYMMDD.log`
+- Rolling interval: Daily
+- Retention: 7 days (automatic cleanup)
+- Log format: `[{Timestamp:yyyy-MM-dd HH:mm:ss.fff} {Level:u3}] {SourceContext} {Message:lj} {Properties:j}{NewLine}{Exception}`
+
+**When to use**:
+- ✅ Local troubleshooting and debugging
+- ✅ Capturing detailed logs without cloud costs
+- ✅ Diagnosing issues during development
+- ❌ Production (use Application Insights instead)
+
+**Performance impact**: Minimal when disabled (default). Small disk I/O overhead when enabled.
 
 ### Application Insights
 

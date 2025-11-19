@@ -223,4 +223,39 @@
   <data name="ReadBy" xml:space="preserve">
     <value>Прочитано</value>
   </data>
+  
+  <!-- Entra ID / Silent SSO Messages -->
+  <data name="SilentSsoAttemptedInteractionRequired" xml:space="preserve">
+    <value>Мы попытались выполнить автоматический вход, но требуется взаимодействие.</value>
+  </data>
+  <data name="PleaseChooseSignInMethod" xml:space="preserve">
+    <value>Пожалуйста, выберите ниже способ входа.</value>
+  </data>
+  <data name="AccountNotAuthorizedUseOtp" xml:space="preserve">
+    <value>Ваша учетная запись не имеет права на вход через Microsoft. Используйте одноразовый пароль.</value>
+  </data>
+  <data name="AccountNotAuthorizedContactAdmin" xml:space="preserve">
+    <value>Ваша учетная запись не авторизована. Обратитесь к администратору.</value>
+  </data>
+  <data name="AuthenticationFailedPleaseRetry" xml:space="preserve">
+    <value>Ошибка аутентификации. Повторите попытку.</value>
+  </data>
+  <data name="OrUseOtp" xml:space="preserve">
+    <value>или используйте одноразовый код</value>
+  </data>
+  <data name="Email" xml:space="preserve">
+    <value>Электронная почта</value>
+  </data>
+  <data name="EnterYourEmail" xml:space="preserve">
+    <value>Введите ваш email</value>
+  </data>
+  <data name="EnterEmailForOtp" xml:space="preserve">
+    <value>Введите ваш email, чтобы получить проверочный код.</value>
+  </data>
+  <data name="EmailRequired" xml:space="preserve">
+    <value>Email обязателен</value>
+  </data>
+  <data name="EmailAndCodeRequired" xml:space="preserve">
+    <value>Email и код обязательны</value>
+  </data>
 </root>
