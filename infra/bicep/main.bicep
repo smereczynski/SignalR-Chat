@@ -45,6 +45,47 @@ param vnetDnsServers string = ''
 @secure()
 param otpPepper string
 
+@description('Entra ID instance base URL (blank to use default)')
+param entraIdInstance string = ''
+
+@description('Entra ID tenant ID or "organizations" for multi-tenant')
+param entraIdTenantId string = 'organizations'
+
+@description('Entra ID application (client) ID')
+param entraIdClientId string = ''
+
+@description('Entra ID client secret (optional; prefer Key Vault)')
+@secure()
+param entraIdClientSecret string = ''
+
+@description('Entra ID sign-in callback path')
+param entraIdCallbackPath string = '/signin-oidc'
+
+@description('Entra ID sign-out callback path')
+param entraIdSignedOutCallbackPath string = '/signout-callback-oidc'
+
+@description('Require tenant validation against allowed list')
+param entraIdRequireTenantValidation bool = true
+
+@description('Allowed tenant IDs array for multi-tenant auth')
+param entraIdAllowedTenants array = []
+
+@description('Enable automatic silent SSO attempt')
+param entraIdAutomaticSsoEnable bool = false
+
+@description('Cookie name recording silent SSO attempt')
+param entraIdAutomaticSsoAttemptCookieName string = 'sso_attempted'
+
+@description('Enable OTP fallback if Entra ID unavailable')
+param entraIdFallbackEnableOtp bool = true
+
+@description('Allow OTP for unauthorized tenant users')
+param entraIdFallbackOtpForUnauthorizedUsers bool = false
+
+@description('Optional Entra ID connection string (ClientId=...;ClientSecret=...)')
+@secure()
+param entraIdConnectionString string = ''
+
 // ==========================================
 // Variables - Static IP Allocation
 // ==========================================
@@ -193,6 +234,20 @@ module appService './modules/app-service.bicep' = {
     logAnalyticsWorkspaceId: monitoring.outputs.logAnalyticsWorkspaceId
     privateEndpointSubnetId: networking.outputs.privateEndpointsSubnetId
     privateEndpointStaticIp: appServicePrivateIp
+    // Entra ID parameters
+    entraIdInstance: entraIdInstance
+    entraIdTenantId: entraIdTenantId
+    entraIdClientId: entraIdClientId
+    entraIdClientSecret: entraIdClientSecret
+    entraIdCallbackPath: entraIdCallbackPath
+    entraIdSignedOutCallbackPath: entraIdSignedOutCallbackPath
+    entraIdRequireTenantValidation: entraIdRequireTenantValidation
+    entraIdAllowedTenants: entraIdAllowedTenants
+    entraIdAutomaticSsoEnable: entraIdAutomaticSsoEnable
+    entraIdAutomaticSsoAttemptCookieName: entraIdAutomaticSsoAttemptCookieName
+    entraIdFallbackEnableOtp: entraIdFallbackEnableOtp
+    entraIdFallbackOtpForUnauthorizedUsers: entraIdFallbackOtpForUnauthorizedUsers
+    entraIdConnectionString: entraIdConnectionString
   }
 }
 
