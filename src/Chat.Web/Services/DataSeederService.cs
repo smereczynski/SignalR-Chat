@@ -52,8 +52,8 @@ namespace Chat.Web.Services
                 if (hasRooms && hasUsers)
                 {
                     _logger.LogInformation("Database already contains data (Rooms: {RoomCount}, Users: {UserCount}) - skipping seed",
-                        existingRooms?.Count ?? 0,
-                        existingUsers?.Count ?? 0);
+                        existingRooms.Count,
+                        existingUsers.Count);
                     return;
                 }
 

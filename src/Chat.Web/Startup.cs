@@ -621,20 +621,10 @@ namespace Chat.Web
                                                 Chat.Web.Utilities.LogSanitizer.Sanitize(tenantId ?? "<null>"),
                                                 Chat.Web.Utilities.LogSanitizer.Sanitize(upn));
                                             
-                                            // Check if this is a silent SSO attempt
-                                            var isSilent = context.Properties.Items.TryGetValue("silent", out var silentValue) && silentValue == "true";
-                                            if (isSilent)
-                                            {
-                                                // Silent SSO - redirect with reason (handled by OnRemoteFailure in silent flow)
-                                                context.HandleResponse();
-                                                context.Response.Redirect("/login?reason=not_authorized");
-                                            }
-                                            else
-                                            {
-                                                // Normal login - redirect with error
-                                                context.HandleResponse();
-                                                context.Response.Redirect("/login?reason=not_authorized");
-                                            }
+                                            // Tenant not authorized - redirect to login
+                                            // Both silent SSO and normal login follow same path
+                                            context.HandleResponse();
+                                            context.Response.Redirect("/login?reason=not_authorized");
                                             return;
                                         }
                                     }
