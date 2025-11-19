@@ -168,7 +168,6 @@ namespace Chat.Web.Repositories
         public string country { get; set; }
         public string region { get; set; }
         public string[] fixedRooms { get; set; } 
-        public string[] rooms { get; set; } 
         public string defaultRoom { get; set; } 
     }
     internal class RoomDoc { public string id { get; set; } public string name { get; set; } public string admin { get; set; } public string[] users { get; set; } }
@@ -203,7 +202,7 @@ namespace Chat.Web.Repositories
                     activity?.AddEvent(new ActivityEvent("page", tags: new ActivityTagsCollection {{"db.page.count", page.Count}}));
                     list.AddRange(page.Select(d =>
                     {
-                        var rooms = d.fixedRooms ?? d.rooms; // support Admin schema (rooms) and legacy (fixedRooms)
+                        var rooms = d.fixedRooms; // fixedRooms is the single source of truth
                         var fixedRooms = rooms != null ? new System.Collections.Generic.List<string>(rooms) : new System.Collections.Generic.List<string>();
                         // Default room: prefer explicit defaultRoom; otherwise first allowed room if available
                         var def = !string.IsNullOrWhiteSpace(d.defaultRoom) ? d.defaultRoom : (fixedRooms.Count > 0 ? fixedRooms[0] : null);
@@ -234,10 +233,41 @@ namespace Chat.Web.Repositories
             }
         }
 
+        private string GetDocumentId(string userName)
+        {
+            using var activity = Tracing.ActivitySource.StartActivity("cosmos.users.getid", ActivityKind.Client);
+            activity?.SetTag("app.userName", userName);
+            var q = _users.GetItemQueryIterator<UserDoc>(new QueryDefinition("SELECT c.id FROM c WHERE c.userName = @u").WithParameter("@u", userName));
+            try
+            {
+                while (q.HasMoreResults)
+                {
+                    var page = Resilience.RetryHelper.ExecuteAsync(
+                        _ => q.ReadNextAsync(),
+                        Transient.IsCosmosTransient,
+                        _logger,
+                        "cosmos.users.getid.readnext").GetAwaiter().GetResult();
+                    var d = page.FirstOrDefault();
+                    if (d != null)
+                    {
+                        return d.id;
+                    }
+                }
+                return null;
+            }
+            catch (CosmosException ex)
+            {
+                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+                _logger.LogError(ex, "Cosmos user ID lookup failed");
+                throw;
+            }
+        }
+
         public ApplicationUser GetByUserName(string userName)
         {
             using var activity = Tracing.ActivitySource.StartActivity("cosmos.users.get", ActivityKind.Client);
             activity?.SetTag("app.userName", userName);
+            // Use cross-partition query to find user by userName
             var q = _users.GetItemQueryIterator<UserDoc>(new QueryDefinition("SELECT * FROM c WHERE c.userName = @u").WithParameter("@u", userName));
             try
             {
@@ -251,7 +281,7 @@ namespace Chat.Web.Repositories
                     var d = page.FirstOrDefault();
                     if (d != null)
                     {
-                        var rooms = d.fixedRooms ?? d.rooms; // support Admin schema
+                        var rooms = d.fixedRooms; // fixedRooms is the single source of truth
                         var fixedRooms = rooms != null ? new System.Collections.Generic.List<string>(rooms) : new System.Collections.Generic.List<string>();
                         var def = !string.IsNullOrWhiteSpace(d.defaultRoom) ? d.defaultRoom : (fixedRooms.Count > 0 ? fixedRooms[0] : null);
                         return new ApplicationUser 
@@ -301,7 +331,7 @@ namespace Chat.Web.Repositories
                     var d = page.FirstOrDefault();
                     if (d != null)
                     {
-                        var rooms = d.fixedRooms ?? d.rooms;
+                        var rooms = d.fixedRooms;
                         var fixedRooms = rooms != null ? new System.Collections.Generic.List<string>(rooms) : new System.Collections.Generic.List<string>();
                         var def = !string.IsNullOrWhiteSpace(d.defaultRoom) ? d.defaultRoom : (fixedRooms.Count > 0 ? fixedRooms[0] : null);
                         return new ApplicationUser 
@@ -322,12 +352,13 @@ namespace Chat.Web.Repositories
                         };
                     }
                 }
+                _logger.LogDebug("GetByUpn: No user found with upn={Upn}", upn);
                 return null;
             }
             catch (CosmosException ex)
             {
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-                _logger.LogError(ex, "Cosmos user lookup by UPN failed");
+                _logger.LogError(ex, "Cosmos user lookup by UPN failed for upn={Upn}", upn);
                 throw;
             }
         }
@@ -336,9 +367,14 @@ namespace Chat.Web.Repositories
         {
             using var activity = Tracing.ActivitySource.StartActivity("cosmos.users.upsert", ActivityKind.Client);
             activity?.SetTag("app.userName", user.UserName);
-            var doc = new UserDoc 
+            
+            // Check if user already exists to preserve their ID
+            var existing = GetByUserName(user.UserName);
+            var documentId = existing != null ? GetDocumentId(user.UserName) : Guid.NewGuid().ToString();
+            
+                var doc = new UserDoc 
             { 
-                id = user.UserName, 
+                id = documentId,
                 userName = user.UserName, 
                 fullName = user.FullName, 
                 avatar = user.Avatar, 
@@ -351,7 +387,6 @@ namespace Chat.Web.Repositories
                 country = user.Country,
                 region = user.Region,
                 fixedRooms = user.FixedRooms != null ? System.Linq.Enumerable.ToArray(user.FixedRooms) : null, 
-                rooms = user.FixedRooms != null ? System.Linq.Enumerable.ToArray(user.FixedRooms) : null, 
                 defaultRoom = user.DefaultRoom 
             };
             try

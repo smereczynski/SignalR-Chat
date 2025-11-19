@@ -48,6 +48,7 @@ using OpenTelemetry.Instrumentation.StackExchangeRedis;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Chat.Web.Middleware;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 
 namespace Chat.Web
 {
@@ -485,18 +486,7 @@ namespace Chat.Web
                     }
                 }
                 
-                var authBuilder = services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
-                    .AddCookie(options =>
-                    {
-                        // Redirect unauthenticated users to dedicated login page
-                        options.LoginPath = "/login";
-                        options.AccessDeniedPath = "/login";
-                        options.SlidingExpiration = true;
-                        // Keep session active for at least 12 hours to match chat expectations
-                        options.ExpireTimeSpan = TimeSpan.FromHours(12);
-                        // Preserve ReturnUrl to bounce back to the originally requested page (/chat by default)
-                        options.ReturnUrlParameter = "ReturnUrl";
-                    });
+                var authBuilder = services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme);
                 
                 // Add Entra ID authentication if configured
                 if (entraIdOptions.IsEnabled)
@@ -511,6 +501,12 @@ namespace Chat.Web
                             microsoftIdentityOptions.CallbackPath = entraIdOptions.CallbackPath;
                             microsoftIdentityOptions.SignedOutCallbackPath = entraIdOptions.SignedOutCallbackPath;
                             
+                            // Use authorization code flow only (no implicit/hybrid flow requiring ID tokens)
+                            microsoftIdentityOptions.ResponseType = Microsoft.IdentityModel.Protocols.OpenIdConnect.OpenIdConnectResponseType.Code;
+                            
+                            // Use the main cookie scheme (not a separate one)
+                            microsoftIdentityOptions.SignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+                            
                             // Token validation
                             microsoftIdentityOptions.TokenValidationParameters = new Microsoft.IdentityModel.Tokens.TokenValidationParameters
                             {
@@ -524,23 +520,92 @@ namespace Chat.Web
                             // Events for custom logic
                             microsoftIdentityOptions.Events = new Microsoft.AspNetCore.Authentication.OpenIdConnect.OpenIdConnectEvents
                             {
+                                OnRedirectToIdentityProvider = context =>
+                                {
+                                    // Check both Parameters and Items for silent flag
+                                    var isSilentParams = context.Properties?.Parameters.TryGetValue("silent", out var silentVal) == true &&
+                                                         ((silentVal as string) == "true" || (silentVal is bool b && b));
+                                    var isSilentItems = context.Properties?.Items.TryGetValue("silent", out var silentItemVal) == true &&
+                                                        silentItemVal == "true";
+                                    var isSilent = isSilentParams || isSilentItems;
+                                    
+                                    if (isSilent)
+                                    {
+                                        // Request silent sign-in (no UI); identity provider will return login_required/interaction_required if not possible
+                                        context.ProtocolMessage.Prompt = "none";
+                                    }
+                                    return Task.CompletedTask;
+                                },
                                 OnTokenValidated = async context =>
                                 {
                                     var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Startup>>();
+                                    logger.LogWarning("===== OnTokenValidated START =====");
+                                    
                                     var usersRepo = context.HttpContext.RequestServices.GetRequiredService<IUsersRepository>();
                                     
                                     // Extract claims
                                     var upn = context.Principal?.FindFirst("preferred_username")?.Value;
                                     var tenantId = context.Principal?.FindFirst("tid")?.Value;
+                                    var issuerClaim = context.Principal?.FindFirst("iss")?.Value;
                                     var email = context.Principal?.FindFirst("email")?.Value ?? upn;
                                     var displayName = context.Principal?.FindFirst("name")?.Value;
                                     var country = context.Principal?.FindFirst("country")?.Value;
                                     var region = context.Principal?.FindFirst("state")?.Value;
                                     
+                                    logger.LogWarning("===== OnTokenValidated: Extracted UPN={Upn}, TenantId={TenantId} =====", upn ?? "<null>", tenantId ?? "<null>");
+
+                                    // Fallback: derive tenantId from issuer when tid claim missing (some account types / older tokens)
+                                    if (string.IsNullOrWhiteSpace(tenantId))
+                                    {
+                                        var issuer = issuerClaim;
+                                        if (!string.IsNullOrWhiteSpace(issuer))
+                                        {
+                                            try
+                                            {
+                                                // Issuer format: https://login.microsoftonline.com/{tenantId}/v2.0
+                                                var trimmed = issuer.TrimEnd('/');
+                                                var segments = trimmed.Split('/', StringSplitOptions.RemoveEmptyEntries);
+                                                tenantId = segments.LastOrDefault(s => s.Length == 36 && s.Count(c => c == '-') == 4) // looks like GUID
+                                                           ?? segments.Reverse().FirstOrDefault(s => s.Length == 36 && s.Count(c => c == '-') == 4);
+                                                if (!string.IsNullOrWhiteSpace(tenantId))
+                                                {
+                                                    logger.LogDebug("OnTokenValidated: Derived tenantId {TenantId} from issuer", Chat.Web.Utilities.LogSanitizer.Sanitize(tenantId));
+                                                }
+                                            }
+                                            catch (Exception ex)
+                                            {
+                                                logger.LogDebug(ex, "OnTokenValidated: Failed to derive tenantId from issuer {Issuer}", Chat.Web.Utilities.LogSanitizer.Sanitize(issuer));
+                                            }
+                                        }
+                                    }
+                                    
+                                    // One-time diagnostic: log sanitized UPN, TenantId, Issuer on token validation
+                                    logger.LogInformation(
+                                        "OnTokenValidated (diag): UPN={Upn}, Tenant={TenantId}, Issuer={Issuer}",
+                                        Chat.Web.Utilities.LogSanitizer.Sanitize(upn ?? "<null>"),
+                                        Chat.Web.Utilities.LogSanitizer.Sanitize(tenantId ?? "<null>"),
+                                        Chat.Web.Utilities.LogSanitizer.Sanitize(issuerClaim ?? "<null>"));
+                                    
                                     if (string.IsNullOrWhiteSpace(upn))
                                     {
                                         logger.LogWarning("OnTokenValidated: UPN (preferred_username) claim is missing from token");
                                         context.Fail("UPN claim is required");
+                                        return;
+                                    }
+                                    
+                                    // Explicitly deny Microsoft consumer (MSA) accounts
+                                    const string MsaTenantId = "9188040d-6c67-4c5b-b112-36a304b66dad";
+                                    var isMsa = (!string.IsNullOrWhiteSpace(tenantId) && string.Equals(tenantId, MsaTenantId, StringComparison.OrdinalIgnoreCase))
+                                                || (!string.IsNullOrWhiteSpace(issuerClaim) && issuerClaim.IndexOf("/consumers", StringComparison.OrdinalIgnoreCase) >= 0);
+                                    if (isMsa)
+                                    {
+                                        logger.LogWarning(
+                                            "OnTokenValidated: Denying Microsoft consumer (MSA) account. UPN={Upn}, Tenant={TenantId}, Issuer={Issuer}",
+                                            Chat.Web.Utilities.LogSanitizer.Sanitize(upn),
+                                            Chat.Web.Utilities.LogSanitizer.Sanitize(tenantId ?? "<null>"),
+                                            Chat.Web.Utilities.LogSanitizer.Sanitize(issuerClaim ?? "<null>"));
+                                        context.HandleResponse();
+                                        context.Response.Redirect("/login?reason=not_authorized");
                                         return;
                                     }
                                     
@@ -555,7 +620,21 @@ namespace Chat.Web
                                                 "OnTokenValidated: Tenant {TenantId} is not in AllowedTenants list for UPN {Upn}",
                                                 Chat.Web.Utilities.LogSanitizer.Sanitize(tenantId ?? "<null>"),
                                                 Chat.Web.Utilities.LogSanitizer.Sanitize(upn));
-                                            context.Fail("Tenant is not authorized");
+                                            
+                                            // Check if this is a silent SSO attempt
+                                            var isSilent = context.Properties.Items.TryGetValue("silent", out var silentValue) && silentValue == "true";
+                                            if (isSilent)
+                                            {
+                                                // Silent SSO - redirect with reason (handled by OnRemoteFailure in silent flow)
+                                                context.HandleResponse();
+                                                context.Response.Redirect("/login?reason=not_authorized");
+                                            }
+                                            else
+                                            {
+                                                // Normal login - redirect with error
+                                                context.HandleResponse();
+                                                context.Response.Redirect("/login?reason=not_authorized");
+                                            }
                                             return;
                                         }
                                     }
@@ -573,7 +652,10 @@ namespace Chat.Web
                                             logger.LogInformation(
                                                 "OnTokenValidated: User with UPN {Upn} not found in database. OTP fallback enabled - rejecting Entra ID login.",
                                                 Chat.Web.Utilities.LogSanitizer.Sanitize(upn));
-                                            context.Fail("User not found. Please use OTP login.");
+                                            
+                                            // Redirect to login with reason
+                                            context.HandleResponse();
+                                            context.Response.Redirect("/login?reason=not_authorized");
                                             return;
                                         }
                                         else
@@ -581,7 +663,10 @@ namespace Chat.Web
                                             logger.LogWarning(
                                                 "OnTokenValidated: User with UPN {Upn} not found in database and OTP fallback disabled - rejecting login",
                                                 Chat.Web.Utilities.LogSanitizer.Sanitize(upn));
-                                            context.Fail("User not authorized");
+                                            
+                                            // Redirect to login with reason
+                                            context.HandleResponse();
+                                            context.Response.Redirect("/login?reason=not_authorized");
                                             return;
                                         }
                                     }
@@ -603,14 +688,27 @@ namespace Chat.Web
                                         Chat.Web.Utilities.LogSanitizer.Sanitize(user.UserName),
                                         Chat.Web.Utilities.LogSanitizer.Sanitize(upn),
                                         Chat.Web.Utilities.LogSanitizer.Sanitize(tenantId ?? "<null>"));
+                                },
+                                OnRemoteFailure = context =>
+                                {
+                                    var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Startup>>();
+                                    // Check both Parameters and Items for silent flag
+                                    var isSilentParams = context.Properties?.Parameters.TryGetValue("silent", out var silentVal) == true &&
+                                                         ((silentVal as string) == "true" || (silentVal is bool b && b));
+                                    var isSilentItems = context.Properties?.Items.TryGetValue("silent", out var silentItemVal) == true &&
+                                                        silentItemVal == "true";
+                                    var isSilent = isSilentParams || isSilentItems;
                                     
-                                    // Add custom claim for app username (used throughout the app)
-                                    var identity = context.Principal?.Identity as ClaimsIdentity;
-                                    if (identity != null)
+                                    var errMsg = context.Failure?.Message;
+                                    logger.LogInformation("OnRemoteFailure: isSilent={IsSilent} (params={IsSilentParams}, items={IsSilentItems}), message={Message}", 
+                                        isSilent, isSilentParams, isSilentItems, Chat.Web.Utilities.LogSanitizer.Sanitize(errMsg ?? "<none>"));
+                                    
+                                    if (isSilent)
                                     {
-                                        identity.AddClaim(new Claim(ClaimTypes.Name, user.UserName));
-                                        identity.AddClaim(new Claim("app_username", user.UserName));
+                                        context.HandleResponse();
+                                        context.Response.Redirect("/login?reason=sso_failed");
                                     }
+                                    return Task.CompletedTask;
                                 },
                                 OnAuthenticationFailed = context =>
                                 {
@@ -625,15 +723,62 @@ namespace Chat.Web
                                 }
                             };
                         },
-                        cookieOptions =>
+                        openIdConnectScheme: "EntraId",
+                        subscribeToOpenIdConnectMiddlewareDiagnosticsEvents: false);
+
+                    // Configure the cookie authentication options that AddMicrosoftIdentityWebApp created
+                    services.ConfigureApplicationCookie(options =>
+                    {
+                        options.LoginPath = "/login";
+                        options.AccessDeniedPath = "/login";
+                        options.SlidingExpiration = true;
+                        options.ExpireTimeSpan = TimeSpan.FromHours(12);
+                        options.ReturnUrlParameter = "ReturnUrl";
+                        
+                        // Cookie security settings
+                        options.Cookie.HttpOnly = true;
+                        options.Cookie.SecurePolicy = CookieSecurePolicy.Always; // Require HTTPS
+                        options.Cookie.SameSite = SameSiteMode.Lax; // Allow cross-site on top-level navigation
+                        
+                        // Debug: Log what claims are in the cookie
+                        options.Events.OnValidatePrincipal = async cookieContext =>
                         {
-                            // Reuse the main cookie authentication scheme
-                            cookieOptions.LoginPath = "/login";
-                            cookieOptions.AccessDeniedPath = "/login";
-                            cookieOptions.SlidingExpiration = true;
-                            cookieOptions.ExpireTimeSpan = TimeSpan.FromHours(12);
-                        },
-                        openIdConnectScheme: "EntraId");
+                            var logger = cookieContext.HttpContext.RequestServices.GetRequiredService<ILogger<Startup>>();
+                            var identity = cookieContext.Principal?.Identity as ClaimsIdentity;
+                            var name = cookieContext.Principal?.Identity?.Name;
+                            var claimCount = identity?.Claims?.Count() ?? 0;
+                            var hasNameClaim = identity?.HasClaim(c => c.Type == ClaimTypes.Name) ?? false;
+                            var appUsername = identity?.Claims?.FirstOrDefault(c => c.Type == "app_username")?.Value;
+                            
+                            logger.LogWarning("Cookie OnValidatePrincipal: Name={Name}, HasNameClaim={HasNameClaim}, app_username={AppUsername}, ClaimCount={Count}",
+                                name ?? "<null>", hasNameClaim, appUsername ?? "<null>", claimCount);
+                            
+                            await Task.CompletedTask;
+                        };
+                    });
+
+                    // Ensure the default challenge scheme uses our Entra ID OIDC scheme
+                    services.PostConfigure<AuthenticationOptions>(opts =>
+                    {
+                        opts.DefaultChallengeScheme = "EntraId";
+                    });
+                }
+                else
+                {
+                    // No Entra ID - configure standalone cookie authentication for OTP
+                    authBuilder.AddCookie(options =>
+                    {
+                        options.LoginPath = "/login";
+                        options.AccessDeniedPath = "/login";
+                        options.SlidingExpiration = true;
+                        options.ExpireTimeSpan = TimeSpan.FromHours(12);
+                        options.ReturnUrlParameter = "ReturnUrl";
+                        
+                        // Cookie security settings
+                        options.Cookie.HttpOnly = true;
+                        options.Cookie.SecurePolicy = CookieSecurePolicy.Always; // Require HTTPS
+                        options.Cookie.SameSite = SameSiteMode.Lax; // Allow cross-site on top-level navigation
+                    });
                 }
             }
 

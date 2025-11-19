@@ -815,8 +815,7 @@ Notes on storage:
 Purpose: Identity for OTP login, room authorization, and message attribution.
 
 Canonical fields:
-- id: string (stable user key; example: "alice")
-- userName: string (login/display identity; often same as id)
+- userName: string (login/display identity; primary key in Cosmos DB partition /userName)
 - fullName: string | null
 - avatar: string | null (URL or slug; optional)
 - enabled: boolean (default true) — determines if the user is allowed to sign in
@@ -824,6 +823,10 @@ Canonical fields:
 - mobileNumber: string | null (E.164 recommended)
 - fixedRooms: string[] (room names the user may join; enforced server-side)
 - defaultRoom: string | null (preferred room to auto-join; derived when not provided)
+- upn: string | null (Entra ID User Principal Name for enterprise authentication)
+- tenantId: string | null (Entra ID tenant GUID)
+
+Note: Cosmos DB auto-generates the `id` field. The application uses `userName` as the document ID and partition key.
 
 Relationships (relational model):
 - Messages (one-to-many via Message.FromUser)
@@ -836,8 +839,8 @@ Cosmos compatibility:
 Example (logical JSON shape):
 ```
 {
-  "id": "alice",
-  "userName": "alice",
+  "id": "alice@example.com",
+  "userName": "alice@example.com",
   "fullName": "Alice A.",
   "avatar": null,
   "enabled": true,

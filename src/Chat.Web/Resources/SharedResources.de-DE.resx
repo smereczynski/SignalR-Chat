@@ -223,4 +223,39 @@
   <data name="ReadBy" xml:space="preserve">
     <value>Gelesen von</value>
   </data>
+  
+  <!-- Entra ID / Silent SSO Messages -->
+  <data name="SilentSsoAttemptedInteractionRequired" xml:space="preserve">
+    <value>Wir haben versucht, Sie automatisch anzumelden, aber eine Interaktion ist erforderlich.</value>
+  </data>
+  <data name="PleaseChooseSignInMethod" xml:space="preserve">
+    <value>Bitte wählen Sie unten eine Anmeldemethode.</value>
+  </data>
+  <data name="AccountNotAuthorizedUseOtp" xml:space="preserve">
+    <value>Ihr Konto ist nicht für die Microsoft-Anmeldung berechtigt. Bitte verwenden Sie stattdessen ein Einmalpasswort.</value>
+  </data>
+  <data name="AccountNotAuthorizedContactAdmin" xml:space="preserve">
+    <value>Ihr Konto ist nicht berechtigt. Bitte wenden Sie sich an Ihren Administrator.</value>
+  </data>
+  <data name="AuthenticationFailedPleaseRetry" xml:space="preserve">
+    <value>Authentifizierung fehlgeschlagen. Bitte versuchen Sie es erneut.</value>
+  </data>
+  <data name="OrUseOtp" xml:space="preserve">
+    <value>oder Einmalcode verwenden</value>
+  </data>
+  <data name="Email" xml:space="preserve">
+    <value>E-Mail</value>
+  </data>
+  <data name="EnterYourEmail" xml:space="preserve">
+    <value>Geben Sie Ihre E-Mail ein</value>
+  </data>
+  <data name="EnterEmailForOtp" xml:space="preserve">
+    <value>Geben Sie Ihre E-Mail-Adresse ein, um den Bestätigungscode zu erhalten.</value>
+  </data>
+  <data name="EmailRequired" xml:space="preserve">
+    <value>E-Mail ist erforderlich</value>
+  </data>
+  <data name="EmailAndCodeRequired" xml:space="preserve">
+    <value>E-Mail und Code sind erforderlich</value>
+  </data>
 </root>

@@ -10,6 +10,8 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using Chat.Web.Options;
 
 namespace Chat.Web.Controllers
 {
@@ -28,11 +30,12 @@ namespace Chat.Web.Controllers
     private readonly IOtpSender _otpSender;
     private readonly Services.IInProcessMetrics _metrics;
     private readonly Microsoft.Extensions.Logging.ILogger<AuthController> _logger;
+        private readonly IOptions<EntraIdOptions> _entraOptions;
 
         /// <summary>
         /// DI constructor for auth endpoints.
         /// </summary>
-        public AuthController(IUsersRepository users, IOtpStore otpStore, IOtpSender otpSender, Services.IInProcessMetrics metrics, IOtpHasher otpHasher, Microsoft.Extensions.Options.IOptions<Chat.Web.Options.OtpOptions> otpOptions, Microsoft.Extensions.Logging.ILogger<AuthController> logger)
+        public AuthController(IUsersRepository users, IOtpStore otpStore, IOtpSender otpSender, Services.IInProcessMetrics metrics, IOtpHasher otpHasher, Microsoft.Extensions.Options.IOptions<Chat.Web.Options.OtpOptions> otpOptions, Microsoft.Extensions.Logging.ILogger<AuthController> logger, IOptions<EntraIdOptions> entraOptions)
         {
             _users = users;
             _otpStore = otpStore;
@@ -41,6 +44,7 @@ namespace Chat.Web.Controllers
             _otpHasher = otpHasher;
             _otpOptions = otpOptions;
             _logger = logger;
+            _entraOptions = entraOptions;
         }
 
         /// <summary>
@@ -67,7 +71,16 @@ namespace Chat.Web.Controllers
         public async Task<IActionResult> Start([FromBody] StartRequest req)
         {
             var user = _users.GetByUserName(req.UserName);
-            if (user == null || user.Enabled == false) return Unauthorized();
+            if (user == null)
+            {
+                _logger.LogWarning("OTP Start: User not found {UserName}", Chat.Web.Utilities.LogSanitizer.Sanitize(req.UserName));
+                return Unauthorized();
+            }
+            if (user.Enabled == false)
+            {
+                _logger.LogWarning("OTP Start: User disabled {UserName}", Chat.Web.Utilities.LogSanitizer.Sanitize(req.UserName));
+                return Unauthorized();
+            }
 
             // Check if a code already exists - allow resend after 60 seconds to improve UX
             var existing = await _otpStore.GetAsync(req.UserName);
@@ -130,10 +143,19 @@ namespace Chat.Web.Controllers
         [EnableRateLimiting("AuthEndpoints")]
         public async Task<IActionResult> Verify([FromBody] VerifyRequest req)
         {
+            _logger.LogInformation("OTP Verify: Looking up user {UserName}", Chat.Web.Utilities.LogSanitizer.Sanitize(req.UserName));
             var user = _users.GetByUserName(req.UserName);
             // WORKAROUND: ContentResult to avoid PipeWriter UnflushedBytes issue in test harness.
-            if (user == null || !user.Enabled) 
+            if (user == null)
+            {
+                _logger.LogWarning("OTP Verify: User not found {UserName}", Chat.Web.Utilities.LogSanitizer.Sanitize(req.UserName));
                 return new ContentResult { Content = "", ContentType = "text/plain", StatusCode = 401 };
+            }
+            if (!user.Enabled)
+            {
+                _logger.LogWarning("OTP Verify: User disabled {UserName}", Chat.Web.Utilities.LogSanitizer.Sanitize(req.UserName));
+                return new ContentResult { Content = "", ContentType = "text/plain", StatusCode = 401 };
+            }
             
             // Check if user has exceeded maximum verification attempts
             var maxAttempts = _otpOptions.Value?.MaxAttempts ?? 5;
@@ -231,7 +253,11 @@ namespace Chat.Web.Controllers
     public IActionResult Me()
         {
             var userName = User?.Identity?.Name;
-            if (string.IsNullOrEmpty(userName)) return Unauthorized();
+            if (string.IsNullOrEmpty(userName))
+            {
+                return Unauthorized();
+            }
+            
             var user = _users.GetByUserName(userName);
             if (user == null) return Unauthorized();
             var payload = new { userName = user.UserName, fullName = user.FullName, avatar = user.Avatar };
@@ -248,5 +274,45 @@ namespace Chat.Web.Controllers
         /// Request body for OTP verification.
         /// </summary>
         public class VerifyRequest { public string UserName { get; set; } public string Code { get; set; } public string ReturnUrl { get; set; } }
+
+        /// <summary>
+        /// Triggers an interactive Microsoft Entra ID sign-in (non-silent) using the default challenge scheme.
+        /// Redirects back to a safe local URL (defaults to /chat).
+        /// </summary>
+        [AllowAnonymous]
+        [HttpGet("signin/entra")]
+        public IActionResult SignInEntra([FromQuery] string returnUrl = "/chat")
+        {
+            var redirect = string.IsNullOrWhiteSpace(returnUrl) ? "/chat" : (Url.IsLocalUrl(returnUrl) ? returnUrl : "/chat");
+            var props = new AuthenticationProperties { RedirectUri = redirect };
+            props.Parameters["silent"] = "false";
+            return Challenge(props); // uses DefaultChallengeScheme (set to OIDC scheme when Entra is enabled)
+        }
+
+        /// <summary>
+        /// Lightweight auth debug endpoint (Development use): shows auth state and key Entra settings.
+        /// Does not return sensitive data.
+        /// </summary>
+        [AllowAnonymous]
+        [HttpGet("debug")]
+        public IActionResult Debug()
+        {
+            var isAuth = User?.Identity?.IsAuthenticated == true;
+            var name = isAuth ? (User?.Identity?.Name ?? "<null>") : "<anon>";
+            var claimTypes = isAuth ? System.Linq.Enumerable.Select(User.Claims, c => c.Type) : Array.Empty<string>();
+            var entra = _entraOptions?.Value;
+            var payload = new
+            {
+                authenticated = isAuth,
+                name,
+                claims = claimTypes,
+                entraEnabled = entra?.IsEnabled == true,
+                tenantId = entra?.TenantId,
+                requireTenantValidation = entra?.Authorization?.RequireTenantValidation ?? false,
+                allowedTenantsCount = entra?.Authorization?.AllowedTenants?.Count ?? 0
+            };
+            var json = System.Text.Json.JsonSerializer.Serialize(payload);
+            return new ContentResult { Content = json, ContentType = "application/json", StatusCode = 200 };
+        }
     }
 }
