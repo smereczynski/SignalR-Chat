@@ -30,61 +30,62 @@ namespace Chat.Web.Middleware
             _entraOptions = entraOpts.Value;
         }
 
-        public async Task InvokeAsync(HttpContext context)
+        private bool ShouldAttemptSilentSso(HttpContext context)
         {
             // Skip if Entra ID not enabled
             if (!_entraOptions.IsEnabled || _entraOptions.AutomaticSso?.Enable != true)
-            {
-                await _next(context);
-                return;
-            }
+                return false;
 
-            // Already authenticated -> continue
+            // Already authenticated -> skip
             if (context.User?.Identity?.IsAuthenticated == true)
-            {
-                await _next(context);
-                return;
-            }
+                return false;
 
-            // Check if authentication cookie exists (user may not be populated yet but cookie is present)
-            // This prevents re-challenging immediately after successful OIDC callback
+            // Check if authentication cookie exists (prevents re-challenging after OIDC callback)
             if (context.Request.Cookies.ContainsKey(".AspNetCore.Cookies"))
-            {
-                await _next(context);
-                return;
-            }
+                return false;
 
             // Only GET requests eligible
             if (!HttpMethods.IsGet(context.Request.Method))
-            {
-                await _next(context);
-                return;
-            }
+                return false;
 
-            var path = context.Request.Path.Value?.ToLowerInvariant() ?? string.Empty;
-            
-            // Never trigger silent SSO on login page itself to avoid loops
-            if (path.StartsWith("/login") || path.StartsWith("/signin") || path.StartsWith("/signout"))
-            {
-                await _next(context);
-                return;
-            }
-            
-            // Eligible entry points: root or chat pages (adjust if needed)
-            var eligible = path == "/" || path.StartsWith("/chat") || path.StartsWith("/chat/");
-            if (!eligible)
-            {
-                await _next(context);
-                return;
-            }
+            // Check path eligibility
+            if (!IsEligiblePath(context.Request.Path.Value))
+                return false;
 
             // Prevent loops if attempt recorded
             var cookieName = _entraOptions.AutomaticSso.AttemptCookieName ?? "sso_attempted";
             if (_entraOptions.AutomaticSso.AttemptOncePerSession && context.Request.Cookies.ContainsKey(cookieName))
+                return false;
+
+            return true;
+        }
+
+        private static bool IsEligiblePath(string path)
+        {
+            var normalizedPath = path?.ToLowerInvariant() ?? string.Empty;
+            
+            // Never trigger on auth pages to avoid loops
+            if (normalizedPath.StartsWith("/login") || 
+                normalizedPath.StartsWith("/signin") || 
+                normalizedPath.StartsWith("/signout"))
+                return false;
+            
+            // Eligible entry points: root or chat pages
+            return normalizedPath == "/" || 
+                   normalizedPath.StartsWith("/chat") || 
+                   normalizedPath.StartsWith("/chat/");
+        }
+
+        public async Task InvokeAsync(HttpContext context)
+        {
+            if (!ShouldAttemptSilentSso(context))
             {
                 await _next(context);
                 return;
             }
+
+            var cookieName = _entraOptions.AutomaticSso.AttemptCookieName ?? "sso_attempted";
+            var path = context.Request.Path.Value ?? "/";
 
             try
             {
