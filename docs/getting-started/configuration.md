@@ -12,6 +12,18 @@ SignalR Chat uses multiple configuration sources in this priority order (highest
 4. **appsettings.json** (defaults)
 5. **User Secrets** (local development only)
 
+
+## GitHub Actions Variables & Secrets
+
+For Azure deployment via GitHub Actions, you must configure both environment variables and secrets in your repository:
+
+- [GitHub Variables Guide](../deployment/github-variables.md)
+- [GitHub Secrets Guide](../deployment/github-secrets.md)
+
+These are required for Bicep infrastructure deployment and application configuration. See the guides for full lists and examples.
+
+---
+
 ## Environment Variables
 
 ### Quick Reference
