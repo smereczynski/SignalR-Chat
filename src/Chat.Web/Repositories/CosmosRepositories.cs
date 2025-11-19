@@ -183,6 +183,29 @@ namespace Chat.Web.Repositories
             _logger = logger;
         }
 
+        private static ApplicationUser MapUser(UserDoc d)
+        {
+            var rooms = d.fixedRooms;
+            var fixedRooms = rooms != null ? new System.Collections.Generic.List<string>(rooms) : new System.Collections.Generic.List<string>();
+            var def = !string.IsNullOrWhiteSpace(d.defaultRoom) ? d.defaultRoom : (fixedRooms.Count > 0 ? fixedRooms[0] : null);
+            return new ApplicationUser
+            {
+                UserName = d.userName,
+                FullName = d.fullName,
+                Avatar = d.avatar,
+                Email = d.email,
+                MobileNumber = d.mobile,
+                Enabled = d.enabled ?? true,
+                Upn = d.upn,
+                TenantId = d.tenantId,
+                DisplayName = d.displayName,
+                Country = d.country,
+                Region = d.region,
+                FixedRooms = fixedRooms,
+                DefaultRoom = def
+            };
+        }
+
         public IEnumerable<ApplicationUser> GetAll()
         {
             using var activity = Tracing.ActivitySource.StartActivity("cosmos.users.getall", ActivityKind.Client);
@@ -200,27 +223,7 @@ namespace Chat.Web.Repositories
                         "cosmos.users.getall.readnext"
                     ).GetAwaiter().GetResult();
                     activity?.AddEvent(new ActivityEvent("page", tags: new ActivityTagsCollection {{"db.page.count", page.Count}}));
-                    list.AddRange(page.Select(d =>
-                    {
-                        var rooms = d.fixedRooms; // fixedRooms is the single source of truth
-                        var fixedRooms = rooms != null ? new System.Collections.Generic.List<string>(rooms) : new System.Collections.Generic.List<string>();
-                        // Default room: prefer explicit defaultRoom; otherwise first allowed room if available
-                        var def = !string.IsNullOrWhiteSpace(d.defaultRoom) ? d.defaultRoom : (fixedRooms.Count > 0 ? fixedRooms[0] : null);
-                        return new ApplicationUser
-                        {
-                            UserName = d.userName,
-                            FullName = d.fullName,
-                            Avatar = d.avatar,
-                            Email = d.email,
-                            MobileNumber = d.mobile,
-                            Enabled = d.enabled ?? true,
-                            Upn = d.upn,
-                            TenantId = d.tenantId,
-                            DisplayName = d.displayName,
-                            FixedRooms = fixedRooms,
-                            DefaultRoom = def
-                        };
-                    }));
+                    list.AddRange(page.Select(MapUser));
                 }
                 activity?.SetTag("app.result.count", list.Count);
                 return list;
@@ -281,23 +284,7 @@ namespace Chat.Web.Repositories
                     var d = page.FirstOrDefault();
                     if (d != null)
                     {
-                        var rooms = d.fixedRooms; // fixedRooms is the single source of truth
-                        var fixedRooms = rooms != null ? new System.Collections.Generic.List<string>(rooms) : new System.Collections.Generic.List<string>();
-                        var def = !string.IsNullOrWhiteSpace(d.defaultRoom) ? d.defaultRoom : (fixedRooms.Count > 0 ? fixedRooms[0] : null);
-                        return new ApplicationUser 
-                        { 
-                            UserName = d.userName, 
-                            FullName = d.fullName, 
-                            Avatar = d.avatar, 
-                            Email = d.email, 
-                            MobileNumber = d.mobile, 
-                            Enabled = d.enabled ?? true, 
-                            Upn = d.upn,
-                            TenantId = d.tenantId,
-                            DisplayName = d.displayName,
-                            FixedRooms = fixedRooms, 
-                            DefaultRoom = def 
-                        };
+                        return MapUser(d);
                     }
                 }
                 return null;
@@ -331,25 +318,7 @@ namespace Chat.Web.Repositories
                     var d = page.FirstOrDefault();
                     if (d != null)
                     {
-                        var rooms = d.fixedRooms;
-                        var fixedRooms = rooms != null ? new System.Collections.Generic.List<string>(rooms) : new System.Collections.Generic.List<string>();
-                        var def = !string.IsNullOrWhiteSpace(d.defaultRoom) ? d.defaultRoom : (fixedRooms.Count > 0 ? fixedRooms[0] : null);
-                        return new ApplicationUser 
-                        { 
-                            UserName = d.userName, 
-                            FullName = d.fullName, 
-                            Avatar = d.avatar, 
-                            Email = d.email, 
-                            MobileNumber = d.mobile, 
-                            Enabled = d.enabled ?? true, 
-                            Upn = d.upn,
-                            TenantId = d.tenantId,
-                            DisplayName = d.displayName,
-                            Country = d.country,
-                            Region = d.region,
-                            FixedRooms = fixedRooms,
-                            DefaultRoom = def
-                        };
+                        return MapUser(d);
                     }
                 }
                 _logger.LogDebug("GetByUpn: No user found with upn={Upn}", upn);
@@ -564,6 +533,20 @@ namespace Chat.Web.Repositories
             _logger = logger;
         }
 
+        private static Message MapMessage(MessageDoc d)
+        {
+            return new Message
+            {
+                Id = int.Parse(d.id),
+                Content = d.content,
+                Timestamp = d.timestamp,
+                ToRoom = new Room { Name = d.roomName },
+                ToRoomId = 0,
+                FromUser = new ApplicationUser { UserName = d.fromUser },
+                ReadBy = d.readBy != null ? new List<string>(d.readBy) : new List<string>()
+            };
+        }
+
         public Message Create(Message message)
         {
             using var activity = Tracing.ActivitySource.StartActivity("cosmos.messages.create", ActivityKind.Client);
@@ -632,7 +615,7 @@ namespace Chat.Web.Repositories
                     var d = page.FirstOrDefault();
                     if (d != null)
                     {
-                        return new Message { Id = int.Parse(d.id), Content = d.content, Timestamp = d.timestamp, ToRoom = new Room { Name = d.roomName }, ToRoomId = 0, FromUser = new ApplicationUser { UserName = d.fromUser }, ReadBy = d.readBy != null ? new List<string>(d.readBy) : new List<string>() };
+                        return MapMessage(d);
                     }
                 }
                 return null;
@@ -661,7 +644,7 @@ namespace Chat.Web.Repositories
                         _logger,
                         "cosmos.messages.recent.readnext").GetAwaiter().GetResult();
                     activity?.AddEvent(new ActivityEvent("page", tags: new ActivityTagsCollection {{"db.page.count", page.Count}}));
-                    list.AddRange(page.Select(d => new Message { Id = int.Parse(d.id), Content = d.content, Timestamp = d.timestamp, ToRoom = new Room { Name = d.roomName }, FromUser = new ApplicationUser { UserName = d.fromUser }, ReadBy = d.readBy != null ? new List<string>(d.readBy) : new List<string>() }));
+                    list.AddRange(page.Select(MapMessage));
                 }
                 list = list.OrderBy(m => m.Timestamp).ToList();
                 activity?.SetTag("app.result.count", list.Count);
@@ -698,7 +681,7 @@ namespace Chat.Web.Repositories
                         _logger,
                         "cosmos.messages.before.readnext").GetAwaiter().GetResult();
                     activity?.AddEvent(new ActivityEvent("page", tags: new ActivityTagsCollection {{"db.page.count", page.Count}}));
-                    list.AddRange(page.Select(d => new Message { Id = int.Parse(d.id), Content = d.content, Timestamp = d.timestamp, ToRoom = new Room { Name = d.roomName }, FromUser = new ApplicationUser { UserName = d.fromUser }, ReadBy = d.readBy != null ? new List<string>(d.readBy) : new List<string>() }));
+                    list.AddRange(page.Select(MapMessage));
                 }
                 // Keep only the newest 'take' items and return ascending order
                 list = list.OrderByDescending(m => m.Timestamp).Take(take).OrderBy(m => m.Timestamp).ToList();
@@ -755,7 +738,7 @@ namespace Chat.Web.Repositories
                         ex);
                 }
             }
-            return new Message { Id = int.Parse(d.id), Content = d.content, Timestamp = d.timestamp, ToRoom = new Room { Name = d.roomName }, FromUser = new ApplicationUser { UserName = d.fromUser }, ReadBy = d.readBy != null ? new List<string>(d.readBy) : new List<string>() };
+            return MapMessage(d);
         }
     }
 }

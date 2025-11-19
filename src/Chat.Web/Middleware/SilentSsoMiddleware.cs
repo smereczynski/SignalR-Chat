@@ -92,7 +92,7 @@ namespace Chat.Web.Middleware
                 context.Response.Cookies.Append(cookieName, "1", new CookieOptions
                 {
                     HttpOnly = true,
-                    Secure = context.Request.IsHttps,
+                    Secure = true,
                     SameSite = SameSiteMode.Lax,
                     MaxAge = TimeSpan.FromMinutes(10)
                 });
