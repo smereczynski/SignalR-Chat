@@ -223,4 +223,39 @@
   <data name="ReadBy" xml:space="preserve">
     <value>Perskaitė</value>
   </data>
+  
+  <!-- Entra ID / Silent SSO Messages -->
+  <data name="SilentSsoAttemptedInteractionRequired" xml:space="preserve">
+    <value>Bandėme jus automatiškai prijungti, bet reikalingas vartotojo veiksmas.</value>
+  </data>
+  <data name="PleaseChooseSignInMethod" xml:space="preserve">
+    <value>Pasirinkite prisijungimo būdą žemiau.</value>
+  </data>
+  <data name="AccountNotAuthorizedUseOtp" xml:space="preserve">
+    <value>Jūsų paskyra neįgaliota Microsoft prisijungimui. Naudokite vienkartinį slaptažodį.</value>
+  </data>
+  <data name="AccountNotAuthorizedContactAdmin" xml:space="preserve">
+    <value>Jūsų paskyra neįgaliota. Susisiekite su administratoriumi.</value>
+  </data>
+  <data name="AuthenticationFailedPleaseRetry" xml:space="preserve">
+    <value>Autentifikacija nepavyko. Bandykite dar kartą.</value>
+  </data>
+  <data name="OrUseOtp" xml:space="preserve">
+    <value>arba naudokite vienkartinį kodą</value>
+  </data>
+  <data name="Email" xml:space="preserve">
+    <value>El. paštas</value>
+  </data>
+  <data name="EnterYourEmail" xml:space="preserve">
+    <value>Įveskite savo el. paštą</value>
+  </data>
+  <data name="EnterEmailForOtp" xml:space="preserve">
+    <value>Įveskite savo el. paštą, kad gautumėte patvirtinimo kodą.</value>
+  </data>
+  <data name="EmailRequired" xml:space="preserve">
+    <value>El. paštas yra privalomas</value>
+  </data>
+  <data name="EmailAndCodeRequired" xml:space="preserve">
+    <value>El. paštas ir kodas yra privalomi</value>
+  </data>
 </root>

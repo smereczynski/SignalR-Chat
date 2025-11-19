@@ -103,15 +103,22 @@ If enabled, the application performs a **single silent SSO attempt** (OIDC `prom
 ```
 
 **Implementation Components:**
-- `SilentSsoMiddleware`: Performs guarded silent challenge.
+- `SilentSsoMiddleware`: Performs guarded silent challenge, sets `props.Items["silent"] = "true"` to persist state through OAuth callback.
 - OIDC Events:
-  - `OnRedirectToIdentityProvider`: Injects `prompt=none` when silent flag present.
-  - `OnRemoteFailure`: Detects silent failure; redirects with `reason=sso_failed`.
+  - `OnRedirectToIdentityProvider`: Injects `prompt=none` when silent flag present (checks both `Parameters` and `Items` collections).
+  - `OnRemoteFailure`: Detects silent failure; redirects with `reason=sso_failed`. Checks both `Parameters` and `Items` for silent flag.
   - `OnTokenValidated`: Enforces strict UPN authorization; redirects with `reason=not_authorized` if user missing.
+
+**State Persistence:**
+- Silent flag must be set in **both** `Parameters` (for state parameter) **and** `Items` (to survive OAuth redirect cycle).
+- `Items["silent"]` persists through the OAuth callback, while `Parameters["silent"]` may be lost.
+- Event handlers check both collections to reliably detect silent authentication attempts.
 
 **Operational Notes:**
 - Silent attempt only triggers for GET requests to `/`, `/chat`, or child paths.
 - Cookie lifetime (10 minutes) balances session freshness and loop prevention.
+- Path exclusions prevent loops: `/login`, `/signin`, `/signout` are never challenged.
+- Response.HasStarted checks before redirects prevent "headers already sent" exceptions.
 - Safe to disable via `AutomaticSso:Enable=false` without code changes.
 
 ### Configuration

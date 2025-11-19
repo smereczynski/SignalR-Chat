@@ -141,6 +141,21 @@
   <data name="PickUserForOtp" xml:space="preserve">
     <value>Pick a user to receive the OTP (email &amp; mobile).</value>
   </data>
+  <data name="Email" xml:space="preserve">
+    <value>Email</value>
+  </data>
+  <data name="EnterYourEmail" xml:space="preserve">
+    <value>Enter your email</value>
+  </data>
+  <data name="EnterEmailForOtp" xml:space="preserve">
+    <value>Enter your email to receive the verification code.</value>
+  </data>
+  <data name="EmailRequired" xml:space="preserve">
+    <value>Email is required</value>
+  </data>
+  <data name="EmailAndCodeRequired" xml:space="preserve">
+    <value>Email and code are required</value>
+  </data>
   <data name="SendCode" xml:space="preserve">
     <value>Send code</value>
   </data>
@@ -291,5 +306,22 @@
   </data>
   <data name="ReadBy" xml:space="preserve">
     <value>Read by</value>
+  </data>
+  
+  <!-- Entra ID / Silent SSO Messages -->
+  <data name="SilentSsoAttemptedInteractionRequired" xml:space="preserve">
+    <value>We attempted to sign you in automatically, but interaction is required.</value>
+  </data>
+  <data name="PleaseChooseSignInMethod" xml:space="preserve">
+    <value>Please choose a sign-in method below.</value>
+  </data>
+  <data name="AccountNotAuthorizedUseOtp" xml:space="preserve">
+    <value>Your account is not authorized for Microsoft sign-in. Please use one-time password instead.</value>
+  </data>
+  <data name="AccountNotAuthorizedContactAdmin" xml:space="preserve">
+    <value>Your account is not authorized. Please contact your administrator.</value>
+  </data>
+  <data name="AuthenticationFailedPleaseRetry" xml:space="preserve">
+    <value>Authentication failed. Please try again.</value>
   </data>
 </root>

@@ -25,3 +25,4 @@ param appServiceSubnetPrefix = '10.1.0.0/27'
 param privateEndpointsSubnetPrefix = '10.1.0.32/27'
 param acsDataLocation = 'Europe'
 param networkingResourceGroupName = 'rg-vnet-signalrchat-staging-plc'
+param otpPepper = 'REPLACE_WITH_STAGING_PEPPER' // REQUIRED - generate with: openssl rand -base64 32

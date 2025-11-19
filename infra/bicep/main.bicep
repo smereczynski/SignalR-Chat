@@ -41,6 +41,10 @@ param networkingResourceGroupName string
 @description('Custom DNS servers for the VNet (optional, comma-separated). If empty, uses Azure default DNS.')
 param vnetDnsServers string = ''
 
+@description('OTP pepper for secure hashing (REQUIRED)')
+@secure()
+param otpPepper string
+
 // ==========================================
 // Variables - Static IP Allocation
 // ==========================================
@@ -145,7 +149,12 @@ module signalR './modules/signalr.bicep' = {
     environment: environment
     privateEndpointSubnetId: networking.outputs.privateEndpointsSubnetId
     privateEndpointStaticIp: signalRPrivateIp
-    allowedOrigins: [
+    // Allow App Service URL always; in dev also allow local origin for browser-based development
+    allowedOrigins: environment == 'dev' ? [
+      appServiceUrl
+      'https://localhost:5099'
+      'http://localhost:5099'
+    ] : [
       appServiceUrl
     ]
     logAnalyticsWorkspaceId: monitoring.outputs.logAnalyticsWorkspaceId
@@ -180,6 +189,7 @@ module appService './modules/app-service.bicep' = {
     redisConnectionString: redis.outputs.connectionString
     signalRConnectionString: signalR.outputs.connectionString
     acsConnectionString: acs.outputs.connectionString
+    otpPepper: otpPepper
     logAnalyticsWorkspaceId: monitoring.outputs.logAnalyticsWorkspaceId
     privateEndpointSubnetId: networking.outputs.privateEndpointsSubnetId
     privateEndpointStaticIp: appServicePrivateIp

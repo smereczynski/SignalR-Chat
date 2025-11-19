@@ -37,8 +37,7 @@ namespace Chat.Web.Controllers
         {
             var userName = User?.Identity?.Name;
             var profile = string.IsNullOrWhiteSpace(userName) ? null : _users.GetByUserName(userName);
-            var allowed = profile?.FixedRooms ?? new List<string>();
-
+            var allowed = profile?.FixedRooms ?? [];
             var rooms = _rooms.GetAll()
                 .Where(r => allowed.Contains(r.Name))
                 .Select(r => new RoomViewModel { Id = r.Id, Name = r.Name })

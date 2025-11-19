@@ -54,7 +54,7 @@
           @if (Model.EntraIdEnabled)
           {
             <div class="mb-3">
-              <a href="/login/entra" class="btn btn-primary w-100 d-flex align-items-center justify-content-center">
+              <a href="/api/auth/signin/entra" class="btn btn-primary w-100 d-flex align-items-center justify-content-center">
                 <svg xmlns="http://www.w3.org/2000/svg" width="21" height="21" viewBox="0 0 21 21" class="me-2">
                   <path fill="#f25022" d="M0 0h10v10H0z"/>
                   <path fill="#00a4ef" d="M11 0h10v10H11z"/>
@@ -76,11 +76,9 @@
           <div id="otpContainer" data-otp-timeout-ms="8000" data-otp-retry-cooldown-ms="5000" data-otp-resend-delay-ms="60000">
             <div id="otp-step1">
               <div class="mb-2">
-                <label for="otpUserName" class="form-label">@Localizer["User"]</label>
-                <select class="form-select" id="otpUserName">
-                  <option value="" selected disabled>@Localizer["LoadingUsers"]</option>
-                </select>
-                <div class="form-text">@Localizer["PickUserForOtp"]</div>
+                <label for="otpUserName" class="form-label">@Localizer["Email"]</label>
+                <input type="email" class="form-control" id="otpUserName" placeholder="@Localizer["EnterYourEmail"]" autocomplete="email" />
+                <div class="form-text">@Localizer["EnterEmailForOtp"]</div>
               </div>
               <button type="button" class="btn btn-primary" id="btn-send-otp">@Localizer["SendCode"]</button>
             </div>

@@ -59,9 +59,11 @@ All infrastructure deployments are automated through **GitHub Actions**. No loca
 
 ### Step 1: Configure GitHub Environment Variables
 
-For each environment (dev, staging, prod), configure these 6 required variables in GitHub:
+For each environment (dev, staging, prod), configure these required variables and secrets in GitHub:
 
-**GitHub Repository → Settings → Secrets and variables → Actions → Variables**
+**GitHub Repository → Settings → Secrets and variables → Actions**
+
+#### Environment Variables (Variables tab)
 
 | Variable Name | Description | Example (dev) | Example (staging) | Example (prod) |
 |--------------|-------------|---------------|-------------------|----------------|
@@ -72,7 +74,17 @@ For each environment (dev, staging, prod), configure these 6 required variables 
 | `BICEP_PRIVATE_ENDPOINTS_SUBNET_PREFIX` | Second subnet (/27) | `10.0.0.32/27` | `10.1.0.32/27` | `10.2.0.32/27` |
 | `BICEP_ACS_DATA_LOCATION` | ACS data location | `Europe` | `Europe` | `Europe` |
 
-**⚠️ Critical**: Each environment MUST have a unique VNet address space to avoid conflicts.
+#### Required Secrets (Secrets tab)
+
+| Secret Name | Description | How to Generate |
+|------------|-------------|-----------------|
+| `OTP_PEPPER` | Secure pepper for OTP hashing | `openssl rand -base64 32` |
+
+**⚠️ Critical Notes**:
+- Each environment MUST have a unique VNet address space to avoid conflicts
+- **`OTP_PEPPER` is REQUIRED** and must be different for each environment (dev/staging/prod)
+- Generate pepper: `openssl rand -base64 32`
+- Keep pepper values secure and never commit them to git
 
 ### Step 2: Trigger Infrastructure Deployment
 
@@ -229,10 +241,10 @@ source .env.local
 
 ### What Gets Seeded
 
-**Rooms** (created directly in Cosmos):
-- `general` (id: 1)
-- `ops` (id: 2)
-- `random` (id: 3)
+**Rooms** (created directly in Cosmos, IDs auto-generated):
+- `general`
+- `ops`
+- `random`
 
 **Users** (via IUsersRepository):
 - `alice`: FixedRooms=["general", "ops"], DefaultRoom="general", Email="alice@example.com"
@@ -253,9 +265,9 @@ az webapp log tail \
 # "Checking if database needs seeding..."
 # "Database is empty - starting seed process"
 # "Seeding default rooms..."
-# "  ✓ Created room: general (ID: 1)"
-# "  ✓ Created room: ops (ID: 2)"
-# "  ✓ Created room: random (ID: 3)"
+# "  ✓ Created room: general"
+# "  ✓ Created room: ops"
+# "  ✓ Created room: random"
 # "Seeding default users..."
 # "  ✓ Created user: alice"
 # "  ✓ Created user: bob"
@@ -590,13 +602,13 @@ az webapp log tail \
 # "Checking if database needs seeding..."
 # "Database is empty - starting seed process"
 # "Seeding default rooms..."
-# "  ✓ Created room: general (ID: 1)"
-# "  ✓ Created room: ops (ID: 2)"
-# "  ✓ Created room: random (ID: 3)"
+# "  ✓ Created room: general"
+# "  ✓ Created room: ops"
+# "  ✓ Created room: random"
 # "Seeding default users..."
-# "  ✓ Created user: alice"
-# "  ✓ Created user: bob"
-# "  ✓ Created user: charlie"
+# "  ✓ Created user: alice@example.com (Alice Johnson)"
+# "  ✓ Created user: bob@example.com (Bob Stone)"
+# "  ✓ Created user: charlie@example.com (Charlie Fields)"
 # "✓ Database seeding completed successfully"
 
 # Verify seeded data in Cosmos DB
