@@ -5,7 +5,8 @@ Learn about SignalR Chat's features and how they work.
 ## Core Features
 
 ### Authentication & Sessions
-- **[Authentication](authentication.md)** - OTP authentication flow with Argon2id hashing
+- **[Authentication](authentication.md)** - Dual authentication: Microsoft Entra ID (SSO) + OTP fallback with Argon2id hashing
+- **[Entra ID Setup](../development/entra-id-multi-tenant-setup.md)** - Multi-tenant Entra ID configuration guide
 - **[Sessions](sessions.md)** - Session management and security headers
 
 ### Real-time Communication
@@ -26,7 +27,8 @@ Learn about SignalR Chat's features and how they work.
 
 | Feature | Status | Documentation |
 |---------|--------|---------------|
-| OTP Authentication | ✅ Production | [authentication.md](authentication.md) |
+| Entra ID Authentication | ✅ Production | [authentication.md](authentication.md), [Entra ID Setup](../development/entra-id-multi-tenant-setup.md) |
+| OTP Authentication (Fallback) | ✅ Production | [authentication.md](authentication.md) |
 | Real-time Messaging | ✅ Production | [real-time-messaging.md](real-time-messaging.md) |
 | Read Receipts | ✅ Production | [read-receipts.md](read-receipts.md) |
 | Presence Tracking | ✅ Production | [presence.md](presence.md) |

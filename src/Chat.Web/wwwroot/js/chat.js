@@ -545,6 +545,21 @@ if(window.__chatAppBooted){
         reconnectSource: null
       };
       
+      // Re-probe auth if we don't have a profile yet (handles case where SignalR connects before HTTP session cookie set)
+      if (!state.profile && (state.authStatus === AuthStatus.PROBING || state.authStatus === AuthStatus.UNKNOWN)) {
+        fetch('/api/auth/me', {credentials:'include'})
+          .then(r => r.ok ? r.json() : null)
+          .then(u => {
+            if (u && u.userName) {
+              state.profile = {userName: u.userName, fullName: u.fullName, avatar: u.avatar};
+              state.authStatus = AuthStatus.AUTHENTICATED;
+              renderProfile();
+              postTelemetry('auth.reprobe.success', {});
+            }
+          })
+          .catch(() => { /* ignore - UI already handles unauthenticated state */ });
+      }
+      
       loadRooms();
       postTelemetry('hub.connected',{durationMs: Math.round(performance.now()-startedAt)});
   applyConnectionVisual('connected');

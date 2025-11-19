@@ -223,4 +223,39 @@
   <data name="ReadBy" xml:space="preserve">
     <value>Прочитано</value>
   </data>
+  
+  <!-- Entra ID / Silent SSO Messages -->
+  <data name="SilentSsoAttemptedInteractionRequired" xml:space="preserve">
+    <value>Ми намагалися виконати автоматичний вхід, але потрібна взаємодія.</value>
+  </data>
+  <data name="PleaseChooseSignInMethod" xml:space="preserve">
+    <value>Будь ласка, виберіть спосіб входу нижче.</value>
+  </data>
+  <data name="AccountNotAuthorizedUseOtp" xml:space="preserve">
+    <value>Ваш обліковий запис не має дозволу на вхід через Microsoft. Скористайтеся одноразовим паролем.</value>
+  </data>
+  <data name="AccountNotAuthorizedContactAdmin" xml:space="preserve">
+    <value>Ваш обліковий запис не авторизовано. Зверніться до адміністратора.</value>
+  </data>
+  <data name="AuthenticationFailedPleaseRetry" xml:space="preserve">
+    <value>Помилка автентифікації. Спробуйте ще раз.</value>
+  </data>
+  <data name="OrUseOtp" xml:space="preserve">
+    <value>або використовуйте одноразовий код</value>
+  </data>
+  <data name="Email" xml:space="preserve">
+    <value>Електронна пошта</value>
+  </data>
+  <data name="EnterYourEmail" xml:space="preserve">
+    <value>Введіть ваш email</value>
+  </data>
+  <data name="EnterEmailForOtp" xml:space="preserve">
+    <value>Введіть ваш email, щоб отримати код перевірки.</value>
+  </data>
+  <data name="EmailRequired" xml:space="preserve">
+    <value>Email обов'язковий</value>
+  </data>
+  <data name="EmailAndCodeRequired" xml:space="preserve">
+    <value>Email і код обов'язкові</value>
+  </data>
 </root>

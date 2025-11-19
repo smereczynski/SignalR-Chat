@@ -153,7 +153,23 @@ namespace Chat.Web.Repositories
     }
 
     // Simple DTOs for Cosmos storage
-    internal class UserDoc { public string id { get; set; } public string userName { get; set; } public string fullName { get; set; } public string avatar { get; set; } public string email { get; set; } public string mobile { get; set; } public bool? enabled { get; set; } public string[] fixedRooms { get; set; } public string[] rooms { get; set; } public string defaultRoom { get; set; } }
+    internal class UserDoc 
+    { 
+        public string id { get; set; } 
+        public string userName { get; set; } 
+        public string fullName { get; set; } 
+        public string avatar { get; set; } 
+        public string email { get; set; } 
+        public string mobile { get; set; } 
+        public bool? enabled { get; set; } 
+        public string upn { get; set; }
+        public string tenantId { get; set; }
+        public string displayName { get; set; }
+        public string country { get; set; }
+        public string region { get; set; }
+        public string[] fixedRooms { get; set; } 
+        public string defaultRoom { get; set; } 
+    }
     internal class RoomDoc { public string id { get; set; } public string name { get; set; } public string admin { get; set; } public string[] users { get; set; } }
     internal class MessageDoc { public string id { get; set; } public string roomName { get; set; } public string content { get; set; } public string fromUser { get; set; } public DateTime timestamp { get; set; } public string[] readBy { get; set; } }
 
@@ -165,6 +181,29 @@ namespace Chat.Web.Repositories
         {
             _users = clients.Users;
             _logger = logger;
+        }
+
+        private static ApplicationUser MapUser(UserDoc d)
+        {
+            var rooms = d.fixedRooms;
+            var fixedRooms = rooms != null ? new System.Collections.Generic.List<string>(rooms) : new System.Collections.Generic.List<string>();
+            var def = !string.IsNullOrWhiteSpace(d.defaultRoom) ? d.defaultRoom : (fixedRooms.Count > 0 ? fixedRooms[0] : null);
+            return new ApplicationUser
+            {
+                UserName = d.userName,
+                FullName = d.fullName,
+                Avatar = d.avatar,
+                Email = d.email,
+                MobileNumber = d.mobile,
+                Enabled = d.enabled ?? true,
+                Upn = d.upn,
+                TenantId = d.tenantId,
+                DisplayName = d.displayName,
+                Country = d.country,
+                Region = d.region,
+                FixedRooms = fixedRooms,
+                DefaultRoom = def
+            };
         }
 
         public IEnumerable<ApplicationUser> GetAll()
@@ -184,24 +223,7 @@ namespace Chat.Web.Repositories
                         "cosmos.users.getall.readnext"
                     ).GetAwaiter().GetResult();
                     activity?.AddEvent(new ActivityEvent("page", tags: new ActivityTagsCollection {{"db.page.count", page.Count}}));
-                    list.AddRange(page.Select(d =>
-                    {
-                        var rooms = d.fixedRooms ?? d.rooms; // support Admin schema (rooms) and legacy (fixedRooms)
-                        var fixedRooms = rooms != null ? new System.Collections.Generic.List<string>(rooms) : new System.Collections.Generic.List<string>();
-                        // Default room: prefer explicit defaultRoom; otherwise first allowed room if available
-                        var def = !string.IsNullOrWhiteSpace(d.defaultRoom) ? d.defaultRoom : (fixedRooms.Count > 0 ? fixedRooms[0] : null);
-                        return new ApplicationUser
-                        {
-                            UserName = d.userName,
-                            FullName = d.fullName,
-                            Avatar = d.avatar,
-                            Email = d.email,
-                            MobileNumber = d.mobile,
-                            Enabled = d.enabled ?? true,
-                            FixedRooms = fixedRooms,
-                            DefaultRoom = def
-                        };
-                    }));
+                    list.AddRange(page.Select(MapUser));
                 }
                 activity?.SetTag("app.result.count", list.Count);
                 return list;
@@ -214,10 +236,41 @@ namespace Chat.Web.Repositories
             }
         }
 
+        private string GetDocumentId(string userName)
+        {
+            using var activity = Tracing.ActivitySource.StartActivity("cosmos.users.getid", ActivityKind.Client);
+            activity?.SetTag("app.userName", userName);
+            var q = _users.GetItemQueryIterator<UserDoc>(new QueryDefinition("SELECT c.id FROM c WHERE c.userName = @u").WithParameter("@u", userName));
+            try
+            {
+                while (q.HasMoreResults)
+                {
+                    var page = Resilience.RetryHelper.ExecuteAsync(
+                        _ => q.ReadNextAsync(),
+                        Transient.IsCosmosTransient,
+                        _logger,
+                        "cosmos.users.getid.readnext").GetAwaiter().GetResult();
+                    var d = page.FirstOrDefault();
+                    if (d != null)
+                    {
+                        return d.id;
+                    }
+                }
+                return null;
+            }
+            catch (CosmosException ex)
+            {
+                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+                _logger.LogError(ex, "Cosmos user ID lookup failed");
+                throw;
+            }
+        }
+
         public ApplicationUser GetByUserName(string userName)
         {
             using var activity = Tracing.ActivitySource.StartActivity("cosmos.users.get", ActivityKind.Client);
             activity?.SetTag("app.userName", userName);
+            // Use cross-partition query to find user by userName
             var q = _users.GetItemQueryIterator<UserDoc>(new QueryDefinition("SELECT * FROM c WHERE c.userName = @u").WithParameter("@u", userName));
             try
             {
@@ -231,10 +284,7 @@ namespace Chat.Web.Repositories
                     var d = page.FirstOrDefault();
                     if (d != null)
                     {
-                        var rooms = d.fixedRooms ?? d.rooms; // support Admin schema
-                        var fixedRooms = rooms != null ? new System.Collections.Generic.List<string>(rooms) : new System.Collections.Generic.List<string>();
-                        var def = !string.IsNullOrWhiteSpace(d.defaultRoom) ? d.defaultRoom : (fixedRooms.Count > 0 ? fixedRooms[0] : null);
-                        return new ApplicationUser { UserName = d.userName, FullName = d.fullName, Avatar = d.avatar, Email = d.email, MobileNumber = d.mobile, Enabled = d.enabled ?? true, FixedRooms = fixedRooms, DefaultRoom = def };
+                        return MapUser(d);
                     }
                 }
                 return null;
@@ -248,11 +298,66 @@ namespace Chat.Web.Repositories
             }
         }
 
+        public ApplicationUser GetByUpn(string upn)
+        {
+            using var activity = Tracing.ActivitySource.StartActivity("cosmos.users.getbyupn", ActivityKind.Client);
+            activity?.SetTag("app.upn", upn);
+            // Case-insensitive UPN matching using LOWER() function
+            var q = _users.GetItemQueryIterator<UserDoc>(
+                new QueryDefinition("SELECT * FROM c WHERE LOWER(c.upn) = LOWER(@upn)")
+                    .WithParameter("@upn", upn));
+            try
+            {
+                while (q.HasMoreResults)
+                {
+                    var page = Resilience.RetryHelper.ExecuteAsync(
+                        _ => q.ReadNextAsync(),
+                        Transient.IsCosmosTransient,
+                        _logger,
+                        "cosmos.users.getbyupn.readnext").GetAwaiter().GetResult();
+                    var d = page.FirstOrDefault();
+                    if (d != null)
+                    {
+                        return MapUser(d);
+                    }
+                }
+                _logger.LogDebug("GetByUpn: No user found with upn={Upn}", upn);
+                return null;
+            }
+            catch (CosmosException ex)
+            {
+                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+                _logger.LogError(ex, "Cosmos user lookup by UPN failed for upn={Upn}", upn);
+                throw;
+            }
+        }
+
         public void Upsert(ApplicationUser user)
         {
             using var activity = Tracing.ActivitySource.StartActivity("cosmos.users.upsert", ActivityKind.Client);
             activity?.SetTag("app.userName", user.UserName);
-            var doc = new UserDoc { id = user.UserName, userName = user.UserName, fullName = user.FullName, avatar = user.Avatar, email = user.Email, mobile = user.MobileNumber, enabled = user.Enabled, fixedRooms = user.FixedRooms != null ? System.Linq.Enumerable.ToArray(user.FixedRooms) : null, rooms = user.FixedRooms != null ? System.Linq.Enumerable.ToArray(user.FixedRooms) : null, defaultRoom = user.DefaultRoom };
+            
+            // Check if user already exists to preserve their ID
+            var existing = GetByUserName(user.UserName);
+            var documentId = existing != null ? GetDocumentId(user.UserName) : Guid.NewGuid().ToString();
+            
+                var doc = new UserDoc 
+            { 
+                id = documentId,
+                userName = user.UserName, 
+                fullName = user.FullName, 
+                avatar = user.Avatar, 
+                email = user.Email, 
+                mobile = user.MobileNumber, 
+                enabled = user.Enabled, 
+                upn = user.Upn,
+                tenantId = user.TenantId,
+                displayName = user.DisplayName,
+                country = user.Country,
+                region = user.Region,
+                fixedRooms = user.FixedRooms != null ? System.Linq.Enumerable.ToArray(user.FixedRooms) : null, 
+                defaultRoom = user.DefaultRoom 
+            };
             try
             {
                 var resp = Resilience.RetryHelper.ExecuteAsync(
@@ -428,6 +533,20 @@ namespace Chat.Web.Repositories
             _logger = logger;
         }
 
+        private static Message MapMessage(MessageDoc d)
+        {
+            return new Message
+            {
+                Id = int.Parse(d.id),
+                Content = d.content,
+                Timestamp = d.timestamp,
+                ToRoom = new Room { Name = d.roomName },
+                ToRoomId = 0,
+                FromUser = new ApplicationUser { UserName = d.fromUser },
+                ReadBy = d.readBy != null ? new List<string>(d.readBy) : new List<string>()
+            };
+        }
+
         public Message Create(Message message)
         {
             using var activity = Tracing.ActivitySource.StartActivity("cosmos.messages.create", ActivityKind.Client);
@@ -496,7 +615,7 @@ namespace Chat.Web.Repositories
                     var d = page.FirstOrDefault();
                     if (d != null)
                     {
-                        return new Message { Id = int.Parse(d.id), Content = d.content, Timestamp = d.timestamp, ToRoom = new Room { Name = d.roomName }, ToRoomId = 0, FromUser = new ApplicationUser { UserName = d.fromUser }, ReadBy = d.readBy != null ? new List<string>(d.readBy) : new List<string>() };
+                        return MapMessage(d);
                     }
                 }
                 return null;
@@ -525,7 +644,7 @@ namespace Chat.Web.Repositories
                         _logger,
                         "cosmos.messages.recent.readnext").GetAwaiter().GetResult();
                     activity?.AddEvent(new ActivityEvent("page", tags: new ActivityTagsCollection {{"db.page.count", page.Count}}));
-                    list.AddRange(page.Select(d => new Message { Id = int.Parse(d.id), Content = d.content, Timestamp = d.timestamp, ToRoom = new Room { Name = d.roomName }, FromUser = new ApplicationUser { UserName = d.fromUser }, ReadBy = d.readBy != null ? new List<string>(d.readBy) : new List<string>() }));
+                    list.AddRange(page.Select(MapMessage));
                 }
                 list = list.OrderBy(m => m.Timestamp).ToList();
                 activity?.SetTag("app.result.count", list.Count);
@@ -562,7 +681,7 @@ namespace Chat.Web.Repositories
                         _logger,
                         "cosmos.messages.before.readnext").GetAwaiter().GetResult();
                     activity?.AddEvent(new ActivityEvent("page", tags: new ActivityTagsCollection {{"db.page.count", page.Count}}));
-                    list.AddRange(page.Select(d => new Message { Id = int.Parse(d.id), Content = d.content, Timestamp = d.timestamp, ToRoom = new Room { Name = d.roomName }, FromUser = new ApplicationUser { UserName = d.fromUser }, ReadBy = d.readBy != null ? new List<string>(d.readBy) : new List<string>() }));
+                    list.AddRange(page.Select(MapMessage));
                 }
                 // Keep only the newest 'take' items and return ascending order
                 list = list.OrderByDescending(m => m.Timestamp).Take(take).OrderBy(m => m.Timestamp).ToList();
@@ -619,7 +738,7 @@ namespace Chat.Web.Repositories
                         ex);
                 }
             }
-            return new Message { Id = int.Parse(d.id), Content = d.content, Timestamp = d.timestamp, ToRoom = new Room { Name = d.roomName }, FromUser = new ApplicationUser { UserName = d.fromUser }, ReadBy = d.readBy != null ? new List<string>(d.readBy) : new List<string>() };
+            return MapMessage(d);
         }
     }
 }

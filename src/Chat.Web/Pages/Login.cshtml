@@ -13,14 +13,72 @@
               <span id="currentLanguageFlag" class="flag-icon">🌐</span>
             </button>
           </div>
+
+          @* Silent SSO / authorization alerts *@
+          @if (!string.IsNullOrWhiteSpace(Model.Reason))
+          {
+            if (Model.Reason == "sso_failed")
+            {
+              <div class="alert alert-info py-2" role="alert">
+                @Localizer["SilentSsoAttemptedInteractionRequired", ""]
+                <span class="small d-block mt-1">@Localizer["PleaseChooseSignInMethod"]</span>
+              </div>
+            }
+            else if (Model.Reason == "not_authorized")
+            {
+              if (Model.OtpFallbackAllowed)
+              {
+                <div class="alert alert-warning py-2" role="alert">
+                  @Localizer["AccountNotAuthorizedUseOtp"]
+                </div>
+              }
+              else
+              {
+                <div class="alert alert-danger py-2" role="alert">
+                  @Localizer["AccountNotAuthorizedContactAdmin"]
+                </div>
+              }
+            }
+          }
+          @if (!string.IsNullOrWhiteSpace(Model.Error))
+          {
+            if (Model.Error == "authentication_failed")
+            {
+              <div class="alert alert-danger py-2" role="alert">
+                @Localizer["AuthenticationFailedPleaseRetry"]
+              </div>
+            }
+          }
+          
+          <!-- Microsoft Entra ID Sign-In (if configured) -->
+          @if (Model.EntraIdEnabled)
+          {
+            <div class="mb-3">
+              <a href="/api/auth/signin/entra" class="btn btn-primary w-100 d-flex align-items-center justify-content-center">
+                <svg xmlns="http://www.w3.org/2000/svg" width="21" height="21" viewBox="0 0 21 21" class="me-2">
+                  <path fill="#f25022" d="M0 0h10v10H0z"/>
+                  <path fill="#00a4ef" d="M11 0h10v10H11z"/>
+                  <path fill="#7fba00" d="M0 11h10v10H0z"/>
+                  <path fill="#ffb900" d="M11 11h10v10H11z"/>
+                </svg>
+                @Localizer["SignInWithMicrosoft"]
+              </a>
+            </div>
+            
+            <div class="d-flex align-items-center my-3">
+              <hr class="flex-grow-1">
+              <span class="px-3 text-muted small">@Localizer["OrUseOtp"]</span>
+              <hr class="flex-grow-1">
+            </div>
+          }
+          
+          <!-- OTP Sign-In -->
           <div id="otpContainer" data-otp-timeout-ms="8000" data-otp-retry-cooldown-ms="5000" data-otp-resend-delay-ms="60000">
             <div id="otp-step1">
               <div class="mb-2">
-                <label for="otpUserName" class="form-label">@Localizer["User"]</label>
-                <select class="form-select" id="otpUserName">
-                  <option value="" selected disabled>@Localizer["LoadingUsers"]</option>
-                </select>
-                <div class="form-text">@Localizer["PickUserForOtp"]</div>
+                <label for="otpUserName" class="form-label">@Localizer["Email"]</label>
+                <input type="email" class="form-control" id="otpUserName" placeholder="@Localizer["EnterYourEmail"]" autocomplete="email" />
+                <div class="form-text">@Localizer["EnterEmailForOtp"]</div>
               </div>
               <button type="button" class="btn btn-primary" id="btn-send-otp">@Localizer["SendCode"]</button>
             </div>

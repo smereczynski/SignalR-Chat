@@ -223,4 +223,39 @@
   <data name="ReadBy" xml:space="preserve">
     <value>Přečteno uživatelem</value>
   </data>
+  
+  <!-- Entra ID / Silent SSO Messages -->
+  <data name="SilentSsoAttemptedInteractionRequired" xml:space="preserve">
+    <value>Pokusili jsme se vás přihlásit automaticky, ale je vyžadována interakce.</value>
+  </data>
+  <data name="PleaseChooseSignInMethod" xml:space="preserve">
+    <value>Vyberte prosím níže způsob přihlášení.</value>
+  </data>
+  <data name="AccountNotAuthorizedUseOtp" xml:space="preserve">
+    <value>Váš účet není oprávněn k přihlášení Microsoft. Použijte jednorázové heslo.</value>
+  </data>
+  <data name="AccountNotAuthorizedContactAdmin" xml:space="preserve">
+    <value>Váš účet není oprávněn. Kontaktujte prosím svého správce.</value>
+  </data>
+  <data name="AuthenticationFailedPleaseRetry" xml:space="preserve">
+    <value>Ověření selhalo. Zkuste to prosím znovu.</value>
+  </data>
+  <data name="OrUseOtp" xml:space="preserve">
+    <value>nebo použijte jednorázový kód</value>
+  </data>
+  <data name="Email" xml:space="preserve">
+    <value>E-mail</value>
+  </data>
+  <data name="EnterYourEmail" xml:space="preserve">
+    <value>Zadejte svůj e-mail</value>
+  </data>
+  <data name="EnterEmailForOtp" xml:space="preserve">
+    <value>Zadejte svůj e-mail pro přijetí ověřovacího kódu.</value>
+  </data>
+  <data name="EmailRequired" xml:space="preserve">
+    <value>E-mail je povinný</value>
+  </data>
+  <data name="EmailAndCodeRequired" xml:space="preserve">
+    <value>E-mail a kód jsou povinné</value>
+  </data>
 </root>

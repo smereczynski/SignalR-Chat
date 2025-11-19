@@ -47,6 +47,10 @@ param signalRConnectionString string
 @secure()
 param acsConnectionString string
 
+@description('OTP pepper for secure hashing')
+@secure()
+param otpPepper string
+
 @description('Log Analytics Workspace ID for diagnostic logs')
 param logAnalyticsWorkspaceId string = ''
 
@@ -159,6 +163,10 @@ resource webApp 'Microsoft.Web/sites@2024-11-01' = {
         {
           name: 'Acs__SmsFrom'
           value: 'TRANSLATOR'
+        }
+        {
+          name: 'Otp__Pepper'
+          value: otpPepper
         }
         {
           name: 'WEBSITE_HEALTHCHECK_MAXPINGFAILURES'

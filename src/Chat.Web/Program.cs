@@ -34,6 +34,13 @@ namespace Chat.Web
             // Development: verbose logging (Debug level) for easier troubleshooting
             // Production: standard logging (Information level) to reduce noise
             var isDevelopment = string.Equals(envName, "Development", StringComparison.OrdinalIgnoreCase);
+            
+            // File logging: opt-in via configuration (disabled by default to avoid unnecessary disk I/O)
+            // Set Serilog__WriteToFile=true in environment variables to enable
+            var writeToFileEnv = Environment.GetEnvironmentVariable("Serilog__WriteToFile");
+            var writeToFile = !string.IsNullOrWhiteSpace(writeToFileEnv) && 
+                              (string.Equals(writeToFileEnv, "true", StringComparison.OrdinalIgnoreCase) || writeToFileEnv == "1");
+            
             var loggerConfig = new LoggerConfiguration()
                 .MinimumLevel.Override("Microsoft", isDevelopment ? LogEventLevel.Information : LogEventLevel.Warning)
                 .MinimumLevel.Override("Microsoft.Azure.Cosmos", LogEventLevel.Information) // Always log Cosmos operations
@@ -45,6 +52,18 @@ namespace Chat.Web
                 .Enrich.WithMachineName()
                 .Enrich.WithThreadId()
                 .WriteTo.Console(outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {SourceContext} {Message:lj} {Properties:j}{NewLine}{Exception}");
+            
+            // Conditionally enable file logging if configured
+            if (writeToFile)
+            {
+                loggerConfig = loggerConfig.WriteTo.File(
+                    path: "logs/chat-.log",
+                    rollingInterval: RollingInterval.Day,
+                    outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff} {Level:u3}] {SourceContext} {Message:lj} {Properties:j}{NewLine}{Exception}",
+                    restrictedToMinimumLevel: LogEventLevel.Debug,
+                    retainedFileCountLimit: 7 // Keep last 7 days
+                );
+            }
 
             // Write to Application Insights if connection string available (both Dev and Production)
             if (!string.IsNullOrWhiteSpace(aiConnectionString))

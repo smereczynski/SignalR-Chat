@@ -33,8 +33,9 @@ namespace Chat.Web.Services
         }
 
         /// <summary>
-        /// Seeds initial data if the database is empty.
-        /// Checks for existing rooms and users, and only seeds if both are null/empty.
+        /// Seeds initial data for any missing dataset.
+        /// If rooms are missing, seeds rooms. If users are missing, seeds users.
+        /// This avoids a situation where existing users block room seeding.
         /// </summary>
         public async Task SeedIfEmptyAsync()
         {
@@ -48,20 +49,29 @@ namespace Chat.Web.Services
                 var existingUsers = _usersRepo.GetAll()?.ToList();
                 var hasUsers = existingUsers != null && existingUsers.Any();
 
-                if (hasRooms || hasUsers)
+                if (hasRooms && hasUsers)
                 {
-                    _logger.LogInformation("Database already contains data (Rooms: {RoomCount}, Users: {UserCount}) - skipping seed", 
-                        existingRooms?.Count ?? 0, 
-                        existingUsers?.Count ?? 0);
+                    _logger.LogInformation("Database already contains data (Rooms: {RoomCount}, Users: {UserCount}) - skipping seed",
+                        existingRooms.Count,
+                        existingUsers.Count);
                     return;
                 }
 
-                _logger.LogInformation("Database is empty - seeding initial data");
+                if (!hasRooms)
+                {
+                    _logger.LogInformation("Rooms dataset empty - seeding default rooms");
+                    await SeedRoomsAsync();
+                }
 
-                await SeedRoomsAsync();
-                await SeedUsersAsync();
+                if (!hasUsers)
+                {
+                    _logger.LogInformation("Users dataset empty - seeding default users");
+                    await SeedUsersAsync();
+                }
 
-                _logger.LogInformation("✓ Database seeding completed successfully");
+                _logger.LogInformation("✓ Database seeding completed successfully (RoomsSeeded: {RoomsSeeded}, UsersSeeded: {UsersSeeded})",
+                    !hasRooms,
+                    !hasUsers);
             }
             catch (Exception ex)
             {
@@ -76,9 +86,9 @@ namespace Chat.Web.Services
 
             var rooms = new[]
             {
-                new { id = "1", name = "general", admin = (string)null, users = Array.Empty<string>() },
-                new { id = "2", name = "ops", admin = (string)null, users = Array.Empty<string>() },
-                new { id = "3", name = "random", admin = (string)null, users = Array.Empty<string>() }
+                new { id = "general", name = "general", admin = (string)null, users = Array.Empty<string>() },
+                new { id = "ops", name = "ops", admin = (string)null, users = Array.Empty<string>() },
+                new { id = "random", name = "random", admin = (string)null, users = Array.Empty<string>() }
             };
 
             foreach (var room in rooms)
@@ -90,7 +100,7 @@ namespace Chat.Web.Services
                         room,
                         new PartitionKey(room.name)
                     );
-                    _logger.LogInformation("  ✓ Created room: {RoomName} (ID: {RoomId})", room.name, room.id);
+                    _logger.LogInformation("  ✓ Created room: {RoomName}", room.name);
                 }
                 catch (Exception ex)
                 {
@@ -107,36 +117,54 @@ namespace Chat.Web.Services
             {
                 new ApplicationUser
                 {
-                    UserName = "alice",
+                    UserName = "alice@example.com",
                     FullName = "Alice Johnson",
                     Email = "alice@example.com",
                     MobileNumber = "+1234567890",
                     Enabled = true,
                     FixedRooms = new List<string> { "general", "ops" },
                     DefaultRoom = "general",
-                    Avatar = null
+                    Avatar = null,
+                    // Entra ID fields (placeholders for seeded users - will be populated on first Entra ID login)
+                    Upn = null,
+                    TenantId = null,
+                    DisplayName = null,
+                    Country = null,
+                    Region = null
                 },
                 new ApplicationUser
                 {
-                    UserName = "bob",
+                    UserName = "bob@example.com",
                     FullName = "Bob Stone",
                     Email = "bob@example.com",
                     MobileNumber = "+1234567891",
                     Enabled = true,
                     FixedRooms = new List<string> { "general", "random" },
                     DefaultRoom = "general",
-                    Avatar = null
+                    Avatar = null,
+                    // Entra ID fields (placeholders for seeded users - will be populated on first Entra ID login)
+                    Upn = null,
+                    TenantId = null,
+                    DisplayName = null,
+                    Country = null,
+                    Region = null
                 },
                 new ApplicationUser
                 {
-                    UserName = "charlie",
+                    UserName = "charlie@example.com",
                     FullName = "Charlie Fields",
                     Email = "charlie@example.com",
                     MobileNumber = "+1234567892",
                     Enabled = true,
                     FixedRooms = new List<string> { "general" },
                     DefaultRoom = "general",
-                    Avatar = null
+                    Avatar = null,
+                    // Entra ID fields (placeholders for seeded users - will be populated on first Entra ID login)
+                    Upn = null,
+                    TenantId = null,
+                    DisplayName = null,
+                    Country = null,
+                    Region = null
                 }
             };
 
