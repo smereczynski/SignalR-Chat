@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Json;
@@ -23,22 +24,36 @@ namespace Chat.IntegrationTests
         public async Task BurstRequests_Produce429()
         {
             var client = _factory.CreateClient();
-            // With rate limit of 20 requests per 5 seconds, need 25 concurrent requests to trigger 429
-            var tasks = new Task<HttpResponseMessage>[25];
-            for (int i = 0; i < tasks.Length; i++)
+            // Rate limit: 20 permits per 5 seconds (from CustomWebApplicationFactory)
+            // Send 40 requests in rapid succession to guarantee exceeding the limit
+            const int totalRequests = 40;
+            var tasks = new List<Task<HttpResponseMessage>>(totalRequests);
+            
+            // Create all tasks simultaneously using Parallel.For for maximum concurrency
+            var taskArray = new Task<HttpResponseMessage>[totalRequests];
+            Parallel.For(0, totalRequests, i =>
             {
-                tasks[i] = client.PostAsJsonAsync("/api/auth/start", new StartReq("alice", "alice"));
-            }
-            await Task.WhenAll(tasks);
-            int tooMany = 0, oks = 0;
-            foreach (var t in tasks)
+                taskArray[i] = client.PostAsJsonAsync("/api/auth/start", new StartReq("alice", "alice"));
+            });
+            
+            // Wait for all to complete
+            await Task.WhenAll(taskArray);
+            
+            int tooMany = 0, oks = 0, accepted = 0, other = 0;
+            foreach (var task in taskArray)
             {
-                var resp = await t;
+                var resp = await task;
                 if (resp.StatusCode == HttpStatusCode.TooManyRequests) tooMany++;
-                if (resp.StatusCode == HttpStatusCode.OK) oks++;
+                else if (resp.StatusCode == HttpStatusCode.OK) oks++;
+                else if (resp.StatusCode == HttpStatusCode.Accepted) accepted++;
+                else other++;
             }
-            _output.WriteLine($"Burst summary: OK={oks}, 429={tooMany}");
-            Assert.True(tooMany >= 1, $"Expected at least one 429 but got OK={oks},429={tooMany}");
+            
+            _output.WriteLine($"Burst summary: Total={totalRequests}, OK={oks}, Accepted={accepted}, 429={tooMany}, Other={other}");
+            
+            // With 40 requests and limit of 20, we should get at least a few 429s
+            // Allow for some timing variance in CI environments
+            Assert.True(tooMany >= 1, $"Expected at least one 429 but got OK={oks}, 429={tooMany}, Other={other}");
         }
     }
 }
