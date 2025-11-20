@@ -53,6 +53,9 @@
   <data name="Reconnecting" xml:space="preserve">
     <value>JUNGIAMASI IŠ NAUJO…</value>
   </data>
+  <data name="Degraded" xml:space="preserve">
+    <value>RIBOTA</value>
+  </data>
   <data name="Disconnected" xml:space="preserve">
     <value>ATSIJUNGTA</value>
   </data>

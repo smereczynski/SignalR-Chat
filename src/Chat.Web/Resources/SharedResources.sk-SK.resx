@@ -51,7 +51,10 @@
     <value>Kto je tu ({0})</value>
   </data>
   <data name="Reconnecting" xml:space="preserve">
-    <value>PRIPÁJANIE…</value>
+    <value>OPÄTOVNÉ PRIPOJENIE…</value>
+  </data>
+  <data name="Degraded" xml:space="preserve">
+    <value>OBMEDZENÉ</value>
   </data>
   <data name="Disconnected" xml:space="preserve">
     <value>ODPOJENÉ</value>
