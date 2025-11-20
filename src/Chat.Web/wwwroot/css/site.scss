@@ -138,3 +138,11 @@ body {
         }
     }
 }
+
+// -------------------------------------------------------------
+// Validation summary - hide when valid (no errors)
+// ASP.NET Core adds 'validation-summary-valid' class when there are no errors
+// -------------------------------------------------------------
+.validation-summary-valid {
+    display: none;
+}
