@@ -1,7 +1,73 @@
 @page
+@using Microsoft.Extensions.Localization
+@inject IStringLocalizer<Chat.Web.Resources.SharedResources> Localizer
 @model AdminIndexModel
 @{
-    Layout = "/Pages/Shared/_Layout.cshtml";
-    ViewData["Title"] = "Home";
+    ViewData["Title"] = Localizer["AdminDashboard"];
 }
 
+<div class="row">
+    <div class="col-md-4 mb-4">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">@Localizer["Users"]</h5>
+                <p class="card-text">@Localizer["ManageUserAccounts"]</p>
+                <a href="/Admin/Users" class="btn btn-primary">@Localizer["ManageUsers"]</a>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4 mb-4">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">@Localizer["Rooms"]</h5>
+                <p class="card-text">@Localizer["ViewManageChatRooms"]</p>
+                <a href="/Admin/Rooms" class="btn btn-primary">@Localizer["ManageRooms"]</a>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4 mb-4">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">@Localizer["SystemStatus"]</h5>
+                <p class="card-text">@Localizer["ViewSystemHealth"]</p>
+                <a href="/health" class="btn btn-secondary">@Localizer["HealthCheck"]</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-12">
+        <h3>@Localizer["QuickStats"]</h3>
+        <div class="table-responsive">
+            <table class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>@Localizer["Metric"]</th>
+                        <th>@Localizer["Value"]</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>@Localizer["TotalUsers"]</td>
+                        <td>5 (Fixed)</td>
+                    </tr>
+                    <tr>
+                        <td>@Localizer["ActiveRooms"]</td>
+                        <td>3 (general, random, tech)</td>
+                    </tr>
+                    <tr>
+                        <td>@Localizer["YourTenant"]</td>
+                        <td><code>@(User.FindFirst("http://schemas.microsoft.com/identity/claims/tenantid")?.Value ?? User.FindFirst("tid")?.Value ?? Localizer["NotAvailable"].Value)</code></td>
+                    </tr>
+                    <tr>
+                        <td>@Localizer["YourRole"]</td>
+                        <td><span class="badge bg-primary">@(User.IsInRole("Admin.ReadWrite") ? "Admin.ReadWrite" : "Admin.Read")</span></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

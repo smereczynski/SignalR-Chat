@@ -4,10 +4,8 @@
 @model UsersIndexModel
 @{
     ViewData["Title"] = Localizer["Users"];
-    Layout = "/Pages/Shared/_Layout.cshtml";
 }
 <div class="d-flex justify-content-between align-items-center mb-3">
-    <h2>@Localizer["Users"]</h2>
     <a asp-page="Create" class="btn btn-primary">@Localizer["CreateNewUser"]</a>
 </div>
 <div class="table-responsive">

@@ -1,0 +1,90 @@
+@using Microsoft.Extensions.Localization
+@inject IStringLocalizer<Chat.Web.Resources.SharedResources> Localizer
+@{
+    Layout = "/Pages/Shared/_Layout.cshtml";
+}
+
+<div class="container-fluid h-100">
+    <div class="row h-100">
+        <!-- Sidebar Navigation -->
+        <nav class="col-md-3 col-lg-2 d-md-block bg-light sidebar collapse show">
+            <div class="position-sticky pt-3">
+                <h5 class="px-3 mb-3 text-dark">@Localizer["AdminPanel"]</h5>
+                <ul class="nav flex-column">
+                    <li class="nav-item">
+                        <a class="nav-link @(ViewContext.RouteData.Values["Page"]?.ToString() == "/Admin/Index" ? "active" : "")" href="/Admin">
+                            <i class="bi bi-house-door"></i> @Localizer["Dashboard"]
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link @(ViewContext.RouteData.Values["Page"]?.ToString()?.Contains("/Admin/Users") == true ? "active" : "")" href="/Admin/Users">
+                            <i class="bi bi-people"></i> @Localizer["Users"]
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link @(ViewContext.RouteData.Values["Page"]?.ToString()?.Contains("/Admin/Rooms") == true ? "active" : "")" href="/Admin/Rooms">
+                            <i class="bi bi-chat-dots"></i> @Localizer["Rooms"]
+                        </a>
+                    </li>
+                </ul>
+                
+                <hr class="my-3">
+                
+                <ul class="nav flex-column">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/">
+                            <i class="bi bi-arrow-left"></i> @Localizer["BackToChat"]
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4">
+            <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+                <h1 class="h2">@ViewData["Title"]</h1>
+                <div class="btn-toolbar mb-2 mb-md-0">
+                    <div class="btn-group me-2">
+                        <span class="text-muted">@User.Identity?.Name</span>
+                    </div>
+                </div>
+            </div>
+
+            @RenderBody()
+        </main>
+    </div>
+</div>
+
+@section Scripts {
+    <style>
+        .sidebar {
+            position: sticky;
+            top: 0;
+            height: 100vh;
+            padding-top: 1rem;
+            overflow-x: hidden;
+            overflow-y: auto;
+        }
+        
+        .sidebar .nav-link {
+            font-weight: 500;
+            color: #333;
+        }
+        
+        .sidebar .nav-link.active {
+            color: #0d6efd;
+            background-color: rgba(13, 110, 253, 0.1);
+            border-radius: 0.25rem;
+        }
+        
+        .sidebar .nav-link:hover {
+            color: #0d6efd;
+        }
+        
+        .sidebar h5 {
+            font-weight: 600;
+        }
+    </style>
+    @RenderSection("Scripts", required: false)
+}
