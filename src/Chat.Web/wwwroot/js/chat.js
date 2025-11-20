@@ -128,8 +128,20 @@ if(window.__chatAppBooted){
   function computeConnectionState(){
     // Trust tracked reconnection state (within last 60 seconds to cover max exponential backoff)
     const stateAge = Date.now() - _connectionState.lastUpdate;
-    if(_connectionState.isReconnecting && stateAge < 60000){
-      return 'reconnecting';  // Always show reconnecting during active attempts
+    
+    // If actively reconnecting via automatic reconnect (SignalR's withAutomaticReconnect), show reconnecting
+    if(_connectionState.isReconnecting && _connectionState.reconnectSource === 'automatic' && stateAge < 60000){
+      return 'reconnecting';
+    }
+    
+    // If manually reconnecting (backend down scenario) but attempts are still fresh, show reconnecting
+    // However, if manual reconnect has been going on for >10s, show disconnected (backend is likely down)
+    if(_connectionState.isReconnecting && _connectionState.reconnectSource === 'manual'){
+      if(stateAge < 10000){
+        return 'reconnecting';  // First 10 seconds of manual reconnect attempts
+      } else {
+        return 'disconnected';  // After 10s of failed manual reconnects, backend is down
+      }
     }
     
     // Trust recent event-driven state (within last 5 seconds)
@@ -1376,18 +1388,7 @@ if(window.__chatAppBooted){
   window.addEventListener('focus', ()=>{ maybeMarkRead(); scheduleMarkVisibleRead(); ensureConnected(); });
   document.addEventListener('DOMContentLoaded',()=>{ 
     cacheDom(); 
-    // Inject (or capture) offline banner element
-    els.offlineBanner = document.getElementById('offline-banner');
-    if(!els.offlineBanner){
-      const b=document.createElement('div');
-      b.id='offline-banner';
-      b.className='alert alert-warning text-center py-1 mb-0 d-none';
-      b.setAttribute('role','status');
-      b.setAttribute('aria-live','polite');
-      b.textContent='You are offline. Messages will send when connection is restored.';
-      document.body.prepend(b);
-      els.offlineBanner=b;
-    }
+    // No offline banner popup - connection state is shown via header color only
     loadOutbox(); 
     setLoading(true); 
     probeAuth(); 
@@ -1402,7 +1403,8 @@ if(window.__chatAppBooted){
   function installOfflineHandlers(){
     function updateOffline(on){
       state.isOffline = on;
-      if(els.offlineBanner){ els.offlineBanner.classList.toggle('d-none', !on); }
+      // Don't show offline banner popup - connection state is shown via header color
+      // if(els.offlineBanner){ els.offlineBanner.classList.toggle('d-none', !on); }
       if(on){
         postTelemetry('net.offline',{});
       } else {
