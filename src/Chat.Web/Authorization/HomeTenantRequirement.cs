@@ -41,8 +41,6 @@ namespace Chat.Web.Authorization
             
             var configuredHomeTenantId = _entraIdOptions.Authorization.HomeTenantId;
             
-            // DIAGNOSTIC LOGGING - Log all claims to help troubleshoot
-            var allClaims = string.Join(", ", context.User.Claims.Select(c => $"{c.Type}={c.Value}"));
             _logger.LogInformation(
                 "HomeTenant validation - User: {UserName}, TID claim: {UserTenantId}, Configured HomeTenantId: {ConfiguredHomeTenantId}",
                 context.User.Identity?.Name ?? "Unknown",
@@ -52,7 +50,9 @@ namespace Chat.Web.Authorization
             
             if (tenantIdClaim == null)
             {
-                _logger.LogWarning("HomeTenant validation FAILED: No tenant ID claim found in user token. Claims: {AllClaims}", allClaims);
+                // Log only claim types (not values) to avoid exposing sensitive information
+                var claimTypes = string.Join(", ", context.User.Claims.Select(c => c.Type));
+                _logger.LogWarning("HomeTenant validation FAILED: No tenant ID claim found in user token. Available claim types: {ClaimTypes}", claimTypes);
                 return Task.CompletedTask;
             }
 

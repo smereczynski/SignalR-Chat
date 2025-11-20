@@ -230,12 +230,12 @@ namespace Chat.IntegrationTests
 
         protected override Task<AuthenticateResult> HandleAuthenticateAsync()
         {
-            if (!Request.Headers.ContainsKey("X-Test-Claims"))
+            if (!Request.Headers.TryGetValue("X-Test-Claims", out var claimsHeader))
             {
                 return Task.FromResult(AuthenticateResult.NoResult());
             }
 
-            var claimsJson = Request.Headers["X-Test-Claims"].ToString();
+            var claimsJson = claimsHeader.ToString();
             var claimsData = System.Text.Json.JsonSerializer.Deserialize<List<ClaimData>>(claimsJson);
             
             var claims = new List<Claim>();

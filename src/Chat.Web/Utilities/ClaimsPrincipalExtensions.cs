@@ -25,7 +25,7 @@ namespace Chat.Web.Utilities
         /// Gets all roles assigned to the user from role claims.
         /// </summary>
         /// <param name="user">The claims principal representing the authenticated user.</param>
-        /// <returns">Enumerable of role values; empty if no roles assigned.</returns>
+        /// <returns>Enumerable of role values; empty if no roles assigned.</returns>
         public static IEnumerable<string> GetRoles(this ClaimsPrincipal? user)
         {
             return user?.FindAll(ClaimTypes.Role).Select(c => c.Value) ?? Enumerable.Empty<string>();
