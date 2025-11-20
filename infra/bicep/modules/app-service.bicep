@@ -57,13 +57,6 @@ param entraIdInstance string = ''
 @description('Entra ID tenant ID or "organizations" for multi-tenant')
 param entraIdTenantId string = 'organizations'
 
-@description('Entra ID application (client) ID')
-param entraIdClientId string = ''
-
-@description('Entra ID client secret (use Key Vault or connection string when possible)')
-@secure()
-param entraIdClientSecret string = ''
-
 @description('OIDC sign-in callback path')
 param entraIdCallbackPath string = '/signin-oidc'
 
@@ -88,7 +81,7 @@ param entraIdFallbackEnableOtp bool = true
 @description('Allow OTP for unauthorized (disallowed tenant) users')
 param entraIdFallbackOtpForUnauthorizedUsers bool = false
 
-@description('Optional Entra ID connection string (ClientId=...;ClientSecret=...)')
+@description('Optional Entra ID connection string')
 @secure()
 param entraIdConnectionString string = ''
 
@@ -183,10 +176,6 @@ var baseAppSettings = [
     value: entraIdTenantId
   }
   {
-    name: 'EntraId__ClientId'
-    value: entraIdClientId
-  }
-  {
     name: 'EntraId__CallbackPath'
     value: entraIdCallbackPath
   }
@@ -232,14 +221,6 @@ var baseAppSettings = [
   }
 ]
 
-// Conditional app setting for client secret when not provided via connection string
-var appSettingsClientSecret = entraIdClientSecret != '' && entraIdConnectionString == '' ? [
-  {
-    name: 'EntraId__ClientSecret'
-    value: entraIdClientSecret
-  }
-] : []
-
 // Allowed tenants expansion
 var appSettingsAllowedTenants = [for (i, tenantId) in entraIdAllowedTenants: {
   name: 'EntraId__Authorization__AllowedTenants__${i}'
@@ -247,7 +228,7 @@ var appSettingsAllowedTenants = [for (i, tenantId) in entraIdAllowedTenants: {
 }]
 
 // Final app settings array
-var allAppSettings = concat(baseAppSettings, appSettingsClientSecret, appSettingsAllowedTenants)
+var allAppSettings = concat(baseAppSettings, appSettingsAllowedTenants)
 
 // Base connection strings
 var baseConnectionStrings = [
