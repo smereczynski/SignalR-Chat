@@ -197,6 +197,35 @@ namespace Chat.Web
                 var envPepper = Environment.GetEnvironmentVariable("Otp__Pepper");
                 if (!string.IsNullOrWhiteSpace(envPepper)) opts.Pepper = envPepper;
             });
+            services.PostConfigure<EntraIdOptions>(opts =>
+            {
+                // Load ClientId and ClientSecret from connection string if not already configured
+                if (string.IsNullOrWhiteSpace(opts.ClientSecret))
+                {
+                    var connectionString = Configuration.GetConnectionString("EntraId");
+                    if (!string.IsNullOrWhiteSpace(connectionString))
+                    {
+                        // Parse connection string format: "ClientId=<id>;ClientSecret=<secret>"
+                        var parts = connectionString.Split(';');
+                        foreach (var part in parts)
+                        {
+                            var keyValue = part.Split('=', 2);
+                            if (keyValue.Length == 2)
+                            {
+                                if (keyValue[0].Trim().Equals("ClientId", StringComparison.OrdinalIgnoreCase) &&
+                                    string.IsNullOrWhiteSpace(opts.ClientId))
+                                {
+                                    opts.ClientId = keyValue[1].Trim();
+                                }
+                                else if (keyValue[0].Trim().Equals("ClientSecret", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    opts.ClientSecret = keyValue[1].Trim();
+                                }
+                            }
+                        }
+                    }
+                }
+            });
             services.AddSingleton<IOtpHasher, Argon2OtpHasher>();
 
             // Baseline health checks so mapping exists even in Testing:InMemory mode
@@ -455,32 +484,28 @@ namespace Chat.Web
             }
             else
             {
-                // Bind EntraIdOptions to check if Entra ID is configured
+                // Bind EntraIdOptions manually to check if configured (PostConfigure will handle DI)
                 var entraIdOptions = new EntraIdOptions();
                 Configuration.GetSection("EntraId").Bind(entraIdOptions);
                 
-                // Get client secret from connection string if not in config
-                if (string.IsNullOrWhiteSpace(entraIdOptions.ClientSecret))
+                // Check connection string for ClientId/ClientSecret
+                var connectionString = Configuration.GetConnectionString("EntraId");
+                if (!string.IsNullOrWhiteSpace(connectionString))
                 {
-                    var connectionString = Configuration.GetConnectionString("EntraId");
-                    if (!string.IsNullOrWhiteSpace(connectionString))
+                    var parts = connectionString.Split(';');
+                    foreach (var part in parts)
                     {
-                        // Parse connection string format: "ClientId=<id>;ClientSecret=<secret>"
-                        var parts = connectionString.Split(';');
-                        foreach (var part in parts)
+                        var keyValue = part.Split('=', 2);
+                        if (keyValue.Length == 2)
                         {
-                            var keyValue = part.Split('=', 2);
-                            if (keyValue.Length == 2)
+                            if (keyValue[0].Trim().Equals("ClientId", StringComparison.OrdinalIgnoreCase) &&
+                                string.IsNullOrWhiteSpace(entraIdOptions.ClientId))
                             {
-                                if (keyValue[0].Trim().Equals("ClientId", StringComparison.OrdinalIgnoreCase) &&
-                                    string.IsNullOrWhiteSpace(entraIdOptions.ClientId))
-                                {
-                                    entraIdOptions.ClientId = keyValue[1].Trim();
-                                }
-                                else if (keyValue[0].Trim().Equals("ClientSecret", StringComparison.OrdinalIgnoreCase))
-                                {
-                                    entraIdOptions.ClientSecret = keyValue[1].Trim();
-                                }
+                                entraIdOptions.ClientId = keyValue[1].Trim();
+                            }
+                            else if (keyValue[0].Trim().Equals("ClientSecret", StringComparison.OrdinalIgnoreCase))
+                            {
+                                entraIdOptions.ClientSecret = keyValue[1].Trim();
                             }
                         }
                     }
