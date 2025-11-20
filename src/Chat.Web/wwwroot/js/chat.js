@@ -96,7 +96,7 @@ if(window.__chatAppBooted){
   // --------------- Connection Visual (header color) ---------------
   function applyConnectionVisual(stateName){
     if(!els.roomHeader) return;
-    els.roomHeader.classList.remove('connection-state-connected','connection-state-reconnecting','connection-state-disconnected');
+    els.roomHeader.classList.remove('connection-state-connected','connection-state-reconnecting','connection-state-disconnected','connection-state-degraded');
     // Preserve original room name so we can append/remove status annotation without losing it.
     if(!state._baseRoomTitle && els.joinedRoomTitle){
       state._baseRoomTitle = els.joinedRoomTitle.textContent || '';
@@ -112,6 +112,14 @@ if(window.__chatAppBooted){
         els.roomHeader.classList.add('connection-state-reconnecting');
         if(els.joinedRoomTitle && state._baseRoomTitle){
           els.joinedRoomTitle.textContent = state._baseRoomTitle + ' (' + (window.i18n.Reconnecting || 'RECONNECTING…') + ')';
+        }
+        break;
+      case 'degraded':
+        els.roomHeader.classList.add('connection-state-degraded');
+        if(els.joinedRoomTitle && state._baseRoomTitle){
+          // Show warning but less severe than full disconnection
+          const warn = '\u26A0\uFE0F'; // ⚠️
+          els.joinedRoomTitle.textContent = state._baseRoomTitle + ' (' + warn + ' ' + (window.i18n.Degraded || 'LIMITED') + ')';
         }
         break;
       case 'disconnected':
@@ -144,14 +152,23 @@ if(window.__chatAppBooted){
       }
     }
     
+    // Check SignalR connection state
+    if(!hub) return 'disconnected';
+    const stateStr = hub.state && hub.state.toLowerCase ? hub.state.toLowerCase() : '';
+    const isSignalRConnected = (stateStr === 'connected');
+    
+    // If SignalR connected but backend unhealthy, show degraded state
+    const healthCheckAge = Date.now() - _healthState.lastCheck;
+    if(isSignalRConnected && healthCheckAge < 30000 && !_healthState.isHealthy){
+      return 'degraded';  // SignalR connected but backend (Redis/Cosmos) unhealthy
+    }
+    
     // Trust recent event-driven state (within last 5 seconds)
     if(stateAge < 5000){
       return _connectionState.current;
     }
     
     // Fall back to polling hub.state for stale/missed events
-    if(!hub) return 'disconnected';
-    const stateStr = hub.state && hub.state.toLowerCase ? hub.state.toLowerCase() : '';
     if(stateStr==='connected') return 'connected';
     if(stateStr==='connecting') return 'reconnecting';
     if(stateStr==='reconnecting') return 'reconnecting';
@@ -160,6 +177,67 @@ if(window.__chatAppBooted){
   function startConnectionStateLoop(){
     // Poll every 2.5s to catch any missed transitions (safety net)
     setInterval(()=>{ applyConnectionVisual(computeConnectionState()); }, 2500);
+  }
+
+  // ---------------- Health Check and Heartbeat ----------------
+  let _healthState = {
+    isHealthy: true,
+    lastCheck: 0,
+    redis: 'Unknown',
+    cosmos: 'Unknown'
+  };
+
+  async function checkBackendHealth(){
+    if(!hub || hub.state !== 'Connected') return;
+    try {
+      const health = await hub.invoke('GetHealthStatus');
+      _healthState.isHealthy = health.isHealthy || false;
+      _healthState.redis = health.redis || 'Unknown';
+      _healthState.cosmos = health.cosmos || 'Unknown';
+      _healthState.lastCheck = Date.now();
+      console.debug('[Health]', health.isHealthy ? '✓ Healthy' : '✗ Unhealthy', 
+        `Redis: ${health.redis}, Cosmos: ${health.cosmos}`);
+    } catch(err) {
+      console.warn('[Health] Check failed:', err);
+      _healthState.isHealthy = false;
+      _healthState.redis = 'Error';
+      _healthState.cosmos = 'Error';
+      _healthState.lastCheck = Date.now();
+    }
+  }
+
+  async function sendHeartbeat(){
+    if(!hub || hub.state !== 'Connected') return;
+    try {
+      const response = await hub.invoke('Heartbeat');
+      if(response.acknowledged && response.health){
+        _healthState.isHealthy = response.health.isHealthy || false;
+        _healthState.redis = response.health.redis || 'Unknown';
+        _healthState.cosmos = response.health.cosmos || 'Unknown';
+        _healthState.lastCheck = Date.now();
+        console.debug('[Heartbeat] Acknowledged', response.timestamp);
+      }
+    } catch(err) {
+      console.warn('[Heartbeat] Failed:', err);
+    }
+  }
+
+  function startHealthAndHeartbeatPolling(){
+    // Health check every 15 seconds
+    setInterval(async () => {
+      await checkBackendHealth();
+    }, 15000);
+
+    // Heartbeat every 30 seconds
+    setInterval(async () => {
+      await sendHeartbeat();
+    }, 30000);
+
+    // Initial checks after a short delay (let connection stabilize)
+    setTimeout(async () => {
+      await checkBackendHealth();
+      await sendHeartbeat();
+    }, 2000);
   }
 
   // --------------- Rendering ---------------
@@ -1393,7 +1471,8 @@ if(window.__chatAppBooted){
     setLoading(true); 
     probeAuth(); 
     wireUi(); 
-    startConnectionStateLoop(); 
+    startConnectionStateLoop();
+    startHealthAndHeartbeatPolling();
     installOfflineHandlers();
     // Capture initial title for blinking restoration
     initTitleBlink();
