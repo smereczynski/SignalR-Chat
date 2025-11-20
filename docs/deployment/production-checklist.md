@@ -2,6 +2,17 @@
 
 Use this checklist before deploying SignalR Chat to production to ensure security, performance, and reliability.
 
+
+## GitHub Actions Setup
+
+**Required:**
+- [GitHub Variables Guide](github-variables.md)
+- [GitHub Secrets Guide](github-secrets.md)
+
+Ensure all required variables and secrets are set for your environment before production deployment.
+
+---
+
 ## 🔒 Security
 
 ### Authentication & Secrets
