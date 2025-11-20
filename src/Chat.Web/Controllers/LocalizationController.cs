@@ -40,6 +40,7 @@ namespace Chat.Web.Controllers
                 MessagesWaitingToSend = _localizer["MessagesWaitingToSend"].Value,
                 WhosHere = _localizer["WhosHere"].Value,
                 Reconnecting = _localizer["Reconnecting"].Value,
+                Degraded = _localizer["Degraded"].Value,
                 Disconnected = _localizer["Disconnected"].Value,
                 MessageFailed = _localizer["MessageFailed"].Value,
                 MessagePending = _localizer["MessagePending"].Value,
