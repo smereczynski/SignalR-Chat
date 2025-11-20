@@ -29,7 +29,11 @@ public class UsersCreateModel : PageModel
     [BindProperty]
     public InputModel Input { get; set; } = new();
 
-    public void OnGet() { }
+    public void OnGet()
+    {
+        // No initialization required - displays empty form for user creation
+        // Actual user creation happens in OnPost handler
+    }
 
     public IActionResult OnPost()
     {
