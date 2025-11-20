@@ -1,0 +1,29 @@
+@page
+@using Microsoft.Extensions.Localization
+@inject IStringLocalizer<Chat.Web.Resources.SharedResources> Localizer
+@model RoomsIndexModel
+@{
+    ViewData["Title"] = Localizer["Rooms"];
+    Layout = "/Pages/Shared/_Layout.cshtml";
+}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2>@Localizer["Rooms"]</h2>
+    <a asp-page="Create" class="btn btn-primary">@Localizer["CreateNewRoom"]</a>
+</div>
+<div class="table-responsive">
+    <table class="table table-striped table-hover">
+        <thead class="table-dark">
+            <tr>
+                <th>@Localizer["RoomName"]</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var r in Model.Rooms)
+            {
+                <tr>
+                    <td>@r</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>

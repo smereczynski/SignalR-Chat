@@ -41,7 +41,10 @@ namespace Chat.IntegrationTests
                     ["Features:EnableRestPostMessages"] = "true",
                     // Default MarkRead rate limiting for tests
                     ["RateLimiting:MarkRead:MarkReadPermitLimit"] = "100",
-                    ["RateLimiting:MarkRead:MarkReadWindowSeconds"] = "10"
+                    ["RateLimiting:MarkRead:MarkReadWindowSeconds"] = "10",
+                    // Configure home tenant for admin authorization tests
+                    ["EntraId:Authorization:HomeTenantId"] = "aaaaaaaa-1111-1111-1111-111111111111",
+                    ["EntraId:Authorization:AdminRoleValue"] = "Admin.ReadWrite"
                 };
                 config.AddInMemoryCollection(dict!);
             });

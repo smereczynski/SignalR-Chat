@@ -215,6 +215,9 @@
   <data name="Logout" xml:space="preserve">
     <value>Atsijungti</value>
   </data>
+  <data name="AdminPanel" xml:space="preserve">
+    <value>Administratoriaus skydelis</value>
+  </data>
   
   <!-- Message Status -->
   <data name="Delivered" xml:space="preserve">
