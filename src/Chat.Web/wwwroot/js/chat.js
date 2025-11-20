@@ -170,6 +170,10 @@ if(window.__chatAppBooted){
     
     // Fall back to polling hub.state for stale/missed events
     if(stateStr==='connected') return 'connected';
+    // If hub stuck in connecting/reconnecting for >60s, consider it disconnected
+    if((stateStr==='connecting' || stateStr==='reconnecting') && stateAge >= 60000){
+      return 'disconnected';
+    }
     if(stateStr==='connecting') return 'reconnecting';
     if(stateStr==='reconnecting') return 'reconnecting';
     return 'disconnected';
@@ -807,13 +811,16 @@ if(window.__chatAppBooted){
       applyConnectionVisual('connected');
     });
   c.onreconnecting(err => { 
-    // Mark automatic reconnection state
-    _connectionState = {
-      current: 'reconnecting',
-      lastUpdate: Date.now(),
-      isReconnecting: true,
-      reconnectSource: 'automatic'
-    };
+    // Mark automatic reconnection state (only update timestamp if not already reconnecting)
+    // This preserves the original reconnection start time for timeout calculation
+    if(!_connectionState.isReconnecting || _connectionState.reconnectSource !== 'automatic'){
+      _connectionState = {
+        current: 'reconnecting',
+        lastUpdate: Date.now(),
+        isReconnecting: true,
+        reconnectSource: 'automatic'
+      };
+    }
     
     log('warn','hub.reconnecting', {message: err && err.message}); 
     applyConnectionVisual('reconnecting'); 
