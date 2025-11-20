@@ -278,6 +278,9 @@
   <data name="Logout" xml:space="preserve">
     <value>Wyloguj</value>
   </data>
+  <data name="AdminPanel" xml:space="preserve">
+    <value>Panel administracyjny</value>
+  </data>
   
   <!-- Message Status -->
   <data name="Delivered" xml:space="preserve">
@@ -320,5 +323,127 @@
   </data>
   <data name="EmailAndCodeRequired" xml:space="preserve">
     <value>Email i kod są wymagane</value>
+  </data>
+  
+  <!-- Admin Panel -->
+  <data name="Dashboard" xml:space="preserve">
+    <value>Panel główny</value>
+  </data>
+  <data name="AdminDashboard" xml:space="preserve">
+    <value>Panel administracyjny</value>
+  </data>
+  <data name="BackToChat" xml:space="preserve">
+    <value>Powrót do czatu</value>
+  </data>
+  <data name="ManageUserAccounts" xml:space="preserve">
+    <value>Zarządzaj kontami użytkowników i uprawnieniami.</value>
+  </data>
+  <data name="ManageUsers" xml:space="preserve">
+    <value>Zarządzaj użytkownikami</value>
+  </data>
+  <data name="ViewManageChatRooms" xml:space="preserve">
+    <value>Przeglądaj i zarządzaj pokojami czatu.</value>
+  </data>
+  <data name="ManageRooms" xml:space="preserve">
+    <value>Zarządzaj pokojami</value>
+  </data>
+  <data name="SystemStatus" xml:space="preserve">
+    <value>Status systemu</value>
+  </data>
+  <data name="ViewSystemHealth" xml:space="preserve">
+    <value>Przeglądaj zdrowie i diagnostykę systemu.</value>
+  </data>
+  <data name="HealthCheck" xml:space="preserve">
+    <value>Sprawdzenie zdrowia</value>
+  </data>
+  <data name="QuickStats" xml:space="preserve">
+    <value>Szybkie statystyki</value>
+  </data>
+  <data name="Metric" xml:space="preserve">
+    <value>Metryka</value>
+  </data>
+  <data name="Value" xml:space="preserve">
+    <value>Wartość</value>
+  </data>
+  <data name="TotalUsers" xml:space="preserve">
+    <value>Wszystkich użytkowników</value>
+  </data>
+  <data name="ActiveRooms" xml:space="preserve">
+    <value>Aktywne pokoje</value>
+  </data>
+  <data name="YourTenant" xml:space="preserve">
+    <value>Twój tenant</value>
+  </data>
+  <data name="YourRole" xml:space="preserve">
+    <value>Twoja rola</value>
+  </data>
+  <data name="NotAvailable" xml:space="preserve">
+    <value>Niedostępne</value>
+  </data>
+  <data name="Users" xml:space="preserve">
+    <value>Użytkownicy</value>
+  </data>
+  <data name="Rooms" xml:space="preserve">
+    <value>Pokoje</value>
+  </data>
+  <data name="CreateNewUser" xml:space="preserve">
+    <value>Utwórz nowego użytkownika</value>
+  </data>
+  <data name="CreateNewRoom" xml:space="preserve">
+    <value>Utwórz nowy pokój</value>
+  </data>
+  <data name="UserName" xml:space="preserve">
+    <value>Nazwa użytkownika</value>
+  </data>
+  <data name="Mobile" xml:space="preserve">
+    <value>Telefon komórkowy</value>
+  </data>
+  <data name="Enabled" xml:space="preserve">
+    <value>Włączony</value>
+  </data>
+  <data name="AssignedRooms" xml:space="preserve">
+    <value>Przypisane pokoje</value>
+  </data>
+  <data name="Actions" xml:space="preserve">
+    <value>Akcje</value>
+  </data>
+  <data name="Yes" xml:space="preserve">
+    <value>Tak</value>
+  </data>
+  <data name="No" xml:space="preserve">
+    <value>Nie</value>
+  </data>
+  <data name="Enable" xml:space="preserve">
+    <value>Włącz</value>
+  </data>
+  <data name="Disable" xml:space="preserve">
+    <value>Wyłącz</value>
+  </data>
+  <data name="AssignRooms" xml:space="preserve">
+    <value>Przypisz pokoje</value>
+  </data>
+  <data name="RoomName" xml:space="preserve">
+    <value>Nazwa pokoju</value>
+  </data>
+  <data name="Cancel" xml:space="preserve">
+    <value>Anuluj</value>
+  </data>
+  <data name="Create" xml:space="preserve">
+    <value>Utwórz</value>
+  </data>
+  <data name="Save" xml:space="preserve">
+    <value>Zapisz</value>
+  </data>
+  <data name="Back" xml:space="preserve">
+    <value>Wstecz</value>
+  </data>
+  <data name="CreateUser" xml:space="preserve">
+    <value>Utwórz użytkownika</value>
+  </data>
+  <data name="AssignRoomsToUser" xml:space="preserve">
+    <value>Przypisz pokoje do {0}</value>
+  </data>
+  <data name="EnabledQuestion" xml:space="preserve">
+    <value>Włączony?</value>
   </data>
 </root>

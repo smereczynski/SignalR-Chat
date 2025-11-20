@@ -428,6 +428,35 @@ namespace Chat.Web
 
             services.AddRazorPages();
             services.AddControllers();
+            
+            // Register authorization handler for home tenant validation
+            services.AddSingleton<IAuthorizationHandler, Authorization.HomeTenantHandler>();
+
+            // Authorization policies
+            services.AddAuthorization(options =>
+            {
+                // Default policy: authenticated users (any tenant)
+                options.DefaultPolicy = new AuthorizationPolicyBuilder()
+                    .RequireAuthenticatedUser()
+                    .Build();
+                
+                // Admin policy: requires Admin.ReadWrite app role + home tenant
+                // Tenant validation happens both in OnTokenValidated (for production)
+                // and via HomeTenantRequirement (for testing and defense-in-depth)
+                var entraIdOpts = new EntraIdOptions();
+                Configuration.GetSection("EntraId").Bind(entraIdOpts);
+                
+                if (!string.IsNullOrWhiteSpace(entraIdOpts.Authorization?.AdminRoleValue))
+                {
+                    options.AddPolicy("RequireAdminRole", policy =>
+                    {
+                        policy.RequireAuthenticatedUser();
+                        policy.RequireRole(entraIdOpts.Authorization.AdminRoleValue);
+                        policy.Requirements.Add(new Authorization.HomeTenantRequirement());
+                    });
+                }
+            });
+            
             services.AddSingleton<Services.IInProcessMetrics, Services.InProcessMetrics>();
             
             // HSTS configuration for production (1-year max-age, preload, includeSubDomains)
@@ -651,6 +680,58 @@ namespace Chat.Web
                                             context.HandleResponse();
                                             context.Response.Redirect("/login?reason=not_authorized");
                                             return;
+                                        }
+                                    }
+                                    
+                                    // Home tenant validation for admin role
+                                    // Remove admin role claim from external tenant users for security
+                                    var adminRoleValue = entraIdOptions.Authorization?.AdminRoleValue ?? "Admin.ReadWrite";
+                                    var hasAdminRole = context.Principal?.IsInRole(adminRoleValue) == true;
+                                    
+                                    if (hasAdminRole)
+                                    {
+                                        // Determine home tenant ID (explicit or fallback to TenantId if not "organizations")
+                                        var homeTenantId = entraIdOptions.Authorization?.HomeTenantId;
+                                        if (string.IsNullOrWhiteSpace(homeTenantId) && 
+                                            !string.Equals(entraIdOptions.TenantId, "organizations", StringComparison.OrdinalIgnoreCase))
+                                        {
+                                            homeTenantId = entraIdOptions.TenantId;
+                                        }
+                                        
+                                        // Check if user is from home tenant
+                                        var isHomeTenant = !string.IsNullOrWhiteSpace(homeTenantId) &&
+                                                          !string.IsNullOrWhiteSpace(tenantId) &&
+                                                          string.Equals(tenantId, homeTenantId, StringComparison.OrdinalIgnoreCase);
+                                        
+                                        if (!isHomeTenant)
+                                        {
+                                            // External tenant user with admin role - remove role claim
+                                            logger.LogWarning(
+                                                "OnTokenValidated: External tenant user {Upn} from tenant {TenantId} has admin role {AdminRole} - removing claim (home tenant: {HomeTenantId})",
+                                                Chat.Web.Utilities.LogSanitizer.Sanitize(upn),
+                                                Chat.Web.Utilities.LogSanitizer.Sanitize(tenantId ?? "<null>"),
+                                                adminRoleValue,
+                                                Chat.Web.Utilities.LogSanitizer.Sanitize(homeTenantId ?? "<null>"));
+                                            
+                                            var identity = context.Principal?.Identity as ClaimsIdentity;
+                                            if (identity != null)
+                                            {
+                                                var roleClaims = identity.FindAll(ClaimTypes.Role)
+                                                    .Where(c => string.Equals(c.Value, adminRoleValue, StringComparison.OrdinalIgnoreCase))
+                                                    .ToList();
+                                                
+                                                foreach (var claim in roleClaims)
+                                                {
+                                                    identity.RemoveClaim(claim);
+                                                }
+                                            }
+                                        }
+                                        else
+                                        {
+                                            logger.LogInformation(
+                                                "OnTokenValidated: Home tenant admin user {Upn} authenticated with {AdminRole} role",
+                                                Chat.Web.Utilities.LogSanitizer.Sanitize(upn),
+                                                adminRoleValue);
                                         }
                                     }
                                     

@@ -215,6 +215,9 @@
   <data name="Logout" xml:space="preserve">
     <value>Вийти</value>
   </data>
+  <data name="AdminPanel" xml:space="preserve">
+    <value>Панель адміністратора</value>
+  </data>
   
   <!-- Message Status -->
   <data name="Delivered" xml:space="preserve">

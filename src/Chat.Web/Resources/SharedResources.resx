@@ -284,6 +284,9 @@
   <data name="Logout" xml:space="preserve">
     <value>Logout</value>
   </data>
+  <data name="AdminPanel" xml:space="preserve">
+    <value>Admin Panel</value>
+  </data>
   
   <!-- Message Status -->
   <data name="Delivered" xml:space="preserve">
@@ -308,5 +311,127 @@
   </data>
   <data name="AuthenticationFailedPleaseRetry" xml:space="preserve">
     <value>Authentication failed. Please try again.</value>
+  </data>
+  
+  <!-- Admin Panel -->
+  <data name="Dashboard" xml:space="preserve">
+    <value>Dashboard</value>
+  </data>
+  <data name="AdminDashboard" xml:space="preserve">
+    <value>Admin Dashboard</value>
+  </data>
+  <data name="BackToChat" xml:space="preserve">
+    <value>Back to Chat</value>
+  </data>
+  <data name="ManageUserAccounts" xml:space="preserve">
+    <value>Manage user accounts and permissions.</value>
+  </data>
+  <data name="ManageUsers" xml:space="preserve">
+    <value>Manage Users</value>
+  </data>
+  <data name="ViewManageChatRooms" xml:space="preserve">
+    <value>View and manage chat rooms.</value>
+  </data>
+  <data name="ManageRooms" xml:space="preserve">
+    <value>Manage Rooms</value>
+  </data>
+  <data name="SystemStatus" xml:space="preserve">
+    <value>System Status</value>
+  </data>
+  <data name="ViewSystemHealth" xml:space="preserve">
+    <value>View system health and diagnostics.</value>
+  </data>
+  <data name="HealthCheck" xml:space="preserve">
+    <value>Health Check</value>
+  </data>
+  <data name="QuickStats" xml:space="preserve">
+    <value>Quick Stats</value>
+  </data>
+  <data name="Metric" xml:space="preserve">
+    <value>Metric</value>
+  </data>
+  <data name="Value" xml:space="preserve">
+    <value>Value</value>
+  </data>
+  <data name="TotalUsers" xml:space="preserve">
+    <value>Total Users</value>
+  </data>
+  <data name="ActiveRooms" xml:space="preserve">
+    <value>Active Rooms</value>
+  </data>
+  <data name="YourTenant" xml:space="preserve">
+    <value>Your Tenant</value>
+  </data>
+  <data name="YourRole" xml:space="preserve">
+    <value>Your Role</value>
+  </data>
+  <data name="NotAvailable" xml:space="preserve">
+    <value>Not available</value>
+  </data>
+  <data name="Users" xml:space="preserve">
+    <value>Users</value>
+  </data>
+  <data name="Rooms" xml:space="preserve">
+    <value>Rooms</value>
+  </data>
+  <data name="CreateNewUser" xml:space="preserve">
+    <value>Create New User</value>
+  </data>
+  <data name="CreateNewRoom" xml:space="preserve">
+    <value>Create New Room</value>
+  </data>
+  <data name="UserName" xml:space="preserve">
+    <value>Username</value>
+  </data>
+  <data name="Mobile" xml:space="preserve">
+    <value>Mobile</value>
+  </data>
+  <data name="Enabled" xml:space="preserve">
+    <value>Enabled</value>
+  </data>
+  <data name="AssignedRooms" xml:space="preserve">
+    <value>Assigned Rooms</value>
+  </data>
+  <data name="Actions" xml:space="preserve">
+    <value>Actions</value>
+  </data>
+  <data name="Yes" xml:space="preserve">
+    <value>Yes</value>
+  </data>
+  <data name="No" xml:space="preserve">
+    <value>No</value>
+  </data>
+  <data name="Enable" xml:space="preserve">
+    <value>Enable</value>
+  </data>
+  <data name="Disable" xml:space="preserve">
+    <value>Disable</value>
+  </data>
+  <data name="AssignRooms" xml:space="preserve">
+    <value>Assign Rooms</value>
+  </data>
+  <data name="RoomName" xml:space="preserve">
+    <value>Room Name</value>
+  </data>
+  <data name="Cancel" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="Create" xml:space="preserve">
+    <value>Create</value>
+  </data>
+  <data name="Save" xml:space="preserve">
+    <value>Save</value>
+  </data>
+  <data name="Back" xml:space="preserve">
+    <value>Back</value>
+  </data>
+  <data name="CreateUser" xml:space="preserve">
+    <value>Create User</value>
+  </data>
+  <data name="AssignRoomsToUser" xml:space="preserve">
+    <value>Assign Rooms to {0}</value>
+  </data>
+  <data name="EnabledQuestion" xml:space="preserve">
+    <value>Enabled?</value>
   </data>
 </root>
