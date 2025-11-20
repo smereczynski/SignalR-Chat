@@ -51,13 +51,6 @@ param entraIdInstance string = ''
 @description('Entra ID tenant ID or "organizations" for multi-tenant')
 param entraIdTenantId string = 'organizations'
 
-@description('Entra ID application (client) ID')
-param entraIdClientId string = ''
-
-@description('Entra ID client secret (optional; prefer Key Vault)')
-@secure()
-param entraIdClientSecret string = ''
-
 @description('Entra ID sign-in callback path')
 param entraIdCallbackPath string = '/signin-oidc'
 
@@ -237,8 +230,6 @@ module appService './modules/app-service.bicep' = {
     // Entra ID parameters
     entraIdInstance: entraIdInstance
     entraIdTenantId: entraIdTenantId
-    entraIdClientId: entraIdClientId
-    entraIdClientSecret: entraIdClientSecret
     entraIdCallbackPath: entraIdCallbackPath
     entraIdSignedOutCallbackPath: entraIdSignedOutCallbackPath
     entraIdRequireTenantValidation: entraIdRequireTenantValidation

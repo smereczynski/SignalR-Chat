@@ -200,7 +200,6 @@ jobs:
             --parameters networkingResourceGroupName=${{ env.NETWORKING_RESOURCE_GROUP }} \
             --parameters otpPepper="${{ secrets.OTP_PEPPER }}" \
             --parameters entraIdClientId="${{ secrets.ENTRA_ID_CLIENT_ID }}" \
-            --parameters entraIdClientSecret="${{ secrets.ENTRA_ID_CLIENT_SECRET }}" \
             --parameters entraIdAllowedTenants=${{ secrets.ENTRA_ID_ALLOWED_TENANTS_JSON }} \
             --parameters entraIdAutomaticSsoEnable=${{ env.ENTRA_ID_AUTOMATIC_SSO_ENABLE }} \
             --parameters entraIdAutomaticSsoAttemptCookieName="${{ env.ENTRA_ID_AUTOMATIC_SSO_ATTEMPT_COOKIE_NAME }}" \
