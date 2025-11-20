@@ -1,0 +1,54 @@
+@page
+@using Microsoft.Extensions.Localization
+@inject IStringLocalizer<Chat.Web.Resources.SharedResources> Localizer
+@model UsersIndexModel
+@{
+    ViewData["Title"] = Localizer["Users"];
+}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <a asp-page="Create" class="btn btn-primary">@Localizer["CreateNewUser"]</a>
+</div>
+<div class="table-responsive">
+    <table class="table table-striped table-hover">
+        <thead class="table-dark">
+            <tr>
+                <th>@Localizer["UserName"]</th>
+                <th>@Localizer["Email"]</th>
+                <th>@Localizer["Mobile"]</th>
+                <th>@Localizer["Enabled"]</th>
+                <th>@Localizer["AssignedRooms"]</th>
+                <th>@Localizer["Actions"]</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var u in Model.Users)
+            {
+                <tr>
+                    <td>@u.UserName</td>
+                    <td>@u.Email</td>
+                    <td>@u.MobileNumber</td>
+                    <td>
+                        @if (u.Enabled)
+                        {
+                            <span class="badge bg-success">@Localizer["Yes"]</span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-secondary">@Localizer["No"]</span>
+                        }
+                    </td>
+                    <td class="text-muted">@string.Join(", ", u.FixedRooms)</td>
+                    <td>
+                        <form method="post" asp-page-handler="ToggleEnabled" class="d-inline">
+                            <input type="hidden" name="userName" value="@u.UserName" />
+                            <button type="submit" class="btn btn-sm @(u.Enabled ? "btn-warning" : "btn-success")">
+                                @(u.Enabled ? Localizer["Disable"] : Localizer["Enable"])
+                            </button>
+                        </form>
+                        <a asp-page="AssignRooms" asp-route-userName="@u.UserName" class="btn btn-sm btn-outline-primary">@Localizer["AssignRooms"]</a>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>

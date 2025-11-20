@@ -26,20 +26,29 @@ User (External Tenant)
       - Tenant ID (tid) - External Tenant ID
   → Application validates:
       ✓ Token signature and expiration
-      ✓ User UPN exists in application database
+      ✓ Token issuer (Microsoft Identity Platform)
+      ✓ User is NOT MSA (consumer account) - explicitly denied
+      ✓ Tenant ID in AllowedTenants list (optional security layer)
+      ✓ User UPN exists in application database (MANDATORY)
   → Access granted ✅
 ```
 
 ### Key Concept: UPN-Based Authorization
 
-**CRITICAL**: Authorization is managed **in-application** using the User Principal Name (UPN) claim, not external group claims or app roles.
+⚠️ **CRITICAL**: Authorization is managed **entirely in-application** using the User Principal Name (UPN) claim from the token. The application does NOT use:
+- ❌ External group claims or group membership
+- ❌ App roles assigned in Entra ID
+- ❌ Directory roles or administrative units
+
+✅ **Authorization model**: User's UPN must exist in the application's database **before** their first login. No auto-provisioning.
 
 | Entity | Role | Responsibilities |
-|--------|------|-----------------|
+|--------|------|------------------|
 | **Home Tenant** | Application owner | Registers app, manages client secret, configures redirect URIs |
-| **External Tenant** | Customer organization | Grants admin consent for their users |
-| **Application Database** | Authorization store | Stores authorized UPNs and their permissions |
+| **External Tenant** | Customer organization | Grants admin consent (or users consent individually) |
+| **Application Database** | Authorization store | Stores authorized UPNs - **MUST be pre-populated** |
 | **Token Issuer** | Microsoft Identity Platform | Issues tokens on behalf of External Tenant |
+| **Application Logic** | Authorization enforcer | Validates UPN exists in database, blocks MSA accounts |
 
 **Example:**
 
@@ -104,9 +113,9 @@ The application owner (typically the SignalR Chat deployment team) performs thes
 
 ### Step 2: Configure Token Claims (Optional)
 
-The application uses standard claims (name, email, UPN) which are included by default. No additional token configuration is required for basic authentication.
+The application uses standard claims (name, email, UPN) which are included by default in ID tokens. No additional token configuration is required for basic authentication.
 
-**Optional**: For enhanced user experience, you can add optional claims:
+**Optional**: For enhanced consistency, you can add optional claims:
 
 1. **Navigate to Token Configuration**
    ```
@@ -124,6 +133,8 @@ The application uses standard claims (name, email, UPN) which are included by de
    - Click **Add**
 
 This ensures the application receives `preferred_username` claim which contains the user's UPN (e.g., `alice@fabrikam.com`).
+
+⚠️ **Note**: The application does NOT use group claims, app roles, or directory roles for authorization. Authorization is UPN-based only.
 
 ### Step 3: Configure API Permissions
 
@@ -262,7 +273,6 @@ Each customer organization (external tenant) must perform these steps to enable 
    - Sign in with Global Admin or Privileged Role Admin credentials
    - Review requested permissions:
      - ✅ Sign you in and read your profile (`User.Read`)
-     - ✅ Read group memberships (`GroupMember.Read.All`)
 
 3. **Grant Consent**
    
@@ -333,12 +343,19 @@ UPDATE users SET upn = 'alice@fabrikam.com' WHERE username = 'alice';
         "fabrikam.onmicrosoft.com",
         "contoso.onmicrosoft.com",
         "northwind.onmicrosoft.com"
-      ]
+      ],
+      "RequireTenantValidation": true
     },
     
     "Fallback": {
       "EnableOtp": true,
       "OtpForUnauthorizedUsers": false
+    },
+    
+    "AutomaticSso": {
+      "Enable": false,
+      "AttemptOncePerSession": true,
+      "AttemptCookieName": "sso_attempted"
     }
   }
 }
@@ -412,7 +429,18 @@ Authorization is managed via the application's user database (Cosmos DB). For ea
 - Users with `upn: null` or `upn: ""` **CANNOT** log in via Entra ID
 - UPN must exactly match the `preferred_username` claim from the Entra ID token
 - UPN is case-insensitive (e.g., `Alice@Fabrikam.com` matches `alice@fabrikam.com`)
+- **Microsoft consumer accounts (MSA)** are explicitly **BLOCKED** - only organizational accounts allowed
 - OTP authentication still works for users without UPN (if `EnableOtp: true`)
+
+**Configuration Options:**
+
+| Setting | Description | Default |
+|---------|-------------|---------|   | `Authorization.AllowedTenants` | List of allowed tenant domains/IDs (empty = allow any tenant) | `[]` |
+| `Authorization.RequireTenantValidation` | Enforce AllowedTenants list | `true` |
+| `Fallback.EnableOtp` | Allow OTP as alternative authentication | `true` |
+| `Fallback.OtpForUnauthorizedUsers` | Allow OTP fallback for users denied by Entra ID | `false` |
+| `AutomaticSso.Enable` | Attempt silent SSO on first visit to / or /chat | `false` |
+| `AutomaticSso.AttemptOncePerSession` | Only try automatic SSO once per browser session | `true` |
 
 ### Azure App Service Configuration
 
@@ -427,8 +455,10 @@ az webapp config appsettings set \
     "EntraId__TenantId=organizations" \
     "EntraId__Authorization__AllowedTenants__0=fabrikam.onmicrosoft.com" \
     "EntraId__Authorization__AllowedTenants__1=contoso.onmicrosoft.com" \
+    "EntraId__Authorization__RequireTenantValidation=true" \
     "EntraId__Fallback__EnableOtp=true" \
-    "EntraId__Fallback__OtpForUnauthorizedUsers=false"
+    "EntraId__Fallback__OtpForUnauthorizedUsers=false" \
+    "EntraId__AutomaticSso__Enable=false"
 ```
 
 Store secret in Azure Key Vault:
@@ -531,16 +561,26 @@ The application validates:
 
 ### Issue: "Your organization is not authorized to access this application"
 
-**Cause**: User's tenant ID (`tid`) is not in `AllowedTenants` list (if tenant restrictions are enabled).
+**Cause**: User's tenant ID (`tid`) is not in `AllowedTenants` list AND `RequireTenantValidation: true`.
 
 **Solution**:
-1. Verify tenant domain or ID in user's token (check `tid` claim)
+1. Verify tenant domain or ID in user's token (check `tid` claim in logs)
 2. Add tenant to configuration:
    ```json
    "AllowedTenants": ["fabrikam.onmicrosoft.com", "contoso.onmicrosoft.com"]
    ```
 3. Deploy configuration update
-4. **Or** remove `AllowedTenants` restriction to allow any tenant (authorization via UPN only)
+4. **Or** set `RequireTenantValidation: false` to skip tenant validation (authorization via UPN only)
+
+### Issue: "Microsoft consumer accounts are not supported"
+
+**Cause**: User attempted to sign in with a personal Microsoft account (e.g., @outlook.com, @hotmail.com).
+
+**Solution**:
+This is **by design**. The application only accepts organizational accounts (Entra ID). Users must:
+- Use their work/school account from an organization
+- Contact their IT admin to provision an organizational account
+- Use OTP authentication if enabled (`EnableOtp: true`)
 
 ### Issue: "You are not authorized to access this application. Please contact your administrator."
 
@@ -660,10 +700,11 @@ Application checks user's roles/permissions for fine-grained authorization.
 ## References
 
 - [Microsoft Entra ID Multi-Tenant Apps](https://learn.microsoft.com/entra/identity-platform/howto-convert-app-to-be-multi-tenant)
-- [Group Claims in Tokens](https://learn.microsoft.com/entra/identity-platform/optional-claims#configuring-groups-optional-claims)
 - [Admin Consent Workflow](https://learn.microsoft.com/entra/identity-platform/v2-admin-consent)
 - [Token Reference (ID Tokens)](https://learn.microsoft.com/entra/identity-platform/id-tokens)
+- [Optional Claims](https://learn.microsoft.com/entra/identity-platform/optional-claims)
 - [Security Best Practices](https://learn.microsoft.com/entra/identity-platform/security-best-practices-for-app-registration)
+- [UPN Claim Documentation](https://learn.microsoft.com/entra/identity-platform/id-token-claims-reference#preferred_username)
 
 ---
 
@@ -671,21 +712,21 @@ Application checks user's roles/permissions for fine-grained authorization.
 
 ### Home Tenant Responsibilities (One-Time Setup)
 1. Register multi-tenant application
-2. Enable group claims in token configuration
-3. Configure API permissions + grant admin consent for home tenant
-4. Create client secret and store securely
-5. Generate admin consent URLs for external tenants
+2. Configure API permissions (`User.Read` only)
+3. Create client secret and store securely
+4. Generate admin consent URLs for external tenants
+5. Set up application database for authorized users
 
 ### External Tenant Responsibilities (Per Organization)
-1. Grant admin consent to application
-2. Create security group for authorized users
-3. Add users to security group
-4. Provide group Object ID to application owner
+1. Grant admin consent to application (or allow users to consent individually)
+2. Compile list of authorized user UPNs
+3. Provide user UPNs to application owner
+4. Optionally provide tenant ID for `AllowedTenants` validation
 
 ### Application Owner Responsibilities (Per Onboarding)
-1. Receive group Object ID from external tenant
-2. Add to `AllowedGroups` configuration
-3. Deploy configuration update
-4. Verify test authentication
+1. Receive user UPNs from external tenant admin
+2. Add users to application database with `upn` field populated
+3. (Optional) Add tenant domain/ID to `AllowedTenants` configuration
+4. Verify test user can authenticate
 
-**Result**: Users from external tenants can authenticate with their organizational credentials, and access is controlled by group membership in their own tenant.
+**Result**: Users from external tenants can authenticate with their organizational credentials, and access is controlled by UPN presence in the application database.

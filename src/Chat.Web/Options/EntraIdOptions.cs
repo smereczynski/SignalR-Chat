@@ -66,7 +66,7 @@ namespace Chat.Web.Options
     public class EntraIdAuthorizationOptions
     {
         /// <summary>
-        /// List of allowed tenant domains or tenant IDs. Empty list = allow any tenant.
+        /// List of allowed tenant domains or tenant IDs for regular user access. Empty list = allow any tenant.
         /// Critical for security in multi-tenant scenarios.
         /// </summary>
         /// <remarks>
@@ -81,6 +81,20 @@ namespace Chat.Web.Options
         /// If false, any tenant is allowed (authorization only via UPN in database).
         /// </summary>
         public bool RequireTenantValidation { get; set; } = true;
+
+        /// <summary>
+        /// Home tenant ID (GUID). Used to restrict admin access to home tenant users only.
+        /// Admin role will be ignored for users from external tenants.
+        /// If not set, TenantId property is used as fallback (only if not "organizations").
+        /// </summary>
+        public string HomeTenantId { get; set; } = string.Empty;
+
+        /// <summary>
+        /// App role value required for admin panel access. Default: "Admin.ReadWrite".
+        /// Users with this role can access /Admin/* pages and see the admin cog icon.
+        /// IMPORTANT: Admin access is restricted to home tenant users only.
+        /// </summary>
+        public string AdminRoleValue { get; set; } = "Admin.ReadWrite";
     }
 
     /// <summary>
