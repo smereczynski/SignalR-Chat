@@ -44,6 +44,12 @@
                 <button type="button" id="btn-language" class="btn-language" title="@Localizer["ChangeLanguage"]" data-bs-toggle="modal" data-bs-target="#languageModal">
                     <span id="currentLanguageFlag" class="flag-icon">🌐</span>
                 </button>
+                @if (User.IsInRole("Admin.ReadWrite"))
+                {
+                    <a href="/Admin" class="btn-admin" title="@Localizer["AdminPanel"]" target="_blank">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-settings"><circle cx="12" cy="12" r="3"></circle><path d="M12 1v6m0 6v6m5.656-13.656L15.828 7.172M8.172 16.828l-1.828 1.828m13.656 1.828L18.172 16.828m-10.828-10.828L5.516 4.172M1 12h6m6 0h6"></path></svg>
+                    </a>
+                }
                 <button type="button" id="btn-logout" class="btn-sign-out" title="@Localizer["Logout"]">
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-log-out"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
                 </button>

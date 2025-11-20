@@ -215,6 +215,9 @@
   <data name="Logout" xml:space="preserve">
     <value>Abmelden</value>
   </data>
+  <data name="AdminPanel" xml:space="preserve">
+    <value>Admin-Panel</value>
+  </data>
   
   <!-- Message Status -->
   <data name="Delivered" xml:space="preserve">

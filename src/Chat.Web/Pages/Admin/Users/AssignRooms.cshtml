@@ -1,0 +1,31 @@
+@page "{userName}"
+@using Microsoft.Extensions.Localization
+@inject IStringLocalizer<Chat.Web.Resources.SharedResources> Localizer
+@model UsersAssignRoomsModel
+@{
+    ViewData["Title"] = Localizer["AssignRooms"];
+    Layout = "/Pages/Shared/_Layout.cshtml";
+}
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <h2 class="mb-4">@Localizer["AssignRoomsToUser"] @Model.UserName</h2>
+        <form method="post">
+            <input type="hidden" asp-for="UserName" />
+            <div class="mb-3">
+                @for (int i = 0; i < Model.AllRooms.Count; i++)
+                {
+                    var name = Model.AllRooms[i];
+                    var isChecked = Model.SelectedRooms.Contains(name);
+                    <div class="form-check">
+                        <input type="checkbox" name="SelectedRooms" value="@name" class="form-check-input" id="room-@i" @(isChecked ? "checked" : "") />
+                        <label class="form-check-label" for="room-@i">@name</label>
+                    </div>
+                }
+            </div>
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-primary">@Localizer["Save"]</button>
+                <a asp-page="Index" class="btn btn-secondary">@Localizer["Back"]</a>
+            </div>
+        </form>
+    </div>
+</div>
