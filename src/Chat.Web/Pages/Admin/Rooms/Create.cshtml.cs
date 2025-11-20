@@ -14,7 +14,13 @@ public class RoomsCreateModel : PageModel
     public RoomsCreateModel(IRoomsRepository rooms) => _rooms = rooms;
     [BindProperty, Required]
     public string Name { get; set; } = string.Empty;
-    public void OnGet() { }
+
+    public void OnGet()
+    {
+        // No initialization required - displays empty form for room creation
+        // Actual room creation happens in OnPost handler
+    }
+
     public IActionResult OnPost()
     {
         if (!ModelState.IsValid) return Page();

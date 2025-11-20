@@ -11,15 +11,15 @@
         <h2 class="mb-4">@Localizer["CreateUser"]</h2>
         <form method="post">
             <div class="mb-3">
-                <label asp-for="Input.UserName" class="form-label">@Localizer["UserName"]</label>
+                <label for="Input_UserName" class="form-label">@Localizer["UserName"]</label>
                 <input asp-for="Input.UserName" class="form-control" />
             </div>
             <div class="mb-3">
-                <label asp-for="Input.Email" class="form-label">@Localizer["Email"]</label>
+                <label for="Input_Email" class="form-label">@Localizer["Email"]</label>
                 <input asp-for="Input.Email" type="email" class="form-control" />
             </div>
             <div class="mb-3">
-                <label asp-for="Input.MobileNumber" class="form-label">@Localizer["GSM"]</label>
+                <label for="Input_MobileNumber" class="form-label">@Localizer["GSM"]</label>
                 <input asp-for="Input.MobileNumber" type="tel" class="form-control" />
             </div>
             <div class="mb-3 form-check">
