@@ -4,10 +4,8 @@
 @model RoomsIndexModel
 @{
     ViewData["Title"] = Localizer["Rooms"];
-    Layout = "/Pages/Shared/_Layout.cshtml";
 }
 <div class="d-flex justify-content-between align-items-center mb-3">
-    <h2>@Localizer["Rooms"]</h2>
     <a asp-page="Create" class="btn btn-primary">@Localizer["CreateNewRoom"]</a>
 </div>
 <div class="table-responsive">

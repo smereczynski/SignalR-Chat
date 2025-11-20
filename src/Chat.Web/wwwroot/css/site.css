@@ -72,8 +72,7 @@
   max-width: 180px;
 }
 .sidebar .profile .btn-language,
-.sidebar .profile .btn-sign-out,
-.sidebar .profile .btn-admin {
+.sidebar .profile .btn-sign-out {
   background: none;
   border: none;
   display: flex;
@@ -82,12 +81,9 @@
   padding: 4px;
   cursor: pointer;
   transition: opacity 0.2s;
-  text-decoration: none;
-  color: inherit;
 }
 .sidebar .profile .btn-language:hover,
-.sidebar .profile .btn-sign-out:hover,
-.sidebar .profile .btn-admin:hover {
+.sidebar .profile .btn-sign-out:hover {
   opacity: 0.8;
 }
 .sidebar .profile .btn-language .flag-icon,
