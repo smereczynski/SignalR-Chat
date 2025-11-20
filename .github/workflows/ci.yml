@@ -38,6 +38,9 @@ jobs:
     - name: Build frontend assets
       run: npm run build:prod
     
+    - name: Clean .NET build artifacts (for translation changes)
+      run: rm -rf src/Chat.Web/bin src/Chat.Web/obj
+    
     - name: Restore .NET dependencies
       run: dotnet restore src/Chat.sln
     

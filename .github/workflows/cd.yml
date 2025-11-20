@@ -65,7 +65,7 @@ jobs:
   # ==========================================
   build:
     name: Build Application
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
     
     steps:
     - name: Checkout code
@@ -82,11 +82,14 @@ jobs:
         node-version: '20.x'
         cache: 'npm'
     
-    - name: Restore npm dependencies
-      run: npm ci
+    - name: Install npm dependencies
+      run: npm install
     
     - name: Build frontend assets
       run: npm run build:prod
+    
+    - name: Clean .NET build artifacts (for translation changes)
+      run: rm -rf src/Chat.Web/bin src/Chat.Web/obj
     
     - name: Restore .NET dependencies
       run: dotnet restore src/Chat.sln
@@ -108,24 +111,20 @@ jobs:
     - name: Verify frontend assets in publish output
       run: |
         echo "Verifying Bootstrap version in published output..."
-        if (Test-Path "./publish/wwwroot/lib/bootstrap/css/bootstrap.min.css") {
-          $content = Get-Content "./publish/wwwroot/lib/bootstrap/css/bootstrap.min.css" -Raw
-          if ($content -match "v5\.(\d+)\.(\d+)") {
-            Write-Host "Bootstrap CSS found: v5.$($matches[1]).$($matches[2])"
-          } else {
-            Write-Host "Bootstrap CSS found but version not detected"
-          }
-        } else {
-          Write-Error "ERROR: Bootstrap CSS not found in publish output!"
+        if [ -f "./publish/wwwroot/lib/bootstrap/css/bootstrap.min.css" ]; then
+          VERSION=$(grep -oP 'v5\.\d+\.\d+' "./publish/wwwroot/lib/bootstrap/css/bootstrap.min.css" | head -1 || echo "version not detected")
+          echo "Bootstrap CSS found: $VERSION"
+        else
+          echo "ERROR: Bootstrap CSS not found in publish output!"
           exit 1
-        }
-        if (Test-Path "./publish/wwwroot/lib/microsoft-signalr/signalr.min.js") {
-          Write-Host "SignalR library found"
-        } else {
-          Write-Error "ERROR: SignalR library not found in publish output!"
+        fi
+        
+        if [ -f "./publish/wwwroot/lib/microsoft-signalr/signalr.min.js" ]; then
+          echo "SignalR library found"
+        else
+          echo "ERROR: SignalR library not found in publish output!"
           exit 1
-        }
-      shell: pwsh
+        fi
     
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
