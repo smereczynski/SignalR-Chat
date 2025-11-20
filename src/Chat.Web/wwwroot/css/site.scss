@@ -132,6 +132,10 @@ body {
             background: #e0b75c; // amber / warning
             h5 { color: #3a2d00; }
         }
+        &.connection-state-degraded {
+            background: #ff9f43; // orange - SignalR ok, backend unhealthy
+            h5 { color: #3a2000; }
+        }
         &.connection-state-disconnected {
             background: #d08d8d; // muted red
             h5 { color: #3a0707; }
