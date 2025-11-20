@@ -1,5 +1,7 @@
+
+// SSO-first + email OTP fallback login logic for SignalR Chat
 (function(){
-  // Lightweight helpers
+  // Helpers
   const $ = sel => document.querySelector(sel);
   const on = (el, evt, h, opts) => el && el.addEventListener(evt, h, opts||false);
   function postJson(url, data) {
@@ -13,53 +15,20 @@
   }
 
   document.addEventListener('DOMContentLoaded', () => {
-    const sel = document.getElementById('otpUserName');
-    
-    // Function to update placeholder with localized text
-    function updatePlaceholder() {
-      const sel = document.getElementById('otpUserName');
-      if (sel) {
-        const placeholder = sel.querySelector('option[data-i18n-key="selectUser"]');
-        if (placeholder && window.i18n?.selectUser) {
-          placeholder.textContent = window.i18n.selectUser;
-        }
-      }
-    }
-    
-    // Listen for i18n-loaded event (may fire before or after user list loads)
-    document.addEventListener('i18n-loaded', updatePlaceholder);
-    
-    if (sel && sel.dataset.loaded !== 'true') {
-      fetch('/api/auth/users', { credentials: 'same-origin' })
-        .then(r => { if (!r.ok) throw new Error(window.i18n?.failedToLoadUsers || 'Failed to load users'); return r.json(); })
-        .then(users => {
-          // Clear any existing content
-          sel.innerHTML = '';
-          const placeholder = document.createElement('option');
-          placeholder.value = '';
-          placeholder.disabled = true;
-          placeholder.selected = true;
-          placeholder.textContent = window.i18n?.selectUser || 'Select user...';
-          placeholder.dataset.i18nKey = 'selectUser'; // Mark for translation update
-          sel.appendChild(placeholder);
-          // Append options using textContent to avoid HTML injection
-          (users || []).forEach(u => {
-            const opt = document.createElement('option');
-            opt.value = String(u.userName || '');
-            opt.textContent = String(u.fullName || u.userName || '');
-            sel.appendChild(opt);
-          });
-          sel.dataset.loaded = 'true';
-          // If i18n already loaded before users list, update now
-          updatePlaceholder();
-        })
-        .catch(err => setOtpError(err.message));
+    // SSO/Microsoft login button logic
+    const msLoginBtn = document.getElementById('btn-microsoft-login');
+    if (msLoginBtn) {
+      msLoginBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        window.location.href = '/login/entra';
+      });
     }
 
+    // OTP fallback logic (email input, not dropdown)
     function startOtpSend(isResend){
       setOtpError(null);
-      const userName = (document.getElementById('otpUserName')?.value || '').trim();
-      if (!userName) { setOtpError(window.i18n?.userSelectionRequired || 'User selection is required'); return; }
+      const email = (document.getElementById('otpEmail')?.value || '').trim();
+      if (!email) { setOtpError(window.i18n?.emailRequired || 'Email is required'); return; }
       window.__otpFlow = window.__otpFlow || {};
       const flow = window.__otpFlow;
       const container = document.getElementById('otpContainer');
@@ -98,7 +67,7 @@
 
       if (flow.startAbort) { try { flow.startAbort.abort(); } catch(_){} }
       const controller = new AbortController(); flow.startAbort = controller;
-      flow.activeUser = userName;
+      flow.activeEmail = email;
       flow.lastSendStartTs = performance.now(); flow.lastSendCompletedTs = null;
 
       let remainingMs = countdownTotalMs; if (countdownEl) countdownEl.textContent = Math.ceil(remainingMs/1000);
@@ -107,10 +76,10 @@
       if (flow.startTimeout) clearTimeout(flow.startTimeout);
       flow.startTimeout = setTimeout(()=>{ if (!controller.signal.aborted){ try { controller.abort(); } catch(_){} } }, rawTimeoutMs);
 
-      fetch('/api/auth/start', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ userName }), credentials:'same-origin', signal: controller.signal })
+      postJson('/api/auth/start', { email })
         .then(r => { if (!r.ok) throw new Error(window.i18n?.failedToSendCode || 'Failed to send code'); return r.json().catch(()=>({})); })
         .then(() => {
-          if (flow.activeUser !== userName || controller.signal.aborted) return;
+          if (flow.activeEmail !== email || controller.signal.aborted) return;
           flow.lastSendCompletedTs = performance.now();
           if (!isResend){
             $('#otp-step1')?.classList.add('d-none');
@@ -146,16 +115,15 @@
     function executeOtpVerify(){
       setOtpError(null);
       window.__otpFlow = window.__otpFlow || {}; const flow = window.__otpFlow; if (flow.verifyInFlight) return;
-      const userName = (document.getElementById('otpUserName')?.value || '').trim();
+      const email = (document.getElementById('otpEmail')?.value || '').trim();
       const code = (document.getElementById('otpCode')?.value || '').trim();
-      if (!userName || !code) { setOtpError(window.i18n?.userAndCodeRequired || 'User and code are required'); return; }
+      if (!email || !code) { setOtpError(window.i18n?.emailAndCodeRequired || 'Email and code are required'); return; }
       const btn = document.getElementById('btn-verify-otp'); if (btn) btn.disabled = true; flow.verifyInFlight = true;
       const returnUrl = (typeof window.__returnUrl === 'string' ? window.__returnUrl : '/chat');
-      postJson('/api/auth/verify', { userName, code, returnUrl })
+      postJson('/api/auth/verify', { email, code, returnUrl })
         .then(r => { if (!r.ok) throw new Error(window.i18n?.invalidVerificationCode || 'Invalid code'); return r.json().catch(()=>({})); })
         .then(body => {
           const next = body && typeof body.nextUrl === 'string' ? body.nextUrl : '/chat';
-          // As an extra safety net, client ensures it's an app-local path
           if (next.startsWith('/') && !next.startsWith('//')) {
             window.location.href = next;
           } else {

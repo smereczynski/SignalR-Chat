@@ -47,20 +47,7 @@ namespace Chat.Web.Controllers
             _entraOptions = entraOptions;
         }
 
-        /// <summary>
-    /// Returns a lightweight list of users that can log in (for dropdown population). Public to simplify sign-in UX.
-        /// </summary>
-        [AllowAnonymous]
-        [HttpGet("users")]
-        public IActionResult Users()
-        {
-            var users = _users.GetAll();
-            // Only expose enabled users to the login dropdown
-            var list = System.Linq.Enumerable.Select(System.Linq.Enumerable.Where(users, u => (u?.Enabled) != false), u => new { userName = u.UserName, fullName = u.FullName });
-            // Manual serialization to avoid test harness PipeWriter issue.
-            var json = JsonSerializer.Serialize(list);
-            return new ContentResult { Content = json, ContentType = "application/json", StatusCode = 200 };
-        }
+        // [Removed: /api/auth/users endpoint and dropdown logic, no longer needed for SSO-first, email-input fallback]
 
         /// <summary>
         /// Begins OTP flow: validates user existence, generates and stores a code, sends via configured sender.

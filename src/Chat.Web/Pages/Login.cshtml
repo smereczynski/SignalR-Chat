@@ -76,8 +76,8 @@
           <div id="otpContainer" data-otp-timeout-ms="8000" data-otp-retry-cooldown-ms="5000" data-otp-resend-delay-ms="60000">
             <div id="otp-step1">
               <div class="mb-2">
-                <label for="otpUserName" class="form-label">@Localizer["Email"]</label>
-                <input type="email" class="form-control" id="otpUserName" placeholder="@Localizer["EnterYourEmail"]" autocomplete="email" />
+                <label for="otpEmail" class="form-label">@Localizer["Email"]</label>
+                <input type="email" class="form-control" id="otpEmail" placeholder="@Localizer["EnterYourEmail"]" autocomplete="email" />
                 <div class="form-text">@Localizer["EnterEmailForOtp"]</div>
               </div>
               <button type="button" class="btn btn-primary" id="btn-send-otp">@Localizer["SendCode"]</button>
@@ -186,12 +186,10 @@
         .catch(() => { 
           // Fallback to English defaults if localization API fails
           window.i18n = {
-            selectUser: 'Select user...',
-            failedToLoadUsers: 'Failed to load users',
-            userSelectionRequired: 'User selection is required',
+            emailRequired: 'Email is required',
+            emailAndCodeRequired: 'Email and code are required',
             failedToSendCode: 'Failed to send code',
             errorSendingCode: 'Error sending code',
-            userAndCodeRequired: 'User and code are required',
             invalidVerificationCode: 'Invalid verification code',
             verificationFailed: 'Verification failed. Please try again.',
             pleaseWaitSeconds: 'Please wait {0} seconds before resending',
