@@ -8,13 +8,17 @@ This document explains how to integrate the Admin Panel into the main SignalR Ch
 
 The Admin Panel provides administrative capabilities for managing users and rooms in SignalR Chat. Access is controlled via the `Admin.ReadWrite` app role assigned in the Entra ID app registration.
 
+**⚠️ Important Security Constraint**: Admin access is **restricted to home tenant users only**. External tenant users (multi-tenant SSO users) cannot be granted admin privileges, even if assigned the `Admin.ReadWrite` role.
+
 ### Key Concepts
 
 - **App Role Authorization**: Users must be assigned the `Admin.ReadWrite` role in Entra ID to access admin features
+- **Home Tenant Only**: Admin access is restricted to users from the home tenant (application owner's tenant)
 - **Integrated Architecture**: Admin panel is part of the main Chat.Web application (not a separate deployment)
-- **UI Visibility**: Only users with the `Admin.ReadWrite` role see the admin "cog" icon in the chat interface
+- **UI Visibility**: Only home tenant users with the `Admin.ReadWrite` role see the admin "cog" icon in the chat interface
 - **Entra ID Only**: Admin panel requires Entra ID authentication - **no OTP fallback**
 - **Claims-Based Access Control**: Authorization checks the `roles` claim in the ID token
+- **Tenant Validation**: Token validation enforces home tenant ID check for admin role claims
 
 ---
 
@@ -23,18 +27,37 @@ The Admin Panel provides administrative capabilities for managing users and room
 ### Authentication & Authorization Flow
 
 ```
-User with Admin.ReadWrite role
+Home tenant user with Admin.ReadWrite role
   → Signs in with Microsoft Entra ID
   → Token issued with claims:
       - preferred_username (UPN)
-      - tid (Tenant ID)
+      - tid (Home Tenant ID)  ← Must match home tenant
       - roles: ["Admin.ReadWrite"]  ← App role claim
   → Application validates:
       ✓ Token signature and expiration
       ✓ User UPN exists in database
       ✓ Token contains "Admin.ReadWrite" role
+      ✓ Tenant ID matches home tenant  ← Critical check
   → Admin access granted ✅
   → Cog icon visible in UI
+```
+
+```
+External tenant user with Admin.ReadWrite role
+  → Signs in with Microsoft Entra ID
+  → Token issued with claims:
+      - preferred_username (UPN)
+      - tid (External Tenant ID)  ← NOT home tenant
+      - roles: ["Admin.ReadWrite"]  ← Role assigned but will be ignored
+  → Application validates:
+      ✓ Token signature and expiration
+      ✓ User UPN exists in database
+      ✓ Token contains "Admin.ReadWrite" role
+      ✗ Tenant ID does NOT match home tenant  ← Access denied
+      → Admin role claim removed from principal
+  → Chat access granted ✅
+  → Admin access denied ❌
+  → No cog icon visible
 ```
 
 ```
@@ -57,10 +80,10 @@ User without Admin.ReadWrite role
 
 | Component | Purpose | Authorization |
 |-----------|---------|--------------|
-| **Admin Pages** | `/Admin/Users`, `/Admin/Rooms`, `/Admin/Users/AssignRooms` | Requires `Admin.ReadWrite` role |
-| **Admin UI (Cog Icon)** | Navigation link in chat interface | Only visible if user has `Admin.ReadWrite` role |
-| **Admin API Endpoints** | `/api/admin/*` (optional REST endpoints) | Requires `Admin.ReadWrite` role |
-| **Chat Pages** | `/`, `/chat`, `/login` | No admin role required |
+| **Admin Pages** | `/Admin/Users`, `/Admin/Rooms`, `/Admin/Users/AssignRooms` | Requires `Admin.ReadWrite` role **+ home tenant** |
+| **Admin UI (Cog Icon)** | Navigation link in chat interface | Only visible if user has `Admin.ReadWrite` role **+ home tenant** |
+| **Admin API Endpoints** | `/api/admin/*` (optional REST endpoints) | Requires `Admin.ReadWrite` role **+ home tenant** |
+| **Chat Pages** | `/`, `/chat`, `/login` | No admin role required (any tenant) |
 
 ---
 
@@ -110,7 +133,7 @@ App roles are automatically included in ID tokens when a user is assigned to the
 {
   "roles": ["Admin.ReadWrite"],
   "preferred_username": "admin@contoso.com",
-  "tid": "tenant-id-guid",
+  "tid": "home-tenant-id-guid",
   ...
 }
 ```
@@ -119,10 +142,13 @@ App roles are automatically included in ID tokens when a user is assigned to the
 - If a user is **not** assigned to any app role, the `roles` claim will be **missing** or **empty** `[]`
 - Multiple roles can be assigned: `"roles": ["Admin.ReadWrite", "Other.Role"]`
 - Group membership **does not** automatically grant app roles
+- **Admin access requires home tenant**: Even if external tenant user has `Admin.ReadWrite` role, access is denied if `tid` doesn't match home tenant ID
 
 ### Step 3: Assign Users to Admin.ReadWrite Role
 
 App roles are assigned via **Enterprise Applications**, not App registrations.
+
+**⚠️ CRITICAL**: Only assign users from the **home tenant** (application owner's tenant). External tenant users cannot be granted admin access.
 
 #### Option A: Assign Individual Users
 
@@ -136,7 +162,7 @@ App roles are assigned via **Enterprise Applications**, not App registrations.
 
 2. **Add User Assignment**
    - Click **Add user/group**
-   - Select **Users**: Choose admin user(s)
+   - Select **Users**: Choose admin user(s) **from home tenant only**
    - Select **Select a role**: Choose `Admin.ReadWrite`
    - Click **Assign**
 
@@ -145,9 +171,11 @@ App roles are assigned via **Enterprise Applications**, not App registrations.
    User should appear in the list:
    ```
    Name: Alice Admin
-   User Principal Name: alice@contoso.com
+   User Principal Name: alice@hometenant.com  ← Home tenant domain
    Role: Admin.ReadWrite
    ```
+   
+   ⚠️ **Do NOT assign external tenant users** (e.g., `bob@externaltenant.com`) to admin role
 
 #### Option B: Assign Security Group (Recommended for Multiple Admins)
 
@@ -193,7 +221,7 @@ Add app role validation to `EntraIdAuthorizationOptions`:
 public class EntraIdAuthorizationOptions
 {
     /// <summary>
-    /// List of allowed tenant domains or tenant IDs. Empty list = allow any tenant.
+    /// List of allowed tenant domains or tenant IDs for regular user access. Empty list = allow any tenant.
     /// </summary>
     public List<string> AllowedTenants { get; set; } = new();
 
@@ -203,8 +231,15 @@ public class EntraIdAuthorizationOptions
     public bool RequireTenantValidation { get; set; } = true;
     
     /// <summary>
+    /// Home tenant ID (GUID). Used to restrict admin access to home tenant users only.
+    /// Admin role will be ignored for users from external tenants.
+    /// </summary>
+    public string HomeTenantId { get; set; } = string.Empty;
+    
+    /// <summary>
     /// App role value required for admin panel access. Default: "Admin.ReadWrite".
     /// Users with this role can access /Admin/* pages and see the admin cog icon.
+    /// IMPORTANT: Admin access is restricted to home tenant users only.
     /// </summary>
     public string AdminRoleValue { get; set; } = "Admin.ReadWrite";
 }
@@ -223,11 +258,13 @@ services.AddAuthorization(options =>
         .RequireAuthenticatedUser()
         .Build();
     
-    // Admin policy: requires Admin.ReadWrite app role
+    // Admin policy: requires Admin.ReadWrite app role + home tenant
     options.AddPolicy("RequireAdminRole", policy =>
     {
         policy.RequireAuthenticatedUser();
         policy.RequireRole("Admin.ReadWrite"); // Checks roles claim in token
+        // Note: Tenant validation happens in OnTokenValidated event
+        // External tenant users will have admin role claim removed
     });
 });
 ```
@@ -520,7 +557,7 @@ namespace Chat.Web.Controllers
 {
   "EntraId": {
     "Instance": "https://login.microsoftonline.com/",
-    "TenantId": "organizations",
+    "TenantId": "organizations",  // Multi-tenant for regular users
     "ClientId": "12345678-1234-1234-1234-123456789abc",
     "ClientSecret": "${ENTRA_CLIENT_SECRET}",
     "CallbackPath": "/signin-oidc",
@@ -531,6 +568,7 @@ namespace Chat.Web.Controllers
         "contoso.onmicrosoft.com"
       ],
       "RequireTenantValidation": true,
+      "HomeTenantId": "87654321-4321-4321-4321-cba987654321",  // Home tenant ID for admin access
       "AdminRoleValue": "Admin.ReadWrite"
     },
     
@@ -632,7 +670,8 @@ Add admin panel redirect URIs to app registration:
 | **Overage Handling** | No overage issues | Requires Graph API calls for large groups |
 | **Scope** | Application-specific | Organization-wide |
 | **Assignment** | Users/Groups → App Role | Users → Group → App needs group claim |
-| **Best For** | Application-level permissions | Cross-app organizational roles |
+| **Multi-Tenant** | Can enforce home tenant restriction | Difficult to restrict by tenant |
+| **Best For** | Application-level permissions (admins) | Cross-app organizational roles |
 
 ### Why App Roles for Admin Panel?
 
@@ -646,18 +685,22 @@ Add admin panel redirect URIs to app registration:
 ### Admin Role Security
 
 - **Principle of Least Privilege**: Only assign `Admin.ReadWrite` to trusted administrators
+- **Home Tenant Only**: Admin access restricted to home tenant users (application owner's tenant)
 - **Regular Audits**: Periodically review app role assignments in Enterprise Applications
 - **Logging**: Log all admin actions (user creation, room management, etc.)
 - **No OTP Fallback**: Admin panel **requires** Entra ID authentication (no OTP bypass)
 - **UI Hiding**: Regular users have **no indication** that admin features exist (no UI hints)
+- **Tenant Validation**: Token validation removes admin role claim from external tenant users
 
 ### Defense in Depth
 
 1. **Token Validation**: Verify `roles` claim contains `Admin.ReadWrite`
-2. **Authorization Policy**: `[Authorize(Policy = "RequireAdminRole")]` on all admin pages
-3. **UI Access Control**: Hide admin cog icon for non-admin users
-4. **API Protection**: Apply `[Authorize(Policy = "RequireAdminRole")]` to admin API endpoints
-5. **Logging & Monitoring**: Track admin access and actions
+2. **Tenant Validation**: Verify token `tid` claim matches home tenant ID
+3. **Role Claim Removal**: Remove admin role from external tenant users in token validation
+4. **Authorization Policy**: `[Authorize(Policy = "RequireAdminRole")]` on all admin pages
+5. **UI Access Control**: Hide admin cog icon for non-admin users
+6. **API Protection**: Apply `[Authorize(Policy = "RequireAdminRole")]` to admin API endpoints
+7. **Logging & Monitoring**: Track admin access and actions, log tenant validation failures
 
 ---
 
@@ -883,22 +926,24 @@ services.AddAuthorization(options =>
 
 ---
 
-## Summary
+### Summary
 
 ### Admin User Setup (Per User)
 1. ☐ Create `Admin.ReadWrite` app role in app registration
-2. ☐ Assign user to `Admin.ReadWrite` role in Enterprise Applications
-3. ☐ User signs out and signs in to get fresh token
-4. ☐ Verify `roles` claim contains `["Admin.ReadWrite"]`
-5. ☐ Verify cog icon visible in chat UI
-6. ☐ Verify `/Admin` page accessible
+2. ☐ Assign **home tenant user** to `Admin.ReadWrite` role in Enterprise Applications
+3. ☐ **Do NOT assign external tenant users** (they will be denied even with role)
+4. ☐ User signs out and signs in to get fresh token
+5. ☐ Verify `roles` claim contains `["Admin.ReadWrite"]` AND `tid` matches home tenant ID
+6. ☐ Verify cog icon visible in chat UI
+7. ☐ Verify `/Admin` page accessible
 
 ### Application Setup (One-Time)
 1. ☐ Define `Admin.ReadWrite` app role in app registration
-2. ☐ Update `EntraIdAuthorizationOptions` with `AdminRoleValue` property
-3. ☐ Add `RequireAdminRole` authorization policy in `Startup.cs`
-4. ☐ Create admin pages under `/Admin/*` with `[Authorize(Policy = "RequireAdminRole")]`
-5. ☐ Add conditional cog icon rendering in main layout (only if `User.IsInRole("Admin.ReadWrite")`)
-6. ☐ Deploy and test with admin and non-admin users
+2. ☐ Update `EntraIdAuthorizationOptions` with `AdminRoleValue` and `HomeTenantId` properties
+3. ☐ Add tenant validation in `OnTokenValidated` event to remove admin role from external tenant users
+4. ☐ Add `RequireAdminRole` authorization policy in `Startup.cs`
+5. ☐ Create admin pages under `/Admin/*` with `[Authorize(Policy = "RequireAdminRole")]`
+6. ☐ Add conditional cog icon rendering in main layout (only if `User.IsInRole("Admin.ReadWrite")`)
+7. ☐ Deploy and test with home tenant admin, external tenant user, and non-admin users
 
-**Result**: Users with `Admin.ReadWrite` role can access admin features and see the cog icon. Regular users have no indication that admin features exist.
+**Result**: Home tenant users with `Admin.ReadWrite` role can access admin features and see the cog icon. External tenant users and regular users have no indication that admin features exist.
