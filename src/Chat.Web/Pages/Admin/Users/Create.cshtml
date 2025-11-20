@@ -13,14 +13,17 @@
             <div class="mb-3">
                 <label for="Input_UserName" class="form-label">@Localizer["UserName"]</label>
                 <input asp-for="Input.UserName" class="form-control" />
+                <span asp-validation-for="Input.UserName" class="text-danger"></span>
             </div>
             <div class="mb-3">
                 <label for="Input_Email" class="form-label">@Localizer["Email"]</label>
                 <input asp-for="Input.Email" type="email" class="form-control" />
+                <span asp-validation-for="Input.Email" class="text-danger"></span>
             </div>
             <div class="mb-3">
-                <label for="Input_MobileNumber" class="form-label">@Localizer["GSM"]</label>
+                <label for="Input_MobileNumber" class="form-label">@Localizer["Mobile"]</label>
                 <input asp-for="Input.MobileNumber" type="tel" class="form-control" />
+                <span asp-validation-for="Input.MobileNumber" class="text-danger"></span>
             </div>
             <div class="mb-3 form-check">
                 <input type="checkbox" asp-for="Input.Enabled" class="form-check-input" id="enabledCheck" checked />

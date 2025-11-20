@@ -413,4 +413,25 @@
   <data name="RoomName" xml:space="preserve">
     <value>Room Name</value>
   </data>
+  <data name="Cancel" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="Create" xml:space="preserve">
+    <value>Create</value>
+  </data>
+  <data name="Save" xml:space="preserve">
+    <value>Save</value>
+  </data>
+  <data name="Back" xml:space="preserve">
+    <value>Back</value>
+  </data>
+  <data name="CreateUser" xml:space="preserve">
+    <value>Create User</value>
+  </data>
+  <data name="AssignRoomsToUser" xml:space="preserve">
+    <value>Assign Rooms to {0}</value>
+  </data>
+  <data name="EnabledQuestion" xml:space="preserve">
+    <value>Enabled?</value>
+  </data>
 </root>
