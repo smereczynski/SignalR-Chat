@@ -27,7 +27,6 @@ namespace Chat.IntegrationTests
             // Rate limit: 20 permits per 5 seconds (from CustomWebApplicationFactory)
             // Send 40 requests in rapid succession to guarantee exceeding the limit
             const int totalRequests = 40;
-            var tasks = new List<Task<HttpResponseMessage>>(totalRequests);
             
             // Create all tasks simultaneously using Parallel.For for maximum concurrency
             var taskArray = new Task<HttpResponseMessage>[totalRequests];
