@@ -43,15 +43,6 @@ jobs:
       BICEP_ACS_DATA_LOCATION: ${{ vars.BICEP_ACS_DATA_LOCATION }}
       BICEP_VNET_DNS_SERVERS: ${{ vars.BICEP_VNET_DNS_SERVERS }}
       ENVIRONMENT: ${{ github.event.inputs.environment }}
-      ENTRA_ID_INSTANCE: ${{ vars.ENTRA_ID_INSTANCE }}
-      ENTRA_ID_TENANT_ID: ${{ vars.ENTRA_ID_TENANT_ID }}
-      ENTRA_ID_CALLBACK_PATH: ${{ vars.ENTRA_ID_CALLBACK_PATH }}
-      ENTRA_ID_SIGNED_OUT_CALLBACK_PATH: ${{ vars.ENTRA_ID_SIGNED_OUT_CALLBACK_PATH }}
-      ENTRA_ID_REQUIRE_TENANT_VALIDATION: ${{ vars.ENTRA_ID_REQUIRE_TENANT_VALIDATION }}
-      ENTRA_ID_AUTOMATIC_SSO_ENABLE: ${{ vars.ENTRA_ID_AUTOMATIC_SSO_ENABLE }}
-      ENTRA_ID_AUTOMATIC_SSO_ATTEMPT_COOKIE_NAME: ${{ vars.ENTRA_ID_AUTOMATIC_SSO_ATTEMPT_COOKIE_NAME }}
-      ENTRA_ID_FALLBACK_ENABLE_OTP: ${{ vars.ENTRA_ID_FALLBACK_ENABLE_OTP }}
-      ENTRA_ID_FALLBACK_OTP_FOR_UNAUTHORIZED_USERS: ${{ vars.ENTRA_ID_FALLBACK_OTP_FOR_UNAUTHORIZED_USERS }}
     
     steps:
       - name: Checkout code
@@ -199,16 +190,6 @@ jobs:
             --parameters acsDataLocation="${{ env.BICEP_ACS_DATA_LOCATION }}" \
             --parameters networkingResourceGroupName=${{ env.NETWORKING_RESOURCE_GROUP }} \
             --parameters otpPepper="${{ secrets.OTP_PEPPER }}" \
-            --parameters entraIdAllowedTenants=${{ secrets.ENTRA_ID_ALLOWED_TENANTS_JSON }} \
-            --parameters entraIdAutomaticSsoEnable=${{ env.ENTRA_ID_AUTOMATIC_SSO_ENABLE }} \
-            --parameters entraIdAutomaticSsoAttemptCookieName="${{ env.ENTRA_ID_AUTOMATIC_SSO_ATTEMPT_COOKIE_NAME }}" \
-            --parameters entraIdFallbackEnableOtp=${{ env.ENTRA_ID_FALLBACK_ENABLE_OTP }} \
-            --parameters entraIdFallbackOtpForUnauthorizedUsers=${{ env.ENTRA_ID_FALLBACK_OTP_FOR_UNAUTHORIZED_USERS }} \
-            --parameters entraIdRequireTenantValidation=${{ env.ENTRA_ID_REQUIRE_TENANT_VALIDATION }} \
-            --parameters entraIdCallbackPath="${{ env.ENTRA_ID_CALLBACK_PATH }}" \
-            --parameters entraIdSignedOutCallbackPath="${{ env.ENTRA_ID_SIGNED_OUT_CALLBACK_PATH }}" \
-            --parameters entraIdInstance="${{ env.ENTRA_ID_INSTANCE }}" \
-            --parameters entraIdTenantId="${{ env.ENTRA_ID_TENANT_ID }}" \
             --parameters entraIdConnectionString="${{ secrets.ENTRA_ID_CONNECTION_STRING }}"
           echo "::endgroup::"
       
@@ -255,16 +236,6 @@ jobs:
             --parameters acsDataLocation="${{ env.BICEP_ACS_DATA_LOCATION }}" \
             --parameters networkingResourceGroupName=${{ env.NETWORKING_RESOURCE_GROUP }} \
             --parameters otpPepper="${{ secrets.OTP_PEPPER }}" \
-            --parameters entraIdAllowedTenants=${{ secrets.ENTRA_ID_ALLOWED_TENANTS_JSON }} \
-            --parameters entraIdAutomaticSsoEnable=${{ env.ENTRA_ID_AUTOMATIC_SSO_ENABLE }} \
-            --parameters entraIdAutomaticSsoAttemptCookieName="${{ env.ENTRA_ID_AUTOMATIC_SSO_ATTEMPT_COOKIE_NAME }}" \
-            --parameters entraIdFallbackEnableOtp=${{ env.ENTRA_ID_FALLBACK_ENABLE_OTP }} \
-            --parameters entraIdFallbackOtpForUnauthorizedUsers=${{ env.ENTRA_ID_FALLBACK_OTP_FOR_UNAUTHORIZED_USERS }} \
-            --parameters entraIdRequireTenantValidation=${{ env.ENTRA_ID_REQUIRE_TENANT_VALIDATION }} \
-            --parameters entraIdCallbackPath="${{ env.ENTRA_ID_CALLBACK_PATH }}" \
-            --parameters entraIdSignedOutCallbackPath="${{ env.ENTRA_ID_SIGNED_OUT_CALLBACK_PATH }}" \
-            --parameters entraIdInstance="${{ env.ENTRA_ID_INSTANCE }}" \
-            --parameters entraIdTenantId="${{ env.ENTRA_ID_TENANT_ID }}" \
             --parameters entraIdConnectionString="${{ secrets.ENTRA_ID_CONNECTION_STRING }}" \
             --name "$DEPLOYMENT_NAME" \
             --output json > deployment-output.json
