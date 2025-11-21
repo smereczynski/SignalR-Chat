@@ -35,10 +35,10 @@ namespace Chat.Web.Services
                     await Task.Delay(TimeSpan.FromMinutes(CleanupIntervalMinutes), stoppingToken);
                     await CleanupStalePresenceAsync(stoppingToken);
                 }
-                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                catch (OperationCanceledException ex) when (stoppingToken.IsCancellationRequested)
                 {
                     // Normal shutdown
-                    _logger.LogInformation("PresenceCleanupService stopping gracefully");
+                    _logger.LogInformation(ex, "PresenceCleanupService stopping gracefully");
                     break;
                 }
                 catch (Exception ex)

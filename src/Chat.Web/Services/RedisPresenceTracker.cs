@@ -157,8 +157,7 @@ namespace Chat.Web.Services
         {
             try
             {
-                var db = _redis.GetDatabase();
-                var server = _redis.GetServer(_redis.GetEndPoints().First());
+                var server = _redis.GetServer(_redis.GetEndPoints()[0]);
                 
                 // Scan for all heartbeat keys (pattern: heartbeat:*)
                 var keys = server.Keys(pattern: HeartbeatKeyPrefix + "*", pageSize: 1000).ToList();
