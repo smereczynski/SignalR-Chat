@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **P0 Critical Documentation** (2025-01-21):
+  - ✅ `docs/development/local-setup.md` - Comprehensive development environment setup guide
+    - In-memory vs Azure mode comparison
+    - IDE setup (VS Code, Visual Studio) with debugging configuration
+    - Frontend development (npm, esbuild, sass, hot reload)
+    - Running tests in different modes
+    - Local Redis and Cosmos DB Emulator setup
+    - Common development tasks (add language, SignalR methods, REST endpoints)
+    - Troubleshooting and performance tips
+  - ✅ `docs/development/testing.md` - Complete testing guide with issue #113 explanation
+    - Test structure (179 tests: 9 unit, 135 integration, 35 web)
+    - Running tests in in-memory and Azure modes
+    - Test projects overview with code examples
+    - Known issues section (SignalR test failures explained)
+    - Writing tests (templates, best practices, parameterized tests)
+    - CustomWebApplicationFactory deep dive
+    - Debugging tests (VS Code, Visual Studio, CLI)
+    - CI/CD testing, code coverage, test performance
+  - ✅ `docs/reference/faq.md` - Comprehensive FAQ covering all major topics
+    - General (what is SignalR Chat, features, technologies)
+    - Development (in-memory mode, Azure mode, adding languages/users/rooms)
+    - Testing (issue #113 root cause, running tests without Azure)
+    - Azure & Deployment (resources, costs, Bicep, environments, Windows vs Linux)
+    - Authentication & Security (OTP flow, password alternatives, security headers, log sanitization)
+    - Performance & Scalability (capacity, horizontal scaling, Cosmos DB optimization, monitoring)
+    - Troubleshooting (port conflicts, OTP delivery, SignalR failures, Cosmos DB, Redis, CI/CD)
+  - ✅ `docs/getting-started/installation.md` - Full Azure setup guide
+    - Installation modes comparison (in-memory vs Azure)
+    - Prerequisites (Azure CLI, .NET 9, Git)
+    - Automated installation via GitHub Actions (step-by-step)
+    - Manual installation via Azure CLI + Bicep
+    - Azure resources overview (with cost estimates: $40-50/month dev)
+    - Configuration guide (app settings, environment variables, Linux vs Windows)
+    - Email OTP configuration (Azure Communication Services setup)
+    - Health checks (application and component health verification)
+    - Troubleshooting common installation issues
+  - 📊 **Documentation Completion**: Moved from 33% to 41% (27/68 planned files)
+
 ### Documentation
 - **Documentation Structure Issues Identified**:
   - ⚠️ **Missing Files**: Multiple documentation files referenced but not yet created:
