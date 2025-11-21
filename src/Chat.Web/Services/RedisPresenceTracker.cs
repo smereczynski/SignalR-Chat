@@ -153,29 +153,29 @@ namespace Chat.Web.Services
             }
         }
 
-        public async Task<IReadOnlyList<string>> GetActiveHeartbeatsAsync()
+        public Task<IReadOnlyList<string>> GetActiveHeartbeatsAsync()
         {
             try
             {
                 var server = _redis.GetServer(_redis.GetEndPoints()[0]);
-                
+
                 // Scan for all heartbeat keys (pattern: heartbeat:*)
                 var keys = server.Keys(pattern: HeartbeatKeyPrefix + "*", pageSize: 1000).ToList();
-                
+
                 // Extract userName from each key (heartbeat:{userName})
                 var activeUsers = keys
                     .Select(key => key.ToString())
                     .Where(keyString => keyString.StartsWith(HeartbeatKeyPrefix))
                     .Select(keyString => keyString.Substring(HeartbeatKeyPrefix.Length))
                     .ToList();
-                
+
                 _logger.LogDebug("Found {Count} active heartbeats", activeUsers.Count);
-                return activeUsers;
+                return Task.FromResult<IReadOnlyList<string>>(activeUsers);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to get active heartbeats from Redis");
-                return Array.Empty<string>();
+                return Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>());
             }
         }
     }

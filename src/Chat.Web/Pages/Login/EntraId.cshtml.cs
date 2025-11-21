@@ -30,13 +30,13 @@ namespace Chat.Web.Pages.Login
         [BindProperty(SupportsGet = true)]
         public string ReturnUrl { get; set; } = "/chat";
 
-        public async Task<IActionResult> OnGetAsync()
+        public Task<IActionResult> OnGetAsync()
         {
             // If Entra ID is not configured, redirect back to login page
             if (!_entraIdOptions.IsEnabled)
             {
                 _logger.LogWarning("Entra ID authentication attempted but not configured (missing ClientId or ClientSecret)");
-                return RedirectToPage("/Login", new { error = "entra_id_not_configured" });
+                return Task.FromResult<IActionResult>(RedirectToPage("/Login", new { error = "entra_id_not_configured" }));
             }
 
             // Validate ReturnUrl (security: prevent open redirect)
@@ -50,12 +50,12 @@ namespace Chat.Web.Pages.Login
 
             // Challenge Entra ID authentication scheme
             _logger.LogInformation("Initiating Entra ID authentication challenge");
-            return Challenge(
+            return Task.FromResult<IActionResult>(Challenge(
                 new AuthenticationProperties
                 {
                     RedirectUri = ReturnUrl ?? "/chat"
                 },
-                "EntraId");
+                "EntraId"));
         }
     }
 }
