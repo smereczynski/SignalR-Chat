@@ -600,7 +600,7 @@ namespace Chat.Web
                                     }
                                     return Task.CompletedTask;
                                 },
-                                OnTokenValidated = async context =>
+                                OnTokenValidated = context =>
                                 {
                                     var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Startup>>();
                                     logger.LogWarning("===== OnTokenValidated START =====");
@@ -654,7 +654,7 @@ namespace Chat.Web
                                     {
                                         logger.LogWarning("OnTokenValidated: UPN (preferred_username) claim is missing from token");
                                         context.Fail("UPN claim is required");
-                                        return;
+                                        return Task.CompletedTask;
                                     }
                                     
                                     // Explicitly deny Microsoft consumer (MSA) accounts
@@ -670,7 +670,7 @@ namespace Chat.Web
                                             Chat.Web.Utilities.LogSanitizer.Sanitize(issuerClaim ?? "<null>"));
                                         context.HandleResponse();
                                         context.Response.Redirect("/login?reason=not_authorized");
-                                        return;
+                                        return Task.CompletedTask;
                                     }
                                     
                                     // Validate tenant if configured
@@ -689,7 +689,7 @@ namespace Chat.Web
                                             // Both silent SSO and normal login follow same path
                                             context.HandleResponse();
                                             context.Response.Redirect("/login?reason=not_authorized");
-                                            return;
+                                            return Task.CompletedTask;
                                         }
                                     }
                                     
@@ -762,18 +762,18 @@ namespace Chat.Web
                                             // Redirect to login with reason
                                             context.HandleResponse();
                                             context.Response.Redirect("/login?reason=not_authorized");
-                                            return;
+                                            return Task.CompletedTask;
                                         }
                                         else
                                         {
                                             logger.LogWarning(
                                                 "OnTokenValidated: User with UPN {Upn} not found in database and OTP fallback disabled - rejecting login",
                                                 Chat.Web.Utilities.LogSanitizer.Sanitize(upn));
-                                            
+
                                             // Redirect to login with reason
                                             context.HandleResponse();
                                             context.Response.Redirect("/login?reason=not_authorized");
-                                            return;
+                                            return Task.CompletedTask;
                                         }
                                     }
                                     
@@ -794,6 +794,8 @@ namespace Chat.Web
                                         Chat.Web.Utilities.LogSanitizer.Sanitize(user.UserName),
                                         Chat.Web.Utilities.LogSanitizer.Sanitize(upn),
                                         Chat.Web.Utilities.LogSanitizer.Sanitize(tenantId ?? "<null>"));
+
+                                    return Task.CompletedTask;
                                 },
                                 OnRemoteFailure = context =>
                                 {
