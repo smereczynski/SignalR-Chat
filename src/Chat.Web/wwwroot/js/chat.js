@@ -111,7 +111,7 @@ if(window.__chatAppBooted){
       case 'reconnecting':
         els.roomHeader.classList.add('connection-state-reconnecting');
         if(els.joinedRoomTitle && state._baseRoomTitle){
-          els.joinedRoomTitle.textContent = state._baseRoomTitle + ' (' + (window.i18n.Reconnecting || 'RECONNECTING…') + ')';
+          els.joinedRoomTitle.textContent = state._baseRoomTitle + ' (' + (window.i18n.reconnecting || 'RECONNECTING…') + ')';
         }
         break;
       case 'degraded':
@@ -119,7 +119,7 @@ if(window.__chatAppBooted){
         if(els.joinedRoomTitle && state._baseRoomTitle){
           // Show warning but less severe than full disconnection
           const warn = '\u26A0\uFE0F'; // ⚠️
-          els.joinedRoomTitle.textContent = state._baseRoomTitle + ' (' + warn + ' ' + (window.i18n.Degraded || 'LIMITED') + ')';
+          els.joinedRoomTitle.textContent = state._baseRoomTitle + ' (' + warn + ' ' + (window.i18n.degraded || 'LIMITED') + ')';
         }
         break;
       case 'disconnected':
@@ -128,7 +128,7 @@ if(window.__chatAppBooted){
           const base = state._baseRoomTitle || els.joinedRoomTitle.textContent || '';
           // Use explicit variation selector for broader rendering + fallback triangle if some fonts strip emoji style
           const warn = '\u26A0\uFE0F'; // ⚠️
-          els.joinedRoomTitle.textContent = base + ' (' + warn + ' ' + (window.i18n.Disconnected || 'DISCONNECTED') + ')';
+          els.joinedRoomTitle.textContent = base + ' (' + warn + ' ' + (window.i18n.disconnected || 'DISCONNECTED') + ')';
         }
         break;
     }
