@@ -297,8 +297,8 @@ namespace Chat.Web
                 services.AddSingleton<IRoomsRepository, CosmosRoomsRepository>();
                 services.AddSingleton<IMessagesRepository, CosmosMessagesRepository>();
 
-                // Data seeder service (seeds initial data during startup if database is empty)
-                services.AddSingleton<Services.DataSeederService>();
+                // Data seeder service (seeds initial data in background if database is empty)
+                services.AddHostedService<Services.DataSeederService>();
 
                 // Redis OTP store (fail fast if placeholder)
                 // Azure App Service injects connection strings as CUSTOMCONNSTR_{name}
@@ -1018,17 +1018,8 @@ namespace Chat.Web
     /// </summary>
     public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
         {
-            // Seed initial data if database is empty (only in non-test mode)
-            var inMemoryTest = string.Equals(Configuration["Testing:InMemory"], "true", StringComparison.OrdinalIgnoreCase);
-            if (!inMemoryTest)
-            {
-                var seeder = app.ApplicationServices.GetService<Services.DataSeederService>();
-                if (seeder != null)
-                {
-                    // Run seeding synchronously during startup
-                    seeder.SeedIfEmptyAsync().GetAwaiter().GetResult();
-                }
-            }
+            // Data seeding now happens in the background via DataSeederService (IHostedService)
+            // This allows the app to start faster and respond to health checks sooner
 
             // Global exception handler with comprehensive logging (all environments)
             app.UseMiddleware<GlobalExceptionHandlerMiddleware>();

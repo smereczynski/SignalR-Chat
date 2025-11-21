@@ -1,19 +1,22 @@
 using Chat.Web.Models;
 using Chat.Web.Repositories;
 using Microsoft.Azure.Cosmos;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Chat.Web.Services
 {
     /// <summary>
-    /// Service responsible for seeding initial rooms and users into the database during application startup.
+    /// Background service responsible for seeding initial rooms and users into the database during application startup.
     /// Only seeds data if the database is empty (no rooms and no users exist).
+    /// Runs in the background to avoid blocking application startup.
     /// </summary>
-    public class DataSeederService
+    public class DataSeederService : BackgroundService
     {
         private readonly IUsersRepository _usersRepo;
         private readonly IRoomsRepository _roomsRepo;
@@ -30,6 +33,12 @@ namespace Chat.Web.Services
             _roomsRepo = roomsRepo;
             _cosmosClients = cosmosClients;
             _logger = logger;
+        }
+
+        protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+        {
+            // Run seeding once at startup
+            await SeedIfEmptyAsync();
         }
 
         /// <summary>
