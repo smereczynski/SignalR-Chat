@@ -150,6 +150,8 @@ namespace Chat.Web
         /// <summary>
         /// Constructs the startup instance (configuration injected by host).
         /// </summary>
+        private ILogger<Startup> _logger;
+
         public Startup(IConfiguration configuration, IWebHostEnvironment environment)
         {
             Configuration = configuration;
@@ -166,6 +168,10 @@ namespace Chat.Web
     /// </summary>
     public void ConfigureServices(IServiceCollection services)
         {
+            // Create early logger for startup diagnostics
+            using var loggerFactory = LoggerFactory.Create(builder => builder.AddConsole());
+            _logger = loggerFactory.CreateLogger<Startup>();
+
             var inMemoryTest = string.Equals(Configuration["Testing:InMemory"], "true", StringComparison.OrdinalIgnoreCase);
             // Defer OpenTelemetry registration until after external clients (Cosmos, Redis) are registered
             var otlpEndpoint = Configuration["OTel:OtlpEndpoint"]; // e.g. http://localhost:4317 or https://otlp.yourdomain:4317
@@ -903,10 +909,10 @@ namespace Chat.Web
                     if (corsOptions.AllowAllOrigins)
                     {
                         // Development only - allow all origins
-                        Console.WriteLine(
-                            "WARNING: CORS configured to allow ALL origins (Development mode). " +
-                            "This should NEVER be enabled in Production.");
-                        
+                        _logger.LogWarning(
+                            "CORS configured to allow ALL origins (Development mode). " +
+                            "This should NEVER be enabled in Production");
+
                         builder
                             .SetIsOriginAllowed(_ => true)
                             .AllowAnyHeader()
@@ -916,8 +922,9 @@ namespace Chat.Web
                     else
                     {
                         // Production/Staging - strict origin whitelist
-                        Console.WriteLine(
-                            $"INFO: CORS configured with allowed origins: {string.Join(", ", corsOptions.AllowedOrigins)}");
+                        _logger.LogInformation(
+                            "CORS configured with allowed origins: {AllowedOrigins}",
+                            string.Join(", ", corsOptions.AllowedOrigins));
 
                         builder
                             .WithOrigins(corsOptions.AllowedOrigins)
