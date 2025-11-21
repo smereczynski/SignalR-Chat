@@ -7,6 +7,124 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Documentation Accuracy Corrections** (2025-01-21):
+  - ✅ Fixed **incorrect in-memory mode documentation** - Previously claimed in-memory mode was "default" when running `dotnet run`, but app actually connects to Azure if `.env.local` exists
+  - ✅ Corrected all documentation to require `Testing__InMemory=true` environment variable for true in-memory mode
+  - ✅ Updated `docs/development/local-setup.md`:
+    - Removed misleading "In-Memory Mode (Default)" heading
+    - Added explicit requirement for `Testing__InMemory=true` environment variable
+    - Added troubleshooting section: "Application Connects to Azure When I Expected In-Memory Mode"
+    - Added verification steps to confirm in-memory vs Azure mode
+    - Added note about Entra ID requiring HTTPS and proper app registration for local development
+  - ✅ Updated `docs/reference/faq.md`:
+    - Corrected misleading "Do I need Azure? No!" answer with accurate `Testing__InMemory=true` requirement
+    - Updated mode switching instructions with correct commands
+    - Added new FAQ entry: "Does Entra ID (SSO) work for local development?" explaining HTTPS/redirect URI requirements
+    - Added verification steps to determine which mode is active
+  - ✅ Updated `docs/getting-started/quickstart.md`:
+    - Changed Step 2 command to include required `Testing__InMemory=true` environment variable
+    - Added warning about Azure connection attempts without the flag
+    - Clarified "What's Running?" section with explicit mode differences
+  - ⚠️ **Important**: Users following old documentation would have experienced unexpected Azure connection attempts if `.env.local` existed
+  - 🔍 **Root Cause**: Application runtime testing revealed `.env.local` file presence causes Azure resource connections regardless of intent
+  - ✅ **Verification**: Tested both modes - confirmed `Testing__InMemory=true` eliminates all Azure connections (no Cosmos DB, SignalR Service, or Redis)
+
+### Added
+- **P0 Critical Documentation** (2025-01-21):
+  - ✅ `docs/development/local-setup.md` - Comprehensive development environment setup guide
+    - In-memory vs Azure mode comparison
+    - IDE setup (VS Code, Visual Studio) with debugging configuration
+    - Frontend development (npm, esbuild, sass, hot reload)
+    - Running tests in different modes
+    - Local Redis and Cosmos DB Emulator setup
+    - Common development tasks (add language, SignalR methods, REST endpoints)
+    - Troubleshooting and performance tips
+  - ✅ `docs/development/testing.md` - Complete testing guide with issue #113 explanation
+    - Test structure (179 tests: 9 unit, 135 integration, 35 web)
+    - Running tests in in-memory and Azure modes
+    - Test projects overview with code examples
+    - Known issues section (SignalR test failures explained)
+    - Writing tests (templates, best practices, parameterized tests)
+    - CustomWebApplicationFactory deep dive
+    - Debugging tests (VS Code, Visual Studio, CLI)
+    - CI/CD testing, code coverage, test performance
+  - ✅ `docs/reference/faq.md` - Comprehensive FAQ covering all major topics
+    - General (what is SignalR Chat, features, technologies)
+    - Development (in-memory mode, Azure mode, adding languages/users/rooms)
+    - Testing (issue #113 root cause, running tests without Azure)
+    - Azure & Deployment (resources, costs, Bicep, environments, Windows vs Linux)
+    - Authentication & Security (OTP flow, password alternatives, security headers, log sanitization)
+    - Performance & Scalability (capacity, horizontal scaling, Cosmos DB optimization, monitoring)
+    - Troubleshooting (port conflicts, OTP delivery, SignalR failures, Cosmos DB, Redis, CI/CD)
+  - ✅ `docs/getting-started/installation.md` - Full Azure setup guide
+    - Installation modes comparison (in-memory vs Azure)
+    - Prerequisites (Azure CLI, .NET 9, Git)
+    - Automated installation via GitHub Actions (step-by-step)
+    - Manual installation via Azure CLI + Bicep
+    - Azure resources overview (with cost estimates: $40-50/month dev)
+    - Configuration guide (app settings, environment variables, Linux vs Windows)
+    - Email OTP configuration (Azure Communication Services setup)
+    - Health checks (application and component health verification)
+    - Troubleshooting common installation issues
+  - 📊 **Documentation Completion**: Moved from 33% to 41% (27/68 planned files)
+
+### Documentation
+- **Documentation Structure Issues Identified**:
+  - ⚠️ **Missing Files**: Multiple documentation files referenced but not yet created:
+    - `docs/getting-started/installation.md` - Referenced in README and getting-started/README.md
+    - `docs/deployment/azure.md` - Referenced in README and deployment/README.md
+    - `docs/deployment/azure/` directory - Referenced in multiple locations
+    - `docs/deployment/github-actions.md` - Referenced in README and deployment/README.md
+    - `docs/deployment/environments.md` - Referenced in deployment/README.md
+    - `docs/deployment/troubleshooting.md` - Referenced in deployment/README.md
+    - `docs/architecture/data-model.md` - Referenced in README, docs/README.md, and architecture/overview.md
+    - `docs/architecture/security.md` - Referenced in README, docs/README.md, and architecture/overview.md
+    - `docs/architecture/diagrams/` directory - Referenced in docs/README.md and architecture/overview.md
+    - `docs/features/real-time-messaging.md` - Referenced in README and docs/README.md
+    - `docs/features/read-receipts.md` - Referenced in README and docs/README.md
+    - `docs/features/notifications.md` - Referenced in README and docs/README.md
+    - `docs/features/localization.md` - Referenced in README and docs/README.md
+    - `docs/features/rate-limiting.md` - Referenced in README and docs/README.md
+    - `docs/features/pagination.md` - Referenced in README and docs/README.md
+    - `docs/development/local-setup.md` - Referenced in README, docs/README.md, and getting-started/README.md
+    - `docs/development/project-structure.md` - Referenced in docs/README.md
+    - `docs/development/testing.md` - Referenced in README and docs/README.md
+    - `docs/development/debugging.md` - Referenced in docs/README.md
+    - `docs/development/vscode-setup.md` - Referenced in docs/README.md
+    - `docs/operations/monitoring.md` - Referenced in README, docs/README.md, and deployment/README.md
+    - `docs/operations/opentelemetry.md` - Referenced in docs/README.md
+    - `docs/operations/application-insights.md` - Referenced in docs/README.md
+    - `docs/operations/logging.md` - Referenced in docs/README.md
+    - `docs/operations/diagnostics.md` - Referenced in docs/README.md
+    - `docs/operations/health-checks.md` - Referenced in docs/README.md
+    - `docs/operations/performance.md` - Referenced in docs/README.md
+    - `docs/reference/` entire directory missing - Referenced extensively in README and docs/README.md
+    - `docs/reference/api/rest-endpoints.md` - Referenced in docs/README.md
+    - `docs/reference/api/signalr-hub.md` - Referenced in docs/README.md
+    - `docs/reference/configuration-reference.md` - Referenced in docs/README.md
+    - `docs/reference/telemetry-reference.md` - Referenced in docs/README.md
+    - `docs/reference/faq.md` - Referenced in docs/README.md and getting-started/README.md
+    - `docs/reference/glossary.md` - Referenced in docs/README.md
+  - ⚠️ **Broken Cross-References**: Several internal links point to non-existent files
+  - ⚠️ **Inconsistent Structure**: Some sections are well-developed (deployment, architecture) while others are missing
+  - ✅ **Existing Documentation**:
+    - `docs/getting-started/` - Partially complete (README, quickstart, configuration)
+    - `docs/architecture/` - Core files exist (overview, system-design, 3 ADRs)
+    - `docs/deployment/` - Well-developed (bootstrap, github-secrets, github-variables, production-checklist, windows-to-linux-migration)
+    - `docs/features/` - Partial (authentication, presence, sessions, README)
+    - `docs/development/` - Two specialized guides (entra-id, admin-panel)
+    - `docs/operations/` - Only disaster-recovery.md exists
+  - 📋 **Documentation Plan**: `docs/DOCUMENTATION-PLAN.md` exists with comprehensive roadmap for missing content
+  - 🔗 **README.md**: Well-structured but contains many broken internal links to planned documentation
+
+### Fixed
+- **Documentation Issues Identified for Future Resolution**:
+  - Issue #113 documented: SignalR integration tests fail without Azure SignalR Service (environment-dependent, not a code bug)
+  - TestAuthHandler not invoked for SignalR connections in local testing
+  - Tests pass with `.env.local` (Azure SignalR) but fail without it
+  - Recommendation: Document as expected behavior, require Azure resources for full test suite
+
 ### Added
 - **Microsoft Entra ID Multi-Tenant Authentication** (#101)
   - **Dual Authentication**: Users can authenticate via Microsoft Entra ID (Azure AD) OR OTP
