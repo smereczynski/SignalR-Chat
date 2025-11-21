@@ -162,17 +162,12 @@ namespace Chat.Web.Services
                 // Scan for all heartbeat keys (pattern: heartbeat:*)
                 var keys = server.Keys(pattern: HeartbeatKeyPrefix + "*", pageSize: 1000).ToList();
                 
-                var activeUsers = new List<string>();
-                foreach (var key in keys)
-                {
-                    // Extract userName from key (heartbeat:{userName})
-                    var keyString = key.ToString();
-                    if (keyString.StartsWith(HeartbeatKeyPrefix))
-                    {
-                        var userName = keyString.Substring(HeartbeatKeyPrefix.Length);
-                        activeUsers.Add(userName);
-                    }
-                }
+                // Extract userName from each key (heartbeat:{userName})
+                var activeUsers = keys
+                    .Select(key => key.ToString())
+                    .Where(keyString => keyString.StartsWith(HeartbeatKeyPrefix))
+                    .Select(keyString => keyString.Substring(HeartbeatKeyPrefix.Length))
+                    .ToList();
                 
                 _logger.LogDebug("Found {Count} active heartbeats", activeUsers.Count);
                 return activeUsers;

@@ -502,11 +502,11 @@ namespace Chat.Web.Hubs
                 var isHealthy = healthReport.Status == HealthStatus.Healthy;
                 
                 // Extract individual component statuses
-                var redisStatus = healthReport.Entries.ContainsKey("redis") 
-                    ? healthReport.Entries["redis"].Status.ToString() 
+                var redisStatus = healthReport.Entries.TryGetValue("redis", out var redisEntry)
+                    ? redisEntry.Status.ToString()
                     : "Unknown";
-                var cosmosStatus = healthReport.Entries.ContainsKey("cosmos") 
-                    ? healthReport.Entries["cosmos"].Status.ToString() 
+                var cosmosStatus = healthReport.Entries.TryGetValue("cosmos", out var cosmosEntry)
+                    ? cosmosEntry.Status.ToString()
                     : "Unknown";
                 
                 activity?.SetTag("health.overall", isHealthy);
