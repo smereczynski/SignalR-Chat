@@ -1,6 +1,6 @@
 using System;
 using System.Threading.Tasks;
-using Chat.Web.Repositories; // LogSanitizer
+using Chat.Web.Utilities;
 
 namespace Chat.Web.Services
 {
