@@ -211,6 +211,8 @@ jobs:
             --parameters privateEndpointsSubnetPrefix=${{ env.BICEP_PRIVATE_ENDPOINTS_SUBNET_PREFIX }} \
             --parameters acsDataLocation="${{ env.BICEP_ACS_DATA_LOCATION }}" \
             --parameters networkingResourceGroupName=${{ env.NETWORKING_RESOURCE_GROUP }} \
+            --parameters otpPepper="${{ secrets.OTP_PEPPER }}" \
+            --parameters entraIdConnectionString="${{ secrets.ENTRA_ID_CONNECTION_STRING }}" \
             --result-format FullResourcePayloads
           echo "::endgroup::"
       
