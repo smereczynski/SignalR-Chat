@@ -7,6 +7,62 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Documentation
+- **Documentation Structure Issues Identified**:
+  - ⚠️ **Missing Files**: Multiple documentation files referenced but not yet created:
+    - `docs/getting-started/installation.md` - Referenced in README and getting-started/README.md
+    - `docs/deployment/azure.md` - Referenced in README and deployment/README.md
+    - `docs/deployment/azure/` directory - Referenced in multiple locations
+    - `docs/deployment/github-actions.md` - Referenced in README and deployment/README.md
+    - `docs/deployment/environments.md` - Referenced in deployment/README.md
+    - `docs/deployment/troubleshooting.md` - Referenced in deployment/README.md
+    - `docs/architecture/data-model.md` - Referenced in README, docs/README.md, and architecture/overview.md
+    - `docs/architecture/security.md` - Referenced in README, docs/README.md, and architecture/overview.md
+    - `docs/architecture/diagrams/` directory - Referenced in docs/README.md and architecture/overview.md
+    - `docs/features/real-time-messaging.md` - Referenced in README and docs/README.md
+    - `docs/features/read-receipts.md` - Referenced in README and docs/README.md
+    - `docs/features/notifications.md` - Referenced in README and docs/README.md
+    - `docs/features/localization.md` - Referenced in README and docs/README.md
+    - `docs/features/rate-limiting.md` - Referenced in README and docs/README.md
+    - `docs/features/pagination.md` - Referenced in README and docs/README.md
+    - `docs/development/local-setup.md` - Referenced in README, docs/README.md, and getting-started/README.md
+    - `docs/development/project-structure.md` - Referenced in docs/README.md
+    - `docs/development/testing.md` - Referenced in README and docs/README.md
+    - `docs/development/debugging.md` - Referenced in docs/README.md
+    - `docs/development/vscode-setup.md` - Referenced in docs/README.md
+    - `docs/operations/monitoring.md` - Referenced in README, docs/README.md, and deployment/README.md
+    - `docs/operations/opentelemetry.md` - Referenced in docs/README.md
+    - `docs/operations/application-insights.md` - Referenced in docs/README.md
+    - `docs/operations/logging.md` - Referenced in docs/README.md
+    - `docs/operations/diagnostics.md` - Referenced in docs/README.md
+    - `docs/operations/health-checks.md` - Referenced in docs/README.md
+    - `docs/operations/performance.md` - Referenced in docs/README.md
+    - `docs/reference/` entire directory missing - Referenced extensively in README and docs/README.md
+    - `docs/reference/api/rest-endpoints.md` - Referenced in docs/README.md
+    - `docs/reference/api/signalr-hub.md` - Referenced in docs/README.md
+    - `docs/reference/configuration-reference.md` - Referenced in docs/README.md
+    - `docs/reference/telemetry-reference.md` - Referenced in docs/README.md
+    - `docs/reference/faq.md` - Referenced in docs/README.md and getting-started/README.md
+    - `docs/reference/glossary.md` - Referenced in docs/README.md
+  - ⚠️ **Broken Cross-References**: Several internal links point to non-existent files
+  - ⚠️ **Inconsistent Structure**: Some sections are well-developed (deployment, architecture) while others are missing
+  - ✅ **Existing Documentation**:
+    - `docs/getting-started/` - Partially complete (README, quickstart, configuration)
+    - `docs/architecture/` - Core files exist (overview, system-design, 3 ADRs)
+    - `docs/deployment/` - Well-developed (bootstrap, github-secrets, github-variables, production-checklist, windows-to-linux-migration)
+    - `docs/features/` - Partial (authentication, presence, sessions, README)
+    - `docs/development/` - Two specialized guides (entra-id, admin-panel)
+    - `docs/operations/` - Only disaster-recovery.md exists
+  - 📋 **Documentation Plan**: `docs/DOCUMENTATION-PLAN.md` exists with comprehensive roadmap for missing content
+  - 🔗 **README.md**: Well-structured but contains many broken internal links to planned documentation
+
+### Fixed
+- **Documentation Issues Identified for Future Resolution**:
+  - Issue #113 documented: SignalR integration tests fail without Azure SignalR Service (environment-dependent, not a code bug)
+  - TestAuthHandler not invoked for SignalR connections in local testing
+  - Tests pass with `.env.local` (Azure SignalR) but fail without it
+  - Recommendation: Document as expected behavior, require Azure resources for full test suite
+
 ### Added
 - **Microsoft Entra ID Multi-Tenant Authentication** (#101)
   - **Dual Authentication**: Users can authenticate via Microsoft Entra ID (Azure AD) OR OTP
