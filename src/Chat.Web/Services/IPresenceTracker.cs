@@ -30,5 +30,17 @@ namespace Chat.Web.Services
         /// Gets all users for presence snapshot API (not used in hot path).
         /// </summary>
         Task<IReadOnlyList<UserViewModel>> GetAllUsersAsync();
+
+        /// <summary>
+        /// Updates the last activity timestamp for heartbeat-based stale connection detection.
+        /// Uses separate Redis key with 2-minute TTL.
+        /// </summary>
+        Task UpdateHeartbeatAsync(string userName);
+
+        /// <summary>
+        /// Gets all users with active heartbeats (not stale).
+        /// Used by cleanup service to identify stale presence entries.
+        /// </summary>
+        Task<IReadOnlyList<string>> GetActiveHeartbeatsAsync();
     }
 }

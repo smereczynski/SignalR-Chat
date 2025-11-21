@@ -12,6 +12,7 @@ namespace Chat.Web.Services
     public class InMemoryPresenceTracker : IPresenceTracker
     {
         private readonly ConcurrentDictionary<string, UserViewModel> _users = new();
+        private readonly ConcurrentDictionary<string, System.DateTime> _heartbeats = new();
 
         public Task SetUserRoomAsync(string userName, string fullName, string avatar, string roomName)
         {
@@ -44,12 +45,34 @@ namespace Chat.Web.Services
                 return Task.CompletedTask;
 
             _users.TryRemove(userName, out _);
+            _heartbeats.TryRemove(userName, out _);
             return Task.CompletedTask;
         }
 
         public Task<IReadOnlyList<UserViewModel>> GetAllUsersAsync()
         {
             return Task.FromResult<IReadOnlyList<UserViewModel>>(_users.Values.ToList());
+        }
+
+        public Task UpdateHeartbeatAsync(string userName)
+        {
+            if (string.IsNullOrWhiteSpace(userName))
+                return Task.CompletedTask;
+
+            _heartbeats[userName] = System.DateTime.UtcNow;
+            return Task.CompletedTask;
+        }
+
+        public Task<IReadOnlyList<string>> GetActiveHeartbeatsAsync()
+        {
+            // Filter heartbeats within last 2 minutes
+            var cutoff = System.DateTime.UtcNow.AddMinutes(-2);
+            var activeUsers = _heartbeats
+                .Where(kvp => kvp.Value > cutoff)
+                .Select(kvp => kvp.Key)
+                .ToList();
+            
+            return Task.FromResult<IReadOnlyList<string>>(activeUsers);
         }
     }
 }

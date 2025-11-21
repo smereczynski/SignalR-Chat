@@ -118,6 +118,9 @@
   <data name="Reconnecting" xml:space="preserve">
     <value>RECONNECTING…</value>
   </data>
+  <data name="Degraded" xml:space="preserve">
+    <value>LIMITED</value>
+  </data>
   <data name="Disconnected" xml:space="preserve">
     <value>DISCONNECTED</value>
   </data>

@@ -12,6 +12,7 @@ using Microsoft.Extensions.Logging;
 using Chat.Web.Observability;
 using System.Diagnostics;
 using Microsoft.Extensions.Localization;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 
 namespace Chat.Web.Hubs
 {
@@ -34,6 +35,7 @@ namespace Chat.Web.Hubs
         private readonly Services.IMarkReadRateLimiter _markReadRateLimiter;
         private readonly Services.IPresenceTracker _presenceTracker;
         private readonly IStringLocalizer<Resources.SharedResources> _localizer;
+        private readonly HealthCheckService _healthCheckService;
 
         /// <summary>
         /// Creates a new Hub instance.
@@ -46,7 +48,8 @@ namespace Chat.Web.Hubs
             Services.UnreadNotificationScheduler unreadScheduler,
             Services.IMarkReadRateLimiter markReadRateLimiter,
             Services.IPresenceTracker presenceTracker,
-            IStringLocalizer<Resources.SharedResources> localizer)
+            IStringLocalizer<Resources.SharedResources> localizer,
+            HealthCheckService healthCheckService)
         {
             _users = users;
             _messages = messages;
@@ -57,6 +60,7 @@ namespace Chat.Web.Hubs
             _markReadRateLimiter = markReadRateLimiter;
             _presenceTracker = presenceTracker;
             _localizer = localizer;
+            _healthCheckService = healthCheckService;
         }
 
         /// <summary>
@@ -473,6 +477,110 @@ namespace Chat.Web.Hubs
                 await Clients.Group(messageRoom).SendAsync("messageRead", new { id = messageId, readers = updated.ReadBy?.ToArray() ?? Array.Empty<string>() });
             }
             catch { /* ignore broadcast errors */ }
+        }
+
+        /// <summary>
+        /// Returns backend health status (Cosmos DB, Redis connectivity).
+        /// Used by clients to detect when SignalR connection is active but backend services are unreachable.
+        /// </summary>
+        public async Task<object> GetHealthStatus()
+        {
+            using var activity = Tracing.ActivitySource.StartActivity("ChatHub.GetHealthStatus");
+            
+            try
+            {
+                // Create cancellation token with 5-second timeout
+                using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(5));
+                
+                // Run health checks tagged as "ready" (Redis + Cosmos)
+                var healthReport = await _healthCheckService.CheckHealthAsync(
+                    (check) => check.Tags.Contains("ready"),
+                    cts.Token
+                );
+                
+                var timestamp = DateTime.UtcNow;
+                var isHealthy = healthReport.Status == HealthStatus.Healthy;
+                
+                // Extract individual component statuses
+                var redisStatus = healthReport.Entries.TryGetValue("redis", out var redisEntry)
+                    ? redisEntry.Status.ToString()
+                    : "Unknown";
+                var cosmosStatus = healthReport.Entries.TryGetValue("cosmos", out var cosmosEntry)
+                    ? cosmosEntry.Status.ToString()
+                    : "Unknown";
+                
+                activity?.SetTag("health.overall", isHealthy);
+                activity?.SetTag("health.redis", redisStatus);
+                activity?.SetTag("health.cosmos", cosmosStatus);
+                
+                _logger.LogDebug(
+                    "Health check for user {User}: Overall={Overall}, Redis={Redis}, Cosmos={Cosmos}",
+                    IdentityName, isHealthy, redisStatus, cosmosStatus
+                );
+                
+                return new
+                {
+                    isHealthy,
+                    redis = redisStatus,
+                    cosmos = cosmosStatus,
+                    timestamp
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "GetHealthStatus failed for user {User}", IdentityName);
+                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+                
+                return new
+                {
+                    isHealthy = false,
+                    redis = "Error",
+                    cosmos = "Error",
+                    timestamp = DateTime.UtcNow,
+                    error = ex.Message
+                };
+            }
+        }
+
+        /// <summary>
+        /// Heartbeat to detect stale connections when disconnect events are lost.
+        /// Updates last activity timestamp in Redis and returns health status.
+        /// Client should invoke every 30 seconds.
+        /// </summary>
+        public async Task<object> Heartbeat()
+        {
+            using var activity = Tracing.ActivitySource.StartActivity("ChatHub.Heartbeat");
+            activity?.SetTag("chat.user", IdentityName);
+            
+            try
+            {
+                // Update last activity timestamp in Redis (2-minute TTL)
+                await _presenceTracker.UpdateHeartbeatAsync(IdentityName);
+                
+                _logger.LogDebug("Heartbeat from user {User}", IdentityName);
+                
+                // Return health status with heartbeat acknowledgment
+                var healthStatus = await GetHealthStatus();
+                
+                return new
+                {
+                    acknowledged = true,
+                    timestamp = DateTime.UtcNow,
+                    health = healthStatus
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Heartbeat failed for user {User}", IdentityName);
+                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+                
+                return new
+                {
+                    acknowledged = false,
+                    timestamp = DateTime.UtcNow,
+                    error = ex.Message
+                };
+            }
         }
     }
 }

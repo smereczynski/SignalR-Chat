@@ -15,6 +15,7 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.10.0" />
+    <PackageReference Include="Moq" Version="4.20.70" />
   </ItemGroup>
   <!-- Keep lightweight by linking specific files where possible; also reference web project for Argon2 hasher tests -->
   <!-- Removed file link to avoid CS0436 duplicate type warnings; use the type from Chat.Web project reference instead. -->
