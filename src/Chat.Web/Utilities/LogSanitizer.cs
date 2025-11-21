@@ -27,7 +27,8 @@ namespace Chat.Web.Utilities
         /// <returns>Sanitized string with control characters removed, or a marker if null/empty</returns>
         public static string Sanitize(string input, int max = 200)
         {
-            if (string.IsNullOrEmpty(input)) return string.Empty;
+            if (input == null) return "<null>";
+            if (input.Length == 0) return "<empty>";
             var sb = new StringBuilder(input.Length);
             foreach (var ch in input)
             {
