@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Documentation Accuracy Corrections** (2025-01-21):
+  - ✅ Fixed **incorrect in-memory mode documentation** - Previously claimed in-memory mode was "default" when running `dotnet run`, but app actually connects to Azure if `.env.local` exists
+  - ✅ Corrected all documentation to require `Testing__InMemory=true` environment variable for true in-memory mode
+  - ✅ Updated `docs/development/local-setup.md`:
+    - Removed misleading "In-Memory Mode (Default)" heading
+    - Added explicit requirement for `Testing__InMemory=true` environment variable
+    - Added troubleshooting section: "Application Connects to Azure When I Expected In-Memory Mode"
+    - Added verification steps to confirm in-memory vs Azure mode
+    - Added note about Entra ID requiring HTTPS and proper app registration for local development
+  - ✅ Updated `docs/reference/faq.md`:
+    - Corrected misleading "Do I need Azure? No!" answer with accurate `Testing__InMemory=true` requirement
+    - Updated mode switching instructions with correct commands
+    - Added new FAQ entry: "Does Entra ID (SSO) work for local development?" explaining HTTPS/redirect URI requirements
+    - Added verification steps to determine which mode is active
+  - ✅ Updated `docs/getting-started/quickstart.md`:
+    - Changed Step 2 command to include required `Testing__InMemory=true` environment variable
+    - Added warning about Azure connection attempts without the flag
+    - Clarified "What's Running?" section with explicit mode differences
+  - ⚠️ **Important**: Users following old documentation would have experienced unexpected Azure connection attempts if `.env.local` existed
+  - 🔍 **Root Cause**: Application runtime testing revealed `.env.local` file presence causes Azure resource connections regardless of intent
+  - ✅ **Verification**: Tested both modes - confirmed `Testing__InMemory=true` eliminates all Azure connections (no Cosmos DB, SignalR Service, or Redis)
+
 ### Added
 - **P0 Critical Documentation** (2025-01-21):
   - ✅ `docs/development/local-setup.md` - Comprehensive development environment setup guide

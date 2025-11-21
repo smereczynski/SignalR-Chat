@@ -26,12 +26,13 @@ This guide covers setting up a complete development environment for SignalR Chat
 
 SignalR Chat supports two development modes:
 
-### 1. In-Memory Mode (Default)
+### 1. In-Memory Mode
 - ✅ **No Azure dependencies** - Works completely offline
 - ✅ **Fast startup** - No connection setup needed
 - ✅ **Perfect for UI development** - All features work
 - ❌ **No persistence** - Data lost on restart
 - ❌ **Single instance only** - Can't test load balancing
+- ⚠️ **Requires explicit flag**: `Testing__InMemory=true` environment variable
 
 ### 2. Azure Mode (Full Feature Set)
 - ✅ **Full persistence** - Cosmos DB stores messages
@@ -56,9 +57,11 @@ dotnet build ./src/Chat.sln
 ### 2. Run the Application
 
 ```bash
-# Run with default settings (in-memory mode)
-dotnet run --project ./src/Chat.Web --urls=http://localhost:5099
+# Run in true in-memory mode (no Azure dependencies)
+Testing__InMemory=true dotnet run --project ./src/Chat.Web --urls=http://localhost:5099
 ```
+
+**⚠️ Important**: Without `Testing__InMemory=true`, the application will attempt to connect to Azure resources if `.env.local` exists or connection strings are configured.
 
 ### 3. Verify It Works
 
@@ -144,7 +147,14 @@ The repository includes pre-configured tasks in `.vscode/tasks.json`:
 - **Test** - Run all tests
 - **Clean Build (translations)** - Rebuild after `.resx` changes
 
-#### 4. Configure Debugging
+### 3. Configure Debugging
+
+**⚠️ Note about Entra ID**: If using Entra ID authentication (SSO), you **must** use HTTPS (`https://localhost:5099`) and configure proper Entra ID app registration with redirect URIs. Entra ID will NOT work with:
+- ❌ HTTP (non-HTTPS) URLs
+- ❌ Missing redirect URI configuration
+- ❌ Empty/placeholder `EntraId:ClientId` in appsettings
+
+For local development without Azure, use OTP authentication (in-memory mode) instead.
 
 Create or update `.vscode/launch.json`:
 
@@ -393,7 +403,8 @@ SIGNALR_CONNECTION_STRING="..."             # SignalR Service
 ACS_CONNECTION_STRING="..."                 # Communication Services
 
 # Testing mode
-Testing__InMemory=true                      # Force in-memory mode (no Azure)
+Testing__InMemory=true                      # Force in-memory mode (required for no Azure)
+                                            # Without this, app uses Azure if .env.local exists
 
 # Observability
 APPLICATIONINSIGHTS_CONNECTION_STRING="..." # App Insights
@@ -544,6 +555,36 @@ COSMOS_CONNECTION_STRING="AccountEndpoint=https://localhost:8081/;AccountKey=C2y
 4. Add integration tests
 
 ## Troubleshooting
+
+### Issue: Application Connects to Azure When I Expected In-Memory Mode
+
+**Symptoms**: Logs show connections to:
+- `cdb-*.documents.azure.com` (Cosmos DB)
+- `*.service.signalr.net` (Azure SignalR Service)
+- Redis connections
+
+**Root cause**: `.env.local` file exists with Azure connection strings, OR environment variables are set.
+
+**Solution**:
+
+**Option 1** - Force in-memory mode:
+```bash
+Testing__InMemory=true dotnet run --project ./src/Chat.Web --urls=http://localhost:5099
+```
+
+**Option 2** - Remove Azure configuration:
+```bash
+# Rename .env.local temporarily
+mv .env.local .env.local.bak
+dotnet run --project ./src/Chat.Web --urls=http://localhost:5099
+```
+
+**How to verify you're in in-memory mode**:
+- ✅ No Cosmos DB connections in logs
+- ✅ No Azure SignalR Service connections
+- ✅ No Redis connections
+- ✅ Faster startup (< 2 seconds)
+- ✅ Terminal shows: `OTP code for [user]: [code]`
 
 ### Issue: Build Fails After Translation Changes
 

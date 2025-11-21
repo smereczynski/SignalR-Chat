@@ -25,8 +25,10 @@ dotnet build ./src/Chat.sln
 
 ```bash
 # Run the application (in-memory storage, no Azure required)
-dotnet run --project ./src/Chat.Web --urls=http://localhost:5099
+Testing__InMemory=true dotnet run --project ./src/Chat.Web --urls=http://localhost:5099
 ```
+
+**⚠️ Important**: The `Testing__InMemory=true` environment variable is **required** to run without Azure dependencies. Without it, the application will attempt to connect to Azure services if connection strings are configured.
 
 You should see output like:
 
@@ -70,11 +72,18 @@ info: Chat.Web.Services.RedisOtpStore[0]
 
 ## What's Running?
 
-In-memory mode uses:
+With `Testing__InMemory=true`, the application uses:
 - ✅ **In-memory OTP storage** (no Redis needed)
 - ✅ **In-memory database** (no Cosmos DB needed)
 - ✅ **Direct SignalR connections** (no Azure SignalR Service)
 - ✅ **All features work** except persistence across restarts
+- ✅ **No network dependencies** - Works completely offline
+
+**Without `Testing__InMemory=true`**:
+- ❌ Attempts to connect to Azure Cosmos DB (if connection string exists)
+- ❌ Attempts to connect to Azure SignalR Service (if connection string exists)
+- ❌ Attempts to connect to Redis (if connection string exists)
+- ❌ Will fail to start if Azure resources are not available
 
 ## Features to Try
 

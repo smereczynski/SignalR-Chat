@@ -87,10 +87,12 @@ SignalR Chat is a production-ready, real-time chat application built with ASP.NE
 
 ### Do I need Azure to develop locally?
 
-**No!** SignalR Chat supports **in-memory mode** for local development:
+**No!** SignalR Chat supports **in-memory mode** for local development without any Azure dependencies.
+
+**To run in true in-memory mode**, use the `Testing__InMemory=true` environment variable:
 
 ```bash
-dotnet run --project ./src/Chat.Web --urls=http://localhost:5099
+Testing__InMemory=true dotnet run --project ./src/Chat.Web --urls=http://localhost:5099
 ```
 
 **In-memory mode includes**:
@@ -101,13 +103,18 @@ dotnet run --project ./src/Chat.Web --urls=http://localhost:5099
 - ❌ Data lost on restart (no persistence)
 - ❌ Single instance only (can't test load balancing)
 
+**⚠️ Important**: Without `Testing__InMemory=true`, the application will connect to Azure resources if:
+- `.env.local` file exists with connection strings
+- Environment variables are set for Azure services
+- `appsettings.json` contains non-empty connection strings
+
 See [Quickstart Guide](../getting-started/quickstart.md) for 5-minute setup.
 
 ### How do I switch between in-memory and Azure mode?
 
-**In-memory mode** (default):
+**In-memory mode** (requires explicit flag):
 ```bash
-dotnet run --project ./src/Chat.Web
+Testing__InMemory=true dotnet run --project ./src/Chat.Web --urls=http://localhost:5099
 ```
 
 **Azure mode** (requires `.env.local` with connection strings):
@@ -116,6 +123,10 @@ bash -lc "set -a; source .env.local; dotnet run --project ./src/Chat.Web --urls=
 ```
 
 Or use VS Code task: **"Run Chat (Azure local env)"**
+
+**How to verify which mode you're in**:
+- **In-memory**: No Azure connections in logs, terminal shows OTP codes
+- **Azure**: Logs show `Connecting to...` for Cosmos DB, SignalR Service, Redis
 
 ### What's in `.env.local`?
 
@@ -398,6 +409,30 @@ ASP.NET Core automatically translates `__` → `:` when reading configuration.
 **Trade-offs**:
 - ❌ Requires email/SMS delivery (depends on Azure Communication Services)
 - ❌ Less familiar to users (most expect passwords)
+
+### Does Entra ID (SSO) work for local development?
+
+**Not without proper setup**. Entra ID authentication requires:
+
+**Required for Entra ID to work**:
+- ✅ HTTPS enabled (`https://localhost:5099`)
+- ✅ Valid Entra ID app registration in Azure Portal
+- ✅ Redirect URI configured: `https://localhost:5099/signin-oidc`
+- ✅ `EntraId:ClientId` configured in `appsettings.json` or environment variables
+- ✅ `EntraId:ClientSecret` (for web app flow)
+- ✅ Dev certificate trusted (`dotnet dev-certs https --trust`)
+
+**Why these requirements?**:
+- Microsoft Identity Platform **requires HTTPS** for redirect URIs (security requirement)
+- Localhost HTTP (`http://localhost:5099`) will **fail** with redirect URI mismatch
+- Empty/placeholder ClientId will cause authentication failures
+
+**Recommended for local development**:
+- ✅ Use **in-memory mode with OTP authentication** (no Entra ID setup needed)
+- ✅ Use `Testing__InMemory=true dotnet run`
+- ✅ Test Entra ID in Azure-deployed environments (dev, staging, prod)
+
+See [Entra ID Multi-Tenant Setup Guide](../development/entra-id-multi-tenant-setup.md) for full configuration.
 
 ### How do I add password authentication?
 
