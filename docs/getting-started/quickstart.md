@@ -101,8 +101,10 @@ In-memory mode uses:
 ### Reconnection
 - Send a message
 - Turn off your Wi-Fi
+- See the room title change to "(RECONNECTING…)"
 - Turn Wi-Fi back on
 - See automatic reconnection (exponential backoff)
+- Note: If connection cannot be restored within 60 seconds, the UI shows "(DISCONNECTED)" but reconnection attempts continue in the background
 
 ### Language Switching
 - Click the flag icon in the profile section

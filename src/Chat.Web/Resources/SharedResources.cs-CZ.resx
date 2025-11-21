@@ -53,6 +53,9 @@
   <data name="Reconnecting" xml:space="preserve">
     <value>PŘIPOJOVÁNÍ…</value>
   </data>
+  <data name="Degraded" xml:space="preserve">
+    <value>OMEZENO</value>
+  </data>
   <data name="Disconnected" xml:space="preserve">
     <value>ODPOJENO</value>
   </data>

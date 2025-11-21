@@ -361,10 +361,53 @@ sequenceDiagram
     B-->>B: window.online
   end
   B->>H: ensureConnected() with infinite reconnect
-  H-->>B: Reconnected + rejoined room
-  B-->>B: Flush outbox FIFO
+  Note over B: Connection state shows "reconnecting"
+  alt Backend returns within 60s
+    H-->>B: Reconnected + rejoined room
+    B-->>B: Flush outbox FIFO
+  else Backend down >60s
+    Note over B: Connection state transitions to "disconnected"
+    B-->>B: Continue retry attempts in background
+  end
   end
 ```
+
+### Connection States
+
+The client-side connection state logic (`computeConnectionState()` in `chat.js`) determines which visual state to display based on multiple factors:
+
+**States**:
+- **`connected`**: Normal operation, SignalR connected and backend healthy
+- **`reconnecting`**: Actively attempting to reconnect (graceful degradation during temporary network issues)
+- **`degraded`**: SignalR connected but backend services (Redis/Cosmos) unhealthy
+- **`disconnected`**: No connection or backend down for extended period
+
+**Timing Thresholds**:
+| Threshold | Duration | Purpose |
+|-----------|----------|---------|
+| Automatic reconnect grace | 60s | Trust "reconnecting" state during SignalR's automatic reconnect attempts |
+| Manual reconnect timeout | 10s | Show "disconnected" after 10s of failed manual reconnects (backend down) |
+| Recent state trust window | 5s | Trust event-driven state updates within last 5 seconds |
+| Health check freshness | 30s | Use health check results if less than 30s old |
+| Hub stuck timeout | 60s | Show "disconnected" if hub stuck in `connecting`/`reconnecting` for >60s |
+
+**State Determination Logic**:
+1. If actively reconnecting via SignalR automatic reconnect (< 60s), show **reconnecting**
+2. If manually reconnecting (< 10s), show **reconnecting**; if manual reconnect > 10s, show **disconnected**
+3. If SignalR connected but health check shows backend unhealthy (< 30s old), show **degraded**
+4. If recent event-driven state change (< 5s), trust that state
+5. Fall back to polling hub state:
+   - If hub state is `connected`, show **connected**
+   - If hub stuck in `connecting` or `reconnecting` for > 60s, show **disconnected** (fixes bug where UI showed "reconnecting" indefinitely)
+   - Otherwise, show **reconnecting** or **disconnected** based on hub state
+
+**Visual Indicators**:
+- **Connected**: Normal appearance
+- **Reconnecting**: Room title appends "(RECONNECTING…)"
+- **Degraded**: Room title appends "(⚠️ LIMITED)" - warning but less severe
+- **Disconnected**: Room title appends "(⚠️ DISCONNECTED)" - critical state
+
+**Background Behavior**: Even when UI shows "disconnected" after 60s, reconnection attempts continue in the background with exponential backoff. When connection is restored, the UI immediately transitions back to "connected".
 
 ### Read receipts flow
 

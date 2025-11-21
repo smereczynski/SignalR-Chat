@@ -51,7 +51,10 @@
     <value>Хто тут ({0})</value>
   </data>
   <data name="Reconnecting" xml:space="preserve">
-    <value>ПЕРЕПІДКЛЮЧЕННЯ…</value>
+    <value>ПОВТОРНЕ ПІДКЛЮЧЕННЯ…</value>
+  </data>
+  <data name="Degraded" xml:space="preserve">
+    <value>ОБМЕЖЕНО</value>
   </data>
   <data name="Disconnected" xml:space="preserve">
     <value>ВІДКЛЮЧЕНО</value>

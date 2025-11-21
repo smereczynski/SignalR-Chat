@@ -486,6 +486,10 @@ namespace Chat.Web
                 )
             );
             services.AddHostedService(sp => sp.GetRequiredService<Services.UnreadNotificationScheduler>());
+            
+            // Presence cleanup service: Remove stale presence entries when heartbeats expire (multi-instance safety)
+            services.AddHostedService<Services.PresenceCleanupService>();
+            
             // Rate limiting: protect auth endpoints (OTP request / verify) - configurable for tests vs prod
             services.AddRateLimiter(options =>
             {

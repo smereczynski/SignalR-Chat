@@ -542,9 +542,19 @@ body {
 .main-content[data-role=room-panel] .header.connection-state-reconnecting h5 {
   color: #3a2d00;
 }
+.main-content[data-role=room-panel] .header.connection-state-degraded {
+  background: #ff9f43;
+}
+.main-content[data-role=room-panel] .header.connection-state-degraded h5 {
+  color: #3a2000;
+}
 .main-content[data-role=room-panel] .header.connection-state-disconnected {
   background: #d08d8d;
 }
 .main-content[data-role=room-panel] .header.connection-state-disconnected h5 {
   color: #3a0707;
+}
+
+.validation-summary-valid {
+  display: none;
 }

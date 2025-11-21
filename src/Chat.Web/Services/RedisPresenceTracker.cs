@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Chat.Web.ViewModels;
 using Microsoft.Extensions.Logging;
@@ -11,13 +12,16 @@ namespace Chat.Web.Services
     /// <summary>
     /// Simplified Redis-backed presence tracker using a single hash for all users.
     /// Stores userName → user data (fullName, avatar, currentRoom) with TTL-based cleanup.
+    /// Heartbeat mechanism: Separate keys (heartbeat:{userName}) with 2-minute TTL for stale detection.
     /// </summary>
     public class RedisPresenceTracker : IPresenceTracker
     {
         private readonly IConnectionMultiplexer _redis;
         private readonly ILogger<RedisPresenceTracker> _logger;
         private const string PresenceHashKey = "presence:users";
+        private const string HeartbeatKeyPrefix = "heartbeat:";
         private const int PresenceTtlSeconds = 600; // 10 minutes
+        private const int HeartbeatTtlSeconds = 120; // 2 minutes
 
         public RedisPresenceTracker(IConnectionMultiplexer redis, ILogger<RedisPresenceTracker> logger)
         {
@@ -124,6 +128,54 @@ namespace Chat.Web.Services
             {
                 _logger.LogError(ex, "Failed to get all users from Redis");
                 return Array.Empty<UserViewModel>();
+            }
+        }
+
+        public async Task UpdateHeartbeatAsync(string userName)
+        {
+            if (string.IsNullOrWhiteSpace(userName))
+                return;
+
+            try
+            {
+                var db = _redis.GetDatabase();
+                var key = HeartbeatKeyPrefix + userName;
+                var timestamp = DateTime.UtcNow.ToString("o"); // ISO 8601 format
+                
+                // Set heartbeat key with 2-minute TTL (automatically expires if no updates)
+                await db.StringSetAsync(key, timestamp, TimeSpan.FromSeconds(HeartbeatTtlSeconds));
+                
+                _logger.LogTrace("Heartbeat updated for user {User}", userName);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to update heartbeat in Redis: {User}", userName);
+            }
+        }
+
+        public async Task<IReadOnlyList<string>> GetActiveHeartbeatsAsync()
+        {
+            try
+            {
+                var server = _redis.GetServer(_redis.GetEndPoints()[0]);
+                
+                // Scan for all heartbeat keys (pattern: heartbeat:*)
+                var keys = server.Keys(pattern: HeartbeatKeyPrefix + "*", pageSize: 1000).ToList();
+                
+                // Extract userName from each key (heartbeat:{userName})
+                var activeUsers = keys
+                    .Select(key => key.ToString())
+                    .Where(keyString => keyString.StartsWith(HeartbeatKeyPrefix))
+                    .Select(keyString => keyString.Substring(HeartbeatKeyPrefix.Length))
+                    .ToList();
+                
+                _logger.LogDebug("Found {Count} active heartbeats", activeUsers.Count);
+                return activeUsers;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to get active heartbeats from Redis");
+                return Array.Empty<string>();
             }
         }
     }
