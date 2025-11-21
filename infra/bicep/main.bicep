@@ -75,14 +75,6 @@ param entraIdFallbackEnableOtp bool = true
 @description('Allow OTP for unauthorized tenant users')
 param entraIdFallbackOtpForUnauthorizedUsers bool = false
 
-@description('Entra ID Client ID')
-@secure()
-param entraIdClientId string = ''
-
-@description('Entra ID Client Secret')
-@secure()
-param entraIdClientSecret string = ''
-
 @description('Optional Entra ID connection string (ClientId=...;ClientSecret=...)')
 @secure()
 param entraIdConnectionString string = ''
