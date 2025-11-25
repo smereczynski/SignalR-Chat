@@ -75,7 +75,8 @@ namespace Chat.Web.Controllers
             var hashingEnabled = _otpOptions.Value?.HashingEnabled ?? true;
             
             // Generate new code (either first send or resend)
-            code = new Random().Next(100000, 999999).ToString();
+            // Use RandomNumberGenerator for cryptographically secure OTP
+            code = System.Security.Cryptography.RandomNumberGenerator.GetInt32(100000, 1000000).ToString();
             var toStore = hashingEnabled ? _otpHasher.Hash(req.UserName, code) : code;
             await _otpStore.SetAsync(req.UserName, toStore, TimeSpan.FromMinutes(5));
             

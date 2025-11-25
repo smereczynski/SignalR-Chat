@@ -30,8 +30,16 @@ namespace Chat.Web.Utilities
             if (input == null) return "<null>";
             if (input.Length == 0) return "<empty>";
             var sb = new StringBuilder(input.Length);
+            int processed = 0;
+            // Cap processing to prevent CPU exhaustion on massive inputs of control characters
+            int limit = Math.Max(max * 10, 4096); 
             foreach (var ch in input)
             {
+                if (++processed > limit) 
+                {
+                    if (sb.Length < max) sb.Append("…");
+                    break;
+                }
                 if (ch == '\r' || ch == '\n') continue; // drop new lines entirely
                 if (char.IsControl(ch)) continue; // remove other control chars (tabs, etc.)
                 sb.Append(ch);
