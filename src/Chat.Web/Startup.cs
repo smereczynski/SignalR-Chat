@@ -150,6 +150,7 @@ namespace Chat.Web
         /// <summary>
         /// Constructs the startup instance (configuration injected by host).
         /// </summary>
+        private ILoggerFactory _loggerFactory;
         private ILogger<Startup> _logger;
 
         public Startup(IConfiguration configuration, IWebHostEnvironment environment)
@@ -169,8 +170,8 @@ namespace Chat.Web
     public void ConfigureServices(IServiceCollection services)
         {
             // Create early logger for startup diagnostics
-            using var loggerFactory = LoggerFactory.Create(builder => builder.AddConsole());
-            _logger = loggerFactory.CreateLogger<Startup>();
+            _loggerFactory = LoggerFactory.Create(builder => builder.AddConsole());
+            _logger = _loggerFactory.CreateLogger<Startup>();
 
             var inMemoryTest = string.Equals(Configuration["Testing:InMemory"], "true", StringComparison.OrdinalIgnoreCase);
             // Defer OpenTelemetry registration until after external clients (Cosmos, Redis) are registered
