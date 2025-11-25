@@ -9,83 +9,12 @@ using Chat.Web.Options;
 using System.Diagnostics;
 using Chat.Web.Observability;
 using Microsoft.Extensions.Logging;
-using System.Text;
 using System.Net.Sockets;
 using Chat.Web.Resilience;
+using Chat.Web.Utilities;
 
 namespace Chat.Web.Repositories
 {
-    internal static class LogSanitizer
-    {
-        // Remove characters that could forge new log lines or control terminal output.
-        // Limits length to a reasonable size to avoid log spam amplification.
-        public static string Sanitize(string input, int max = 200)
-        {
-            if (string.IsNullOrEmpty(input)) return string.Empty;
-            var sb = new StringBuilder(input.Length);
-            foreach (var ch in input)
-            {
-                if (ch == '\r' || ch == '\n') continue; // drop new lines entirely
-                if (char.IsControl(ch)) continue; // remove other control chars (tabs, etc.)
-                sb.Append(ch);
-                if (sb.Length >= max)
-                {
-                    sb.Append("…");
-                    break;
-                }
-            }
-            return sb.ToString();
-        }
-
-        // Mask an email address, preserving only the domain suffix for minimal utility.
-        // Example: john.doe@example.com -> ***@***.com
-        public static string MaskEmail(string email)
-        {
-            var s = Sanitize(email, max: 256);
-            if (string.IsNullOrWhiteSpace(s)) return string.Empty;
-            var at = s.IndexOf('@');
-            if (at < 0) return MaskGeneric(s);
-            var lastDot = s.LastIndexOf('.');
-            var suffix = lastDot > at && lastDot < s.Length - 1 ? s.Substring(lastDot) : string.Empty;
-            return $"***@***{suffix}";
-        }
-
-        // Mask a phone number keeping leading '+' (if present) and last 2 digits.
-        // Non-digit characters (spaces/dashes) are removed in the mask.
-        // Example: +48604970937 -> +*********37
-        public static string MaskPhone(string phone)
-        {
-            var s = Sanitize(phone, max: 64);
-            if (string.IsNullOrWhiteSpace(s)) return string.Empty;
-            var hasPlus = s.StartsWith('+');
-            var digits = new string(s.Where(char.IsDigit).ToArray());
-            if (digits.Length == 0) return hasPlus ? "+**" : "**";
-            var keep = Math.Min(2, digits.Length);
-            var stars = new string('*', Math.Max(0, digits.Length - keep));
-            var tail = digits.Substring(digits.Length - keep, keep);
-            return (hasPlus ? "+" : string.Empty) + stars + tail;
-        }
-
-        // Heuristic mask for destinations (email or phone or other handle)
-        public static string MaskDestination(string dest)
-        {
-            if (string.IsNullOrWhiteSpace(dest)) return string.Empty;
-            var s = Sanitize(dest, max: 256);
-            if (s.Contains('@')) return MaskEmail(s);
-            // Assume phone-like if it contains 5+ digits
-            var digitCount = s.Count(char.IsDigit);
-            if (digitCount >= 5) return MaskPhone(s);
-            return MaskGeneric(s);
-        }
-
-        private static string MaskGeneric(string s)
-        {
-            if (string.IsNullOrEmpty(s)) return string.Empty;
-            var keep = Math.Min(2, s.Length);
-            var tail = s.Substring(s.Length - keep, keep);
-            return new string('*', Math.Max(0, s.Length - keep)) + tail;
-        }
-    }
     public class CosmosClients
     {
         public CosmosClient Client { get; }

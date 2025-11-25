@@ -150,6 +150,8 @@ namespace Chat.Web
         /// <summary>
         /// Constructs the startup instance (configuration injected by host).
         /// </summary>
+        private ILogger<Startup> _logger;
+
         public Startup(IConfiguration configuration, IWebHostEnvironment environment)
         {
             Configuration = configuration;
@@ -166,6 +168,10 @@ namespace Chat.Web
     /// </summary>
     public void ConfigureServices(IServiceCollection services)
         {
+            // Create early logger for startup diagnostics
+            using var loggerFactory = LoggerFactory.Create(builder => builder.AddConsole());
+            _logger = loggerFactory.CreateLogger<Startup>();
+
             var inMemoryTest = string.Equals(Configuration["Testing:InMemory"], "true", StringComparison.OrdinalIgnoreCase);
             // Defer OpenTelemetry registration until after external clients (Cosmos, Redis) are registered
             var otlpEndpoint = Configuration["OTel:OtlpEndpoint"]; // e.g. http://localhost:4317 or https://otlp.yourdomain:4317
@@ -291,8 +297,8 @@ namespace Chat.Web
                 services.AddSingleton<IRoomsRepository, CosmosRoomsRepository>();
                 services.AddSingleton<IMessagesRepository, CosmosMessagesRepository>();
 
-                // Data seeder service (seeds initial data during startup if database is empty)
-                services.AddSingleton<Services.DataSeederService>();
+                // Data seeder service (seeds initial data in background if database is empty)
+                services.AddHostedService<Services.DataSeederService>();
 
                 // Redis OTP store (fail fast if placeholder)
                 // Azure App Service injects connection strings as CUSTOMCONNSTR_{name}
@@ -594,7 +600,7 @@ namespace Chat.Web
                                     }
                                     return Task.CompletedTask;
                                 },
-                                OnTokenValidated = async context =>
+                                OnTokenValidated = context =>
                                 {
                                     var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Startup>>();
                                     logger.LogWarning("===== OnTokenValidated START =====");
@@ -648,7 +654,7 @@ namespace Chat.Web
                                     {
                                         logger.LogWarning("OnTokenValidated: UPN (preferred_username) claim is missing from token");
                                         context.Fail("UPN claim is required");
-                                        return;
+                                        return Task.CompletedTask;
                                     }
                                     
                                     // Explicitly deny Microsoft consumer (MSA) accounts
@@ -664,7 +670,7 @@ namespace Chat.Web
                                             Chat.Web.Utilities.LogSanitizer.Sanitize(issuerClaim ?? "<null>"));
                                         context.HandleResponse();
                                         context.Response.Redirect("/login?reason=not_authorized");
-                                        return;
+                                        return Task.CompletedTask;
                                     }
                                     
                                     // Validate tenant if configured
@@ -683,7 +689,7 @@ namespace Chat.Web
                                             // Both silent SSO and normal login follow same path
                                             context.HandleResponse();
                                             context.Response.Redirect("/login?reason=not_authorized");
-                                            return;
+                                            return Task.CompletedTask;
                                         }
                                     }
                                     
@@ -756,18 +762,18 @@ namespace Chat.Web
                                             // Redirect to login with reason
                                             context.HandleResponse();
                                             context.Response.Redirect("/login?reason=not_authorized");
-                                            return;
+                                            return Task.CompletedTask;
                                         }
                                         else
                                         {
                                             logger.LogWarning(
                                                 "OnTokenValidated: User with UPN {Upn} not found in database and OTP fallback disabled - rejecting login",
                                                 Chat.Web.Utilities.LogSanitizer.Sanitize(upn));
-                                            
+
                                             // Redirect to login with reason
                                             context.HandleResponse();
                                             context.Response.Redirect("/login?reason=not_authorized");
-                                            return;
+                                            return Task.CompletedTask;
                                         }
                                     }
                                     
@@ -788,6 +794,8 @@ namespace Chat.Web
                                         Chat.Web.Utilities.LogSanitizer.Sanitize(user.UserName),
                                         Chat.Web.Utilities.LogSanitizer.Sanitize(upn),
                                         Chat.Web.Utilities.LogSanitizer.Sanitize(tenantId ?? "<null>"));
+
+                                    return Task.CompletedTask;
                                 },
                                 OnRemoteFailure = context =>
                                 {
@@ -903,10 +911,10 @@ namespace Chat.Web
                     if (corsOptions.AllowAllOrigins)
                     {
                         // Development only - allow all origins
-                        Console.WriteLine(
-                            "WARNING: CORS configured to allow ALL origins (Development mode). " +
-                            "This should NEVER be enabled in Production.");
-                        
+                        _logger.LogWarning(
+                            "CORS configured to allow ALL origins (Development mode). " +
+                            "This should NEVER be enabled in Production");
+
                         builder
                             .SetIsOriginAllowed(_ => true)
                             .AllowAnyHeader()
@@ -916,8 +924,9 @@ namespace Chat.Web
                     else
                     {
                         // Production/Staging - strict origin whitelist
-                        Console.WriteLine(
-                            $"INFO: CORS configured with allowed origins: {string.Join(", ", corsOptions.AllowedOrigins)}");
+                        _logger.LogInformation(
+                            "CORS configured with allowed origins: {AllowedOrigins}",
+                            string.Join(", ", corsOptions.AllowedOrigins));
 
                         builder
                             .WithOrigins(corsOptions.AllowedOrigins)
@@ -1011,17 +1020,8 @@ namespace Chat.Web
     /// </summary>
     public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
         {
-            // Seed initial data if database is empty (only in non-test mode)
-            var inMemoryTest = string.Equals(Configuration["Testing:InMemory"], "true", StringComparison.OrdinalIgnoreCase);
-            if (!inMemoryTest)
-            {
-                var seeder = app.ApplicationServices.GetService<Services.DataSeederService>();
-                if (seeder != null)
-                {
-                    // Run seeding synchronously during startup
-                    seeder.SeedIfEmptyAsync().GetAwaiter().GetResult();
-                }
-            }
+            // Data seeding now happens in the background via DataSeederService (IHostedService)
+            // This allows the app to start faster and respond to health checks sooner
 
             // Global exception handler with comprehensive logging (all environments)
             app.UseMiddleware<GlobalExceptionHandlerMiddleware>();

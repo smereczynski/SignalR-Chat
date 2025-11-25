@@ -3,7 +3,7 @@ using System.Diagnostics;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
-using Chat.Web.Repositories; // for LogSanitizer
+using Chat.Web.Utilities;
 
 namespace Chat.Web.Observability
 {
