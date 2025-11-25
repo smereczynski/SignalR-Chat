@@ -61,7 +61,7 @@ namespace Chat.Web
     ///  - Apply rate limiting to sensitive OTP endpoints
     ///  - Expose health and hub endpoints
     /// </summary>
-    public class Startup
+    public class Startup : IDisposable
     {
         /// <summary>
         /// Static holder for custom domain meters and counters. These are added to the MeterProvider in <see cref="ConfigureServices"/>.
@@ -1088,6 +1088,11 @@ namespace Chat.Web
                     Predicate = r => r.Tags.Contains("ready")
                 });
             });
+        }
+
+        public void Dispose()
+        {
+            _loggerFactory?.Dispose();
         }
     }
 }
