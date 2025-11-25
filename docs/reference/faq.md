@@ -206,55 +206,27 @@ See [Local Setup Guide](../development/local-setup.md#full-setup-azure-mode) for
 
 ## Testing
 
-### Why do SignalR tests fail locally?
+### What tests are included?
 
-**Expected behavior!** 11-14 SignalR integration tests fail without Azure SignalR Service.
+SignalR Chat includes **135+ unit tests** covering core business logic:
 
-**Root cause**: `TestAuthHandler` (custom test authentication) is **not invoked** for SignalR WebSocket/SSE connections when using local SignalR transport. Tests pass with Azure SignalR Service because it uses query string authentication.
-
-**Impact**:
-- ❌ 168/179 tests pass locally (94%)
-- ✅ 179/179 tests pass with Azure (100%)
-- ✅ All tests pass in GitHub Actions (uses Azure)
-
-**Workarounds**:
-
-**Option 1**: Run tests with Azure (recommended):
 ```bash
-bash -lc "set -a; source .env.local; dotnet test src/Chat.sln"
-# Output: 179/179 passed ✅
-```
-
-**Option 2**: Skip SignalR tests:
-```bash
-dotnet test --filter "FullyQualifiedName!~RoomJoinPositiveTests"
-# Output: 144/144 passed ✅
-```
-
-**Option 3**: Accept failures as expected:
-```bash
+# Run all tests
 dotnet test src/Chat.sln
-# Output: 168/179 passed (11 expected failures) ⚠️
+# Output: 135/135 passed ✅
 ```
 
-**References**:
-- [Issue #113: Fix failing SignalR hub integration tests](https://github.com/smereczynski/SignalR-Chat/issues/113)
-- [Testing Guide: Known Issues](../development/testing.md#known-issues)
+**Test coverage**:
+- ✅ OTP hashing and validation (Argon2id)
+- ✅ Log sanitization (CWE-117 prevention)
+- ✅ URL validation (security)
+- ✅ Configuration guards (startup validation)
+- ✅ Localization (9 languages)
+- ✅ Service utilities (presence, notifications)
 
-### How do I run tests without Azure?
+**Future work**: Integration tests and end-to-end tests can be implemented when they become a priority. Currently, the focus is on maintaining comprehensive unit test coverage.
 
-Use **in-memory mode** (default):
-
-```bash
-# All tests (expect 11 SignalR failures)
-dotnet test src/Chat.sln
-
-# Force in-memory mode explicitly
-Testing__InMemory=true dotnet test src/Chat.sln
-
-# Skip SignalR tests (all pass)
-dotnet test --filter "FullyQualifiedName!~RoomJoinPositiveTests"
-```
+See [Testing Guide](../development/testing.md) for details.
 
 ### How do I debug a failing test?
 
@@ -274,11 +246,9 @@ See [Testing Guide: Debugging Tests](../development/testing.md#debugging-tests).
 
 ### What's the test coverage?
 
-**Current**: ~80% code coverage across 179 tests
+**Current**: 135+ unit tests covering core business logic
 
-**Target**:
-- Unit tests: >90% coverage (pure logic)
-- Integration tests: >70% coverage (includes I/O)
+**Target**: >80% coverage on unit tests for pure logic and services
 
 **Generate coverage report**:
 ```bash
@@ -673,13 +643,12 @@ StackExchange.Redis.RedisTimeoutException: Timeout performing GET
 ### Tests pass locally, fail in CI
 
 **Possible causes**:
-1. **Environment variables** - CI uses in-memory mode
-2. **Timing issues** - CI is slower, tests may timeout
-3. **Dependencies missing** - Azure resources not configured
+1. **Timing issues** - CI environment may be slower
+2. **Flaky tests** - Race conditions or shared state
 
-**Solution**: Simulate CI locally:
+**Solution**: Run tests multiple times locally to identify flaky tests:
 ```bash
-Testing__InMemory=true dotnet test src/Chat.sln
+for i in {1..10}; do dotnet test src/Chat.sln; done
 ```
 
 ### Application logs not showing in Azure

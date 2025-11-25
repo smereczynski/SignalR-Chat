@@ -726,35 +726,9 @@ public void RequireAdminRole_Policy_RequiresRoleClaim()
 }
 ```
 
-### Integration Tests: Admin Access
+### Testing Admin Access
 
-```csharp
-[Fact]
-public async Task Admin_Index_WithoutAdminRole_ReturnsForbidden()
-{
-    var client = _factory.CreateClient();
-    
-    // Authenticate as regular user (no Admin.ReadWrite role)
-    await AuthenticateAsRegularUser(client);
-    
-    var response = await client.GetAsync("/Admin");
-    
-    Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
-}
-
-[Fact]
-public async Task Admin_Index_WithAdminRole_ReturnsSuccess()
-{
-    var client = _factory.CreateClient();
-    
-    // Authenticate as admin user (with Admin.ReadWrite role)
-    await AuthenticateAsAdmin(client);
-    
-    var response = await client.GetAsync("/Admin");
-    
-    Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-}
-```
+**Note**: Integration tests for admin access can be implemented in the future when they become a priority. Currently, use manual testing to verify admin role functionality.
 
 ### Manual Testing
 
