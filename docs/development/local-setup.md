@@ -314,38 +314,14 @@ dotnet test src/Chat.sln --logger "console;verbosity=detailed"
 ### Specific Test Projects
 
 ```bash
-# Unit tests only (utilities, services)
-dotnet test tests/Chat.Tests/
-
-# Integration tests (SignalR hubs, auth flows)
-dotnet test tests/Chat.IntegrationTests/
-
-# Web tests (health checks, security headers)
-dotnet test tests/Chat.Web.Tests/
-```
-
-### Test Modes
-
-#### In-Memory Mode (Default)
-```bash
+# Run all unit tests (135+ tests)
 dotnet test src/Chat.sln
+
+# Run tests from specific project
+dotnet test tests/Chat.Tests/
 ```
-- Uses in-memory database and OTP storage
-- Fast and isolated
-- Some SignalR tests may fail (see [Testing Guide](testing.md))
 
-#### Azure Mode (Full Feature Set)
-```bash
-# Load .env.local for tests
-bash -lc "set -a; source .env.local; dotnet test src/Chat.sln"
-```
-- Uses Azure resources
-- Tests full integration
-- All tests should pass
-
-### Known Test Issues
-
-⚠️ **SignalR Integration Tests**: 11-14 tests may fail locally without Azure SignalR Service. This is expected behavior. See [Testing Guide](testing.md#known-issues) and [Issue #113](https://github.com/smereczynski/SignalR-Chat/issues/113) for details.
+**Note**: Integration tests and end-to-end tests can be implemented in the future when they become a priority. Currently, the focus is on maintaining comprehensive unit test coverage for core business logic.
 
 ## Configuration
 
@@ -552,7 +528,7 @@ COSMOS_CONNECTION_STRING="AccountEndpoint=https://localhost:8081/;AccountKey=C2y
    ```
 
 3. Add authorization if needed: `[Authorize]`
-4. Add integration tests
+4. Add unit tests to verify functionality
 
 ## Troubleshooting
 
@@ -659,11 +635,8 @@ dotnet build --no-dependencies
 # Run tests in parallel
 dotnet test --parallel
 
-# Run specific test category
-dotnet test --filter "Category=Unit"
-
-# Skip slow integration tests
-dotnet test --filter "FullyQualifiedName!~Integration"
+# Run specific test
+dotnet test --filter "FullyQualifiedName~MyTestName"
 ```
 
 ### Faster Startup

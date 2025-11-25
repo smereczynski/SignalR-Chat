@@ -1,23 +1,23 @@
 # Testing Guide
 
-This guide covers testing practices, running tests, and understanding test failures in SignalR Chat.
+This guide covers testing practices, running tests, and understanding the test structure in SignalR Chat.
 
 ## Test Structure
 
-SignalR Chat has **179 total tests** across three projects:
+SignalR Chat currently has **unit tests** to validate core business logic and utilities:
 
 | Project | Count | Purpose | Speed |
 |---------|-------|---------|-------|
-| **Chat.Tests** | 9 | Unit tests (utilities, helpers) | ⚡ Fast |
-| **Chat.IntegrationTests** | 135 | Domain tests (auth, SignalR, API) | 🐢 Slow |
-| **Chat.Web.Tests** | 35 | Web tests (health, security headers) | ⚡ Fast |
+| **Chat.Tests** | 135+ | Unit tests (utilities, services, business logic) | ⚡ Fast |
+
+> **Note**: Integration tests and end-to-end tests can be implemented in the future as the project matures. Currently, the focus is on maintaining high-quality unit test coverage for core functionality. Integration testing would require Azure resource provisioning and is not a current priority.
 
 ## Running Tests
 
 ### All Tests
 
 ```bash
-# Run all 179 tests
+# Run all tests
 dotnet test src/Chat.sln
 
 # With detailed output
@@ -27,17 +27,11 @@ dotnet test src/Chat.sln --logger "console;verbosity=detailed"
 dotnet test src/Chat.sln /p:CollectCoverage=true
 ```
 
-### Specific Test Projects
+### Specific Test Project
 
 ```bash
-# Unit tests only (9 tests) - utilities, helpers
+# Unit tests - utilities, services, business logic
 dotnet test tests/Chat.Tests/
-
-# Integration tests (135 tests) - SignalR, auth, API
-dotnet test tests/Chat.IntegrationTests/
-
-# Web tests (35 tests) - health checks, security
-dotnet test tests/Chat.Web.Tests/
 ```
 
 ### Specific Test Classes
@@ -145,103 +139,38 @@ public void Sanitize_WithNewlines_RemovesNewlines()
 **Run unit tests only**:
 ```bash
 dotnet test tests/Chat.Tests/
-# Output: 9/9 passed (< 1 second)
+# Output: 135/135 passed (< 3 seconds)
 ```
 
-### Chat.IntegrationTests (Domain Tests)
+## Test Coverage
 
-**Location**: `tests/Chat.IntegrationTests/`  
-**Count**: 135 tests  
-**Focus**: API endpoints, SignalR hubs, authentication flows
+The current test suite focuses on:
 
-**Test files**:
+### Core Business Logic
+- **OTP Generation & Hashing**: Secure random number generation, Argon2id hashing
+- **Log Sanitization**: PII removal, log injection prevention (CWE-117)
+- **URL Validation**: Local URL detection for secure redirects
+- **Configuration Guards**: Validation of required configuration at startup
+- **Localization**: Multi-language support validation
+
+### Services & Utilities
+- **OtpHasher**: Password hashing with pepper
+- **LogSanitizer**: Control character removal
+- **UnreadNotificationScheduler**: Background job scheduling
+- **URL helpers**: Security validation
+
+## Test Organization
+
+Tests are organized by functional area within `tests/Chat.Tests/`:
+
 ```
-Chat.IntegrationTests/
-├── ChatHubLifecycleTests.cs         # SignalR connection lifecycle
-├── CustomWebApplicationFactory.cs   # Test server setup
-├── ImmediatePostAfterLoginTests.cs  # Auth session validation
-├── MarkReadRateLimitingTests.cs     # Rate limiting for read receipts
-├── OtpAttemptLimitingTests.cs       # OTP brute-force protection
-├── OtpAuthFlowTests.cs              # Full OTP authentication flow
-├── RateLimitingTests.cs             # Message send rate limiting
-├── RoomAuthorizationTests.cs        # Room access control
-├── RoomJoinPositiveTests.cs         # SignalR room joining (35 tests)
-└── RoomsAuthorizationTests.cs       # Rooms API authorization
-```
-
-**Example test**:
-```csharp
-[Fact]
-public async Task SendMessage_ValidInput_ReturnsSuccess()
-{
-    // Arrange
-    var connection = await CreateAuthenticatedConnectionAsync("alice");
-    await connection.InvokeAsync("JoinRoom", "general");
-    
-    // Act
-    await connection.InvokeAsync("SendMessage", "general", "Hello");
-    
-    // Assert
-    var messages = await _client.GetFromJsonAsync<List<Message>>("/api/rooms/general/messages");
-    Assert.Contains(messages, m => m.Content == "Hello");
-}
-```
-
-**Run integration tests only**:
-```bash
-dotnet test tests/Chat.IntegrationTests/
-# Output: 124-135/135 passed (10-30 seconds)
-```
-
-**⚠️ Note**: 11-14 tests may fail without Azure SignalR Service. See [Known Issues](#known-issues).
-
-### Chat.Web.Tests (Web/Security Tests)
-
-**Location**: `tests/Chat.Web.Tests/`  
-**Count**: 35 tests  
-**Focus**: HTTP endpoints, security headers, health checks
-
-**Test files**:
-```
-Chat.Web.Tests/
-├── HealthEndpointsTests.cs      # /health, /healthz endpoints
-└── SecurityHeadersTests.cs      # CSP, HSTS, X-Frame-Options
-```
-
-**Example test**:
-```csharp
-[Fact]
-public async Task HealthEndpoint_ReturnsHealthyStatus()
-{
-    // Arrange
-    var client = _factory.CreateClient();
-    
-    // Act
-    var response = await client.GetAsync("/health");
-    
-    // Assert
-    response.EnsureSuccessStatusCode();
-    var content = await response.Content.ReadAsStringAsync();
-    Assert.Contains("Healthy", content);
-}
-```
-
-**Run web tests only**:
-```bash
-dotnet test tests/Chat.Web.Tests/
-# Output: 35/35 passed (< 5 seconds)
-```
-
-## Known Issues
-
-### SignalR Integration Tests Fail Locally
-
-**Issue**: 11-14 tests in `RoomJoinPositiveTests.cs` fail with **401 Unauthorized** when running without Azure SignalR Service.
-
-**Example failure**:
-```
-Microsoft.AspNetCore.SignalR.Client.HubException: 
-Failed to complete negotiation with the server: Unauthorized
+Chat.Tests/
+├── ConfigurationGuardsTests.cs          # Startup configuration validation
+├── LocalizationTests.cs                 # Multi-language support
+├── LogSanitizerTests.cs                 # Log security (CWE-117 prevention)
+├── OtpHasherTests.cs                    # Cryptographic hashing
+├── UnreadNotificationSchedulerTests.cs  # Background jobs
+└── UrlIsLocalUrlTests.cs                # URL security validation
 ```
 
 **Root Cause**:
@@ -325,54 +254,7 @@ namespace Chat.Tests
 }
 ```
 
-### Integration Test Template
 
-```csharp
-using Xunit;
-using Microsoft.AspNetCore.SignalR.Client;
-
-namespace Chat.IntegrationTests
-{
-    public class MyHubTests : IClassFixture<CustomWebApplicationFactory>
-    {
-        private readonly CustomWebApplicationFactory _factory;
-        private readonly HttpClient _client;
-        
-        public MyHubTests(CustomWebApplicationFactory factory)
-        {
-            _factory = factory;
-            _client = factory.CreateClient();
-        }
-        
-        [Fact]
-        public async Task HubMethod_ValidInput_ReturnsSuccess()
-        {
-            // Arrange
-            var connection = await CreateAuthenticatedConnectionAsync("alice");
-            
-            // Act
-            await connection.InvokeAsync("MyMethod", "param");
-            
-            // Assert
-            // Verify expected behavior
-        }
-        
-        private async Task<HubConnection> CreateAuthenticatedConnectionAsync(string userId)
-        {
-            var connection = new HubConnectionBuilder()
-                .WithUrl($"http://localhost/chathub", options =>
-                {
-                    options.HttpMessageHandlerFactory = _ => _factory.Server.CreateHandler();
-                    options.Headers.Add("X-Test-UserId", userId);
-                })
-                .Build();
-            
-            await connection.StartAsync();
-            return connection;
-        }
-    }
-}
-```
 
 ### Testing Best Practices
 
@@ -461,52 +343,9 @@ public async Task AsyncMethod_WithInvalidInput_ThrowsException()
 }
 ```
 
-## CustomWebApplicationFactory
+## Future Testing Enhancements
 
-Integration tests use `CustomWebApplicationFactory` to:
-- Create test server with in-memory database
-- Configure test authentication (`TestAuthHandler`)
-- Override services for testing
-- Provide `HttpClient` for API testing
-
-**Key features**:
-```csharp
-public class CustomWebApplicationFactory : WebApplicationFactory<Program>
-{
-    protected override void ConfigureWebHost(IWebHostBuilder builder)
-    {
-        builder.ConfigureServices(services =>
-        {
-            // Use in-memory database
-            services.Configure<TestingOptions>(o => o.InMemory = true);
-            
-            // Add test authentication
-            services.AddAuthentication("Test")
-                .AddScheme<TestAuthHandlerOptions, TestAuthHandler>("Test", null);
-        });
-    }
-}
-```
-
-**Usage in tests**:
-```csharp
-public class MyTests : IClassFixture<CustomWebApplicationFactory>
-{
-    private readonly HttpClient _client;
-    
-    public MyTests(CustomWebApplicationFactory factory)
-    {
-        _client = factory.CreateClient();
-    }
-    
-    [Fact]
-    public async Task Test()
-    {
-        var response = await _client.GetAsync("/api/endpoint");
-        response.EnsureSuccessStatusCode();
-    }
-}
-```
+Integration tests and end-to-end tests can be implemented in the future when they become a priority. Currently, the focus is on maintaining comprehensive unit test coverage for business logic.
 
 ## CI/CD Testing
 
@@ -633,10 +472,9 @@ dotnet test --logger "console;verbosity=detailed" | grep -E "\d+\.\d+ sec"
 ```
 
 **Common causes**:
-- Database queries (use in-memory)
-- HTTP requests (use `HttpClient` mock)
+- Complex computations
 - `Thread.Sleep()` (use `Task.Delay` or `TaskCompletionSource`)
-- Real SignalR connections (use Azure mode or skip)
+- Excessive setup/teardown
 
 ### Parallel Execution
 
@@ -699,40 +537,11 @@ info: Chat.Web.Services.RedisOtpStore[0]
 
 ## Troubleshooting
 
-### Issue: Tests Fail with "Cosmos:Database not configured"
-
-**Solution**: Force in-memory mode:
-```bash
-Testing__InMemory=true dotnet test src/Chat.sln
-```
-
-### Issue: SignalR Tests Fail with 401 Unauthorized
-
-**Expected behavior** - see [Known Issues](#known-issues)
-
-**Solution**: Use Azure mode:
-```bash
-bash -lc "set -a; source .env.local; dotnet test src/Chat.sln"
-```
-
-### Issue: Tests Pass Locally, Fail in CI
-
-**Possible causes**:
-1. **Environment variables** - CI uses in-memory mode
-2. **Timing issues** - CI is slower, may timeout
-3. **Dependencies** - Missing Redis, Cosmos DB
-
-**Solution**: Simulate CI locally:
-```bash
-Testing__InMemory=true dotnet test src/Chat.sln
-```
-
 ### Issue: Flaky Tests (Pass/Fail Intermittently)
 
 **Common causes**:
 1. **Race conditions** - Use proper synchronization (`await`, locks)
 2. **Shared state** - Tests must be independent
-3. **External dependencies** - Mock or stub
 
 **Solution**: Isolate and debug:
 ```bash
