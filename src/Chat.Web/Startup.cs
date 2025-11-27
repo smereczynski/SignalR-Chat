@@ -152,6 +152,7 @@ namespace Chat.Web
         /// </summary>
         private ILoggerFactory _loggerFactory;
         private ILogger<Startup> _logger;
+        private bool _disposed = false;
 
         public Startup(IConfiguration configuration, IWebHostEnvironment environment)
         {
@@ -1090,9 +1091,23 @@ namespace Chat.Web
             });
         }
 
+        protected virtual void Dispose(bool disposing)
+        {
+            if (!_disposed)
+            {
+                if (disposing)
+                {
+                    // Dispose managed resources
+                    _loggerFactory?.Dispose();
+                }
+                _disposed = true;
+            }
+        }
+
         public void Dispose()
         {
-            _loggerFactory?.Dispose();
+            Dispose(true);
+            GC.SuppressFinalize(this);
         }
     }
 }
