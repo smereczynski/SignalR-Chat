@@ -76,7 +76,7 @@
       if (flow.startTimeout) clearTimeout(flow.startTimeout);
       flow.startTimeout = setTimeout(()=>{ if (!controller.signal.aborted){ try { controller.abort(); } catch(_){} } }, rawTimeoutMs);
 
-      postJson('/api/auth/start', { email })
+      postJson('/api/auth/start', { userName: email })
         .then(r => { if (!r.ok) throw new Error(window.i18n?.failedToSendCode || 'Failed to send code'); return r.json().catch(()=>({})); })
         .then(() => {
           if (flow.activeEmail !== email || controller.signal.aborted) return;
@@ -120,7 +120,7 @@
       if (!email || !code) { setOtpError(window.i18n?.emailAndCodeRequired || 'Email and code are required'); return; }
       const btn = document.getElementById('btn-verify-otp'); if (btn) btn.disabled = true; flow.verifyInFlight = true;
       const returnUrl = (typeof window.__returnUrl === 'string' ? window.__returnUrl : '/chat');
-      postJson('/api/auth/verify', { email, code, returnUrl })
+      postJson('/api/auth/verify', { userName: email, code, returnUrl })
         .then(r => { if (!r.ok) throw new Error(window.i18n?.invalidVerificationCode || 'Invalid code'); return r.json().catch(()=>({})); })
         .then(body => {
           const next = body && typeof body.nextUrl === 'string' ? body.nextUrl : '/chat';
@@ -143,6 +143,11 @@
     const otpCodeInput = document.getElementById('otpCode');
     if (otpCodeInput) {
       otpCodeInput.addEventListener('keydown', ev => { if (ev.key === 'Enter') { ev.preventDefault(); executeOtpVerify(); } });
+    }
+
+    const otpEmailInput = document.getElementById('otpEmail');
+    if (otpEmailInput) {
+      otpEmailInput.addEventListener('keydown', ev => { if (ev.key === 'Enter') { ev.preventDefault(); startOtpSend(false); } });
     }
   });
 })();
