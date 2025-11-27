@@ -79,6 +79,12 @@ param entraIdFallbackOtpForUnauthorizedUsers bool = false
 @secure()
 param entraIdConnectionString string = ''
 
+@description('Home tenant ID for admin panel authorization')
+param entraIdAuthorizationHomeTenantId string = ''
+
+@description('App Role value required for admin access')
+param entraIdAuthorizationAdminRoleValue string = 'Admin.ReadWrite'
+
 // ==========================================
 // Variables - Static IP Allocation
 // ==========================================
@@ -239,6 +245,8 @@ module appService './modules/app-service.bicep' = {
     entraIdFallbackEnableOtp: entraIdFallbackEnableOtp
     entraIdFallbackOtpForUnauthorizedUsers: entraIdFallbackOtpForUnauthorizedUsers
     entraIdConnectionString: entraIdConnectionString
+    entraIdAuthorizationHomeTenantId: entraIdAuthorizationHomeTenantId
+    entraIdAuthorizationAdminRoleValue: entraIdAuthorizationAdminRoleValue
   }
 }
 

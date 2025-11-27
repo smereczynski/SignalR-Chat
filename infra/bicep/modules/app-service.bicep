@@ -85,6 +85,12 @@ param entraIdFallbackOtpForUnauthorizedUsers bool = false
 @secure()
 param entraIdConnectionString string = ''
 
+@description('Home tenant ID for admin panel authorization')
+param entraIdAuthorizationHomeTenantId string = ''
+
+@description('App Role value required for admin access')
+param entraIdAuthorizationAdminRoleValue string = 'Admin.ReadWrite'
+
 @description('Log Analytics Workspace ID for diagnostic logs')
 param logAnalyticsWorkspaceId string = ''
 
@@ -202,6 +208,14 @@ var baseAppSettings = [
   {
     name: 'EntraId__Fallback__OtpForUnauthorizedUsers'
     value: string(entraIdFallbackOtpForUnauthorizedUsers)
+  }
+  {
+    name: 'EntraId__Authorization__HomeTenantId'
+    value: entraIdAuthorizationHomeTenantId
+  }
+  {
+    name: 'EntraId__Authorization__AdminRoleValue'
+    value: entraIdAuthorizationAdminRoleValue
   }
   {
     name: 'Cors__AllowAllOrigins'

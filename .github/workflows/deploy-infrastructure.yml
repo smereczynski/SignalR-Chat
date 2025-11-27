@@ -190,7 +190,9 @@ jobs:
             --parameters acsDataLocation="${{ env.BICEP_ACS_DATA_LOCATION }}" \
             --parameters networkingResourceGroupName=${{ env.NETWORKING_RESOURCE_GROUP }} \
             --parameters otpPepper="${{ secrets.OTP_PEPPER }}" \
-            --parameters entraIdConnectionString="${{ secrets.ENTRA_ID_CONNECTION_STRING }}"
+            --parameters entraIdConnectionString="${{ secrets.ENTRA_ID_CONNECTION_STRING }}" \
+            --parameters entraIdAuthorizationHomeTenantId="${{ secrets.ENTRA_ID_HOME_TENANT_ID }}" \
+            --parameters entraIdAuthorizationAdminRoleValue="${{ vars.ENTRA_ID_ADMIN_ROLE_VALUE }}"
           echo "::endgroup::"
       
       - name: What-If Analysis
@@ -213,6 +215,8 @@ jobs:
             --parameters networkingResourceGroupName=${{ env.NETWORKING_RESOURCE_GROUP }} \
             --parameters otpPepper="${{ secrets.OTP_PEPPER }}" \
             --parameters entraIdConnectionString="${{ secrets.ENTRA_ID_CONNECTION_STRING }}" \
+            --parameters entraIdAuthorizationHomeTenantId="${{ secrets.ENTRA_ID_HOME_TENANT_ID }}" \
+            --parameters entraIdAuthorizationAdminRoleValue="${{ vars.ENTRA_ID_ADMIN_ROLE_VALUE }}" \
             --result-format FullResourcePayloads
           echo "::endgroup::"
       
@@ -239,6 +243,8 @@ jobs:
             --parameters networkingResourceGroupName=${{ env.NETWORKING_RESOURCE_GROUP }} \
             --parameters otpPepper="${{ secrets.OTP_PEPPER }}" \
             --parameters entraIdConnectionString="${{ secrets.ENTRA_ID_CONNECTION_STRING }}" \
+            --parameters entraIdAuthorizationHomeTenantId="${{ secrets.ENTRA_ID_HOME_TENANT_ID }}" \
+            --parameters entraIdAuthorizationAdminRoleValue="${{ vars.ENTRA_ID_ADMIN_ROLE_VALUE }}" \
             --name "$DEPLOYMENT_NAME" \
             --output json > deployment-output.json
           echo "::endgroup::"
