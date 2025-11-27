@@ -61,7 +61,7 @@ namespace Chat.Web
     ///  - Apply rate limiting to sensitive OTP endpoints
     ///  - Expose health and hub endpoints
     /// </summary>
-    public class Startup
+    public class Startup : IDisposable
     {
         /// <summary>
         /// Static holder for custom domain meters and counters. These are added to the MeterProvider in <see cref="ConfigureServices"/>.
@@ -150,7 +150,9 @@ namespace Chat.Web
         /// <summary>
         /// Constructs the startup instance (configuration injected by host).
         /// </summary>
+        private ILoggerFactory _loggerFactory;
         private ILogger<Startup> _logger;
+        private bool _disposed = false;
 
         public Startup(IConfiguration configuration, IWebHostEnvironment environment)
         {
@@ -169,8 +171,8 @@ namespace Chat.Web
     public void ConfigureServices(IServiceCollection services)
         {
             // Create early logger for startup diagnostics
-            using var loggerFactory = LoggerFactory.Create(builder => builder.AddConsole());
-            _logger = loggerFactory.CreateLogger<Startup>();
+            _loggerFactory = LoggerFactory.Create(builder => builder.AddConsole());
+            _logger = _loggerFactory.CreateLogger<Startup>();
 
             var inMemoryTest = string.Equals(Configuration["Testing:InMemory"], "true", StringComparison.OrdinalIgnoreCase);
             // Defer OpenTelemetry registration until after external clients (Cosmos, Redis) are registered
@@ -1087,6 +1089,25 @@ namespace Chat.Web
                     Predicate = r => r.Tags.Contains("ready")
                 });
             });
+        }
+
+        protected virtual void Dispose(bool disposing)
+        {
+            if (!_disposed)
+            {
+                if (disposing)
+                {
+                    // Dispose managed resources
+                    _loggerFactory?.Dispose();
+                }
+                _disposed = true;
+            }
+        }
+
+        public void Dispose()
+        {
+            Dispose(true);
+            GC.SuppressFinalize(this);
         }
     }
 }
