@@ -30,7 +30,7 @@ Key requirements:
 - Use conventional commit messages: `<type>: <description>` (feat, fix, docs, test, refactor, perf, chore)
 - Create feature branches: `feature/your-feature-name` or `fix/bug-description`
 - **Never merge branches locally** - always create a Pull Request on GitHub for review
-- Follow the PR process outlined in CONTRIBUTING.md
+- Follow the PR process outlined in CONTRIBUTING.md and template in .github/pull_request_template.md
 - Ensure all tests pass before committing
 - Keep PR scope focused (one feature/fix per PR)
 
