@@ -11,7 +11,9 @@ This document explains the automated pipelines for **build**, **test**, **deploy
 |----------|---------|---------|--------------|
 | `CI - Build and Test (ci.yml)` | Compile & test on every push / PR | `push` (all branches), `pull_request` (main) | N/A (runs in ephemeral runner) |
 | `CD - Continuous Deployment (cd.yml)` | Build & deploy application code | `push` to `main`, tags `rc*` / `v*.*.*`, manual dispatch | dev / staging / prod |
-| `Deploy Infrastructure (deploy-infrastructure.yml)` | Validate / deploy / teardown Azure resources | Manual dispatch (`validate`, `deploy`, `teardown`) | dev / staging / prod |
+| `Deploy Infrastructure (deploy-infrastructure.yml)` | Validate / deploy / teardown Azure resources | Manual dispatch (`validate`, `deploy`, `teardown`*) | dev / staging / prod |
+
+*Note: `teardown` action is blocked for `prod` environment as a safety measure.
 
 ---
 ## 2. Secrets & Variables
@@ -115,7 +117,7 @@ Workflow builds, deploys to production, then creates a GitHub Release referencin
 |--------|-------------|
 | `validate` | Syntax check + template validation + what-if preview |
 | `deploy` | Full resource provisioning + outputs capture + health pre-check |
-| `teardown` | Deletes resource groups (application + networking) |
+| `teardown` | Selective resource deletion (preserves networking, ACS, monitoring) |
 
 ### 5.2 Resource Groups
 | Type | Pattern |
@@ -137,7 +139,17 @@ Deployment writes JSON to `deployment-output.json` then extracts `appUrl` for su
 Health endpoint call (`/health`) after short delay. Cosmos DB seeding performed by application startup.
 
 ### 5.7 Teardown Safety
-Lists resources before deletion. Both RG deletions are asynchronous (`--no-wait`).
+**Production Protection**: Teardown action is **blocked for `prod` environment** to prevent accidental data loss. Production resources must be deleted manually via Azure Portal or Azure CLI.
+
+**Selective Deletion**: Teardown performs **selective resource deletion** rather than full resource group deletion. This preserves:
+- **Networking infrastructure**: VNet, Subnets, NSGs, Private DNS Zones (entire networking RG untouched)
+- **Azure Communication Services**: CommunicationServices and EmailServices resources (avoids domain re-verification)
+- **Application Insights**: Telemetry and monitoring history preserved
+- **Log Analytics Workspace**: Logs and analytics data retained for compliance/audit
+
+**Deleted Resources**: App Service, Cosmos DB, Redis Cache, SignalR Service
+
+**Resource Groups**: Both application and networking RGs remain intact (not deleted).
 
 ---
 ## 6. Security & Compliance
@@ -185,7 +197,7 @@ dotnet publish src/Chat.Web/Chat.Web.csproj -c Release -o ./publish
 | Staging candidate | Create tag `rc1.2.3` → deploy to staging |
 | Production release | Create tag `v1.2.3` → deploy & GitHub Release |
 | Infra param change | Run infrastructure workflow with `validate` then `deploy` |
-| Complete environment teardown | Run infrastructure workflow with `teardown` (choose env) |
+| Selective resource cleanup | Run infrastructure workflow with `teardown` (dev/staging only, preserves networking/ACS/monitoring) |
 
 ---
 ## 10. Enhancement Backlog
@@ -206,4 +218,4 @@ dotnet publish src/Chat.Web/Chat.Web.csproj -c Release -o ./publish
 - `docs/deployment/bootstrap.md`
 
 ---
-**Last Updated**: 2025-11-21
+**Last Updated**: 2025-11-28
