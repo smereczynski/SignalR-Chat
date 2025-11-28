@@ -7,6 +7,9 @@
 @description('The name of the Communication Service')
 param acsName string
 
+@description('The name of the Email Service')
+param emailServiceName string
+
 @description('The data location for the Communication Service')
 @allowed([
   'Africa'
@@ -32,6 +35,29 @@ param dataLocation string = 'Europe'
 param logAnalyticsWorkspaceId string = ''
 
 // ==========================================
+// Email Service (must be created first)
+// ==========================================
+resource emailService 'Microsoft.Communication/emailServices@2023-04-01' = {
+  name: emailServiceName
+  location: 'global'
+  properties: {
+    dataLocation: dataLocation
+  }
+}
+
+// ==========================================
+// Azure Managed Domain for Email Service
+// ==========================================
+resource emailDomain 'Microsoft.Communication/emailServices/domains@2023-04-01' = {
+  parent: emailService
+  name: 'AzureManagedDomain'
+  location: 'global'
+  properties: {
+    domainManagement: 'AzureManaged'
+  }
+}
+
+// ==========================================
 // Azure Communication Service
 // ==========================================
 resource communicationService 'Microsoft.Communication/communicationServices@2025-05-01' = {
@@ -39,6 +65,9 @@ resource communicationService 'Microsoft.Communication/communicationServices@202
   location: 'global'
   properties: {
     dataLocation: dataLocation
+    linkedDomains: [
+      emailDomain.id
+    ]
   }
 }
 
@@ -62,6 +91,21 @@ resource diagnosticSettings 'Microsoft.Insights/diagnosticSettings@2021-05-01-pr
 // ==========================================
 // Outputs
 // ==========================================
+@description('The resource ID of the Email Service')
+output emailServiceId string = emailService.id
+
+@description('The name of the Email Service')
+output emailServiceName string = emailService.name
+
+@description('The resource ID of the Email Domain')
+output emailDomainId string = emailDomain.id
+
+@description('The name of the Email Domain')
+output emailDomainName string = emailDomain.name
+
+@description('The sender email address from Azure Managed Domain')
+output senderEmailAddress string = emailDomain.properties.mailFromSenderDomain
+
 @description('The resource ID of the Communication Service')
 output communicationServiceId string = communicationService.id
 

@@ -208,6 +208,7 @@ module acs './modules/communication.bicep' = {
   name: 'acs-deployment'
   params: {
     acsName: 'acs-${baseName}-${environment}'
+    emailServiceName: 'acs-email-${baseName}-${environment}'
     dataLocation: acsDataLocation
     logAnalyticsWorkspaceId: monitoring.outputs.logAnalyticsWorkspaceId
   }
