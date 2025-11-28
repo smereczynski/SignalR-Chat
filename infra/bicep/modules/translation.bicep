@@ -53,11 +53,11 @@ resource aiServices 'Microsoft.CognitiveServices/accounts@2025-06-01' = {
   name: aiServicesName
   location: location
   kind: 'AIServices' // Foundry resource type
-  sku: {
-    name: sku
-  }
   identity: {
     type: 'SystemAssigned'
+  }
+  sku: {
+    name: sku
   }
   properties: {
     // Custom subdomain required for API access
