@@ -94,6 +94,21 @@ param entraIdAuthorizationHomeTenantId string = ''
 @description('App Role value required for admin access')
 param entraIdAuthorizationAdminRoleValue string = 'Admin.ReadWrite'
 
+@description('Enable translation service')
+param translationEnabled bool = false
+
+@description('Translation service resource ID')
+param translationResourceId string = ''
+
+@description('Translation service endpoint URL')
+param translationEndpoint string = ''
+
+@description('Translation provider type (NMT, LLM-GPT4oMini, LLM-GPT4o)')
+param translationProvider string = ''
+
+@description('Translation model deployment name (for LLM providers)')
+param translationModelDeploymentName string = ''
+
 @description('Log Analytics Workspace ID for diagnostic logs')
 param logAnalyticsWorkspaceId string = ''
 
@@ -235,6 +250,27 @@ var baseAppSettings = [
   {
     name: 'Cors__AllowedOrigins__2'
     value: 'https://localhost:5099'
+  }
+  // Translation Service settings
+  {
+    name: 'Translation__Enabled'
+    value: string(translationEnabled)
+  }
+  {
+    name: 'Translation__ResourceId'
+    value: translationResourceId
+  }
+  {
+    name: 'Translation__Endpoint'
+    value: translationEndpoint
+  }
+  {
+    name: 'Translation__Provider'
+    value: translationProvider
+  }
+  {
+    name: 'Translation__ModelDeploymentName'
+    value: translationModelDeploymentName
   }
 ]
 

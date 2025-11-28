@@ -85,6 +85,17 @@ param entraIdAuthorizationHomeTenantId string = ''
 @description('App Role value required for admin access')
 param entraIdAuthorizationAdminRoleValue string = 'Admin.ReadWrite'
 
+@description('Translation provider: NMT (Neural Machine Translation), LLM-GPT4oMini, or LLM-GPT4o')
+@allowed([
+  'NMT'
+  'LLM-GPT4oMini'
+  'LLM-GPT4o'
+])
+param translationProvider string = 'NMT'
+
+@description('Enable translation service')
+param enableTranslation bool = false
+
 // ==========================================
 // Variables - Static IP Allocation
 // ==========================================
@@ -215,6 +226,22 @@ module acs './modules/communication.bicep' = {
 }
 
 // ==========================================
+// Module: AI Translation Service (Optional)
+// ==========================================
+module translation './modules/translation.bicep' = if (enableTranslation) {
+  name: 'translation-deployment'
+  params: {
+    baseName: baseName
+    environment: environment
+    location: location
+    translationProvider: translationProvider
+    sku: environment == 'prod' ? 'S0' : 'S0' // S0 for all environments (F0 has low quotas)
+    publicNetworkAccess: environment == 'dev' // Public in dev, private in staging/prod
+    disableLocalAuth: false // Keep key-based auth for simplicity
+  }
+}
+
+// ==========================================
 // Module: App Service (depends on all above)
 // ==========================================
 module appService './modules/app-service.bicep' = {
@@ -249,6 +276,12 @@ module appService './modules/app-service.bicep' = {
     entraIdConnectionString: entraIdConnectionString
     entraIdAuthorizationHomeTenantId: entraIdAuthorizationHomeTenantId
     entraIdAuthorizationAdminRoleValue: entraIdAuthorizationAdminRoleValue
+    // Translation parameters (conditional)
+    translationEnabled: enableTranslation
+    translationResourceId: enableTranslation ? translation!.outputs.resourceId : ''
+    translationEndpoint: enableTranslation ? translation!.outputs.endpoint : ''
+    translationProvider: enableTranslation ? translation!.outputs.translationProvider : ''
+    translationModelDeploymentName: enableTranslation ? translation!.outputs.modelDeploymentName : ''
   }
 }
 
@@ -272,3 +305,12 @@ output appServiceSubnetId string = networking.outputs.appServiceSubnetId
 
 @description('Private Endpoints Subnet ID')
 output privateEndpointsSubnetId string = networking.outputs.privateEndpointsSubnetId
+
+@description('Translation service enabled')
+output translationEnabled bool = enableTranslation
+
+@description('Translation endpoint (if enabled)')
+output translationEndpoint string = enableTranslation ? translation!.outputs.endpoint : ''
+
+@description('Translation provider (NMT, LLM-GPT4oMini, or LLM-GPT4o)')
+output translationProvider string = enableTranslation ? translation!.outputs.translationProvider : ''

@@ -26,3 +26,7 @@ param privateEndpointsSubnetPrefix = '10.2.0.32/27'
 param acsDataLocation = 'Europe'
 param networkingResourceGroupName = 'rg-vnet-signalrchat-prod-plc'
 param otpPepper = 'REPLACE_WITH_PRODUCTION_PEPPER' // REQUIRED - generate with: openssl rand -base64 32
+
+// Translation Service Configuration
+param enableTranslation = true
+param translationProvider = 'LLM-GPT4oMini' // NMT (cost-effective), LLM-GPT4oMini, or LLM-GPT4o
