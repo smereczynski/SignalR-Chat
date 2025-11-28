@@ -289,41 +289,81 @@ jobs:
       - name: Teardown Infrastructure
         if: github.event.inputs.action == 'teardown'
         run: |
-          echo "::group::Deleting Application Resource Group"
-          echo "⚠️  WARNING: This will delete all resources in ${{ env.RESOURCE_GROUP }}"
+          # Block teardown for production environment
+          if [ "${{ github.event.inputs.environment }}" == "prod" ]; then
+            echo "::error::❌ TEARDOWN DENIED: Production environment cannot be torn down via GitHub Actions"
+            echo "::error::This is a safety measure to prevent accidental data loss."
+            echo "::error::If you need to delete production resources, use Azure Portal or Azure CLI manually."
+            exit 1
+          fi
           
-          # List resources to be deleted
+          echo "::group::Selective Resource Deletion"
+          echo "⚠️  WARNING: This will delete selected resources from ${{ env.RESOURCE_GROUP }}"
+          echo ""
+          echo "ℹ️  Protected resources (will NOT be deleted):"
+          echo "   • Networking (VNet, Subnets, NSGs, Private DNS Zones)"
+          echo "   • Azure Communication Services (CommunicationServices, EmailServices)"
+          echo "   • Application Insights"
+          echo "   • Log Analytics Workspace"
+          echo ""
+          
+          # List all resources
+          echo "📋 Current resources in resource group:"
           az resource list \
             --resource-group ${{ env.RESOURCE_GROUP }} \
             --query "[].{Name:name, Type:type, Location:location}" \
-            --output table || true
+            --output table
+          echo ""
           
-          # Delete resource group
-          az group delete \
-            --name ${{ env.RESOURCE_GROUP }} \
-            --yes \
-            --no-wait
+          # Get list of resources to delete (exclude protected types)
+          RESOURCES_TO_DELETE=$(az resource list \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --query "[?type!='Microsoft.Communication/CommunicationServices' && type!='Microsoft.Communication/EmailServices' && type!='Microsoft.Insights/components' && type!='Microsoft.OperationalInsights/workspaces'].id" \
+            --output tsv)
           
-          echo "✅ Application RG deletion initiated (running in background)"
-          echo "::endgroup::"
+          if [ -z "$RESOURCES_TO_DELETE" ]; then
+            echo "ℹ️  No resources to delete (only protected resources remain)"
+          else
+            echo "🗑️  Resources to be deleted:"
+            az resource list \
+              --resource-group ${{ env.RESOURCE_GROUP }} \
+              --query "[?type!='Microsoft.Communication/CommunicationServices' && type!='Microsoft.Communication/EmailServices' && type!='Microsoft.Insights/components' && type!='Microsoft.OperationalInsights/workspaces'].{Name:name, Type:type}" \
+              --output table
+            echo ""
+            
+            # Delete resources one by one (networking resources handled separately)
+            echo "🔄 Deleting resources..."
+            for RESOURCE_ID in $RESOURCES_TO_DELETE; do
+              RESOURCE_NAME=$(echo $RESOURCE_ID | awk -F'/' '{print $NF}')
+              RESOURCE_TYPE=$(az resource show --ids $RESOURCE_ID --query type -o tsv 2>/dev/null || echo "unknown")
+              
+              # Skip networking resources
+              if [[ "$RESOURCE_TYPE" == Microsoft.Network/* ]]; then
+                echo "⏭️  Skipping networking resource: $RESOURCE_NAME ($RESOURCE_TYPE)"
+                continue
+              fi
+              
+              echo "   Deleting: $RESOURCE_NAME ($RESOURCE_TYPE)"
+              az resource delete --ids $RESOURCE_ID --verbose 2>&1 | grep -E "(Succeeded|Failed|ERROR)" || true
+            done
+            
+            echo ""
+            echo "✅ Resource deletion completed"
+          fi
           
-          echo "::group::Deleting Networking Resource Group"
-          echo "⚠️  WARNING: This will delete all networking resources in ${{ env.NETWORKING_RESOURCE_GROUP }}"
-          
-          # List resources to be deleted
+          echo ""
+          echo "📋 Remaining resources (protected + networking):"
           az resource list \
-            --resource-group ${{ env.NETWORKING_RESOURCE_GROUP }} \
-            --query "[].{Name:name, Type:type, Location:location}" \
-            --output table || true
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --query "[].{Name:name, Type:type}" \
+            --output table
           
-          # Delete resource group
-          az group delete \
-            --name ${{ env.NETWORKING_RESOURCE_GROUP }} \
-            --yes \
-            --no-wait
-          
-          echo "✅ Networking RG deletion initiated (running in background)"
           echo "::endgroup::"
+          
+          echo ""
+          echo "ℹ️  Resource groups preserved:"
+          echo "   • ${{ env.RESOURCE_GROUP }} (application RG - contains protected resources)"
+          echo "   • ${{ env.NETWORKING_RESOURCE_GROUP }} (networking RG - fully preserved)"
       
       - name: Deployment Summary
         if: always() && github.event.inputs.action == 'deploy'

@@ -47,6 +47,9 @@ param signalRConnectionString string
 @secure()
 param acsConnectionString string
 
+@description('Sender email address from ACS Email Domain')
+param acsSenderEmailAddress string
+
 @description('OTP pepper for secure hashing')
 @secure()
 param otpPepper string
@@ -153,7 +156,7 @@ var baseAppSettings = [
   }
   {
     name: 'Acs__EmailFrom'
-    value: 'doNotReply@${split(split(acsConnectionString, 'endpoint=https://')[1], '.')[0]}.azurecomm.net'
+    value: acsSenderEmailAddress
   }
   {
     name: 'Acs__SmsFrom'
