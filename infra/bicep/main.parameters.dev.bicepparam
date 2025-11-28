@@ -26,3 +26,7 @@ param privateEndpointsSubnetPrefix = '10.0.0.32/27'
 param acsDataLocation = 'Europe'
 param networkingResourceGroupName = 'rg-vnet-signalrchat-dev-plc'
 param otpPepper = 'LIgCUBRtfypy1JXTcTH4OXdKYrRVSjyAH4pr5rFBEKM=' // SAMPLE - replace with actual secure value
+
+// Translation parameters
+param enableTranslation = true
+param translationProvider = 'LLM-GPT4oMini' // Start with Neural Machine Translation (cost-effective)
