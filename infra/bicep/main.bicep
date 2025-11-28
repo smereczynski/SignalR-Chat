@@ -91,7 +91,7 @@ param entraIdAuthorizationAdminRoleValue string = 'Admin.ReadWrite'
   'LLM-GPT4oMini'
   'LLM-GPT4o'
 ])
-param translationProvider string = 'NMT'
+param translationProvider string = 'LLM-GPT4oMini'
 
 @description('Enable translation service')
 param enableTranslation bool = false

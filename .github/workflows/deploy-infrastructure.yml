@@ -128,6 +128,7 @@ jobs:
             "Microsoft.Cache"
             "Microsoft.SignalRService"
             "Microsoft.Communication"
+            "Microsoft.CognitiveServices"
             "Microsoft.Web"
             "Microsoft.Network"
             "Microsoft.Insights"
@@ -192,7 +193,9 @@ jobs:
             --parameters otpPepper="${{ secrets.OTP_PEPPER }}" \
             --parameters entraIdConnectionString="${{ secrets.ENTRA_ID_CONNECTION_STRING }}" \
             --parameters entraIdAuthorizationHomeTenantId="${{ secrets.ENTRA_ID_HOME_TENANT_ID }}" \
-            --parameters entraIdAuthorizationAdminRoleValue="${{ vars.ENTRA_ID_ADMIN_ROLE_VALUE }}"
+            --parameters entraIdAuthorizationAdminRoleValue="${{ vars.ENTRA_ID_ADMIN_ROLE_VALUE }}" \
+            --parameters enableTranslation=${{ vars.ENABLE_TRANSLATION || 'true' }} \
+            --parameters translationProvider="${{ vars.TRANSLATION_PROVIDER || 'LLM-GPT4oMini' }}"
           echo "::endgroup::"
       
       - name: What-If Analysis
@@ -217,6 +220,8 @@ jobs:
             --parameters entraIdConnectionString="${{ secrets.ENTRA_ID_CONNECTION_STRING }}" \
             --parameters entraIdAuthorizationHomeTenantId="${{ secrets.ENTRA_ID_HOME_TENANT_ID }}" \
             --parameters entraIdAuthorizationAdminRoleValue="${{ vars.ENTRA_ID_ADMIN_ROLE_VALUE }}" \
+            --parameters enableTranslation=${{ vars.ENABLE_TRANSLATION || 'true' }} \
+            --parameters translationProvider="${{ vars.TRANSLATION_PROVIDER || 'LLM-GPT4oMini' }}" \
             --result-format FullResourcePayloads
           echo "::endgroup::"
       
@@ -245,6 +250,8 @@ jobs:
             --parameters entraIdConnectionString="${{ secrets.ENTRA_ID_CONNECTION_STRING }}" \
             --parameters entraIdAuthorizationHomeTenantId="${{ secrets.ENTRA_ID_HOME_TENANT_ID }}" \
             --parameters entraIdAuthorizationAdminRoleValue="${{ vars.ENTRA_ID_ADMIN_ROLE_VALUE }}" \
+            --parameters enableTranslation=${{ vars.ENABLE_TRANSLATION || 'true' }} \
+            --parameters translationProvider="${{ vars.TRANSLATION_PROVIDER || 'LLM-GPT4oMini' }}" \
             --name "$DEPLOYMENT_NAME" \
             --output json > deployment-output.json
           echo "::endgroup::"

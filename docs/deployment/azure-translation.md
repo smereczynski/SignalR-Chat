@@ -5,8 +5,8 @@ Deploy **Microsoft Foundry** (Azure AI Services) for real-time message translati
 ## Overview
 
 The translation infrastructure supports both:
-- **Neural Machine Translation (NMT)**: Standard Azure Translator API (cost-effective)
-- **LLM-based Translation**: GPT-4o-mini or GPT-4o models (higher quality, higher cost)
+- **LLM-based Translation**: GPT-4o-mini or GPT-4o models (default, higher quality)
+- **Neural Machine Translation (NMT)**: Standard Azure Translator API (cost-effective fallback)
 
 ## Resource: Microsoft Foundry
 
@@ -17,16 +17,16 @@ The translation infrastructure supports both:
 - Location: `polandcentral` (Poland Central) ✅
 
 Provides unified access to:
+- Azure OpenAI (GPT-4o-mini, GPT-4o) - default
 - Azure AI Translator (NMT)
-- Azure OpenAI (GPT-4o-mini, GPT-4o)
 - Text Analytics
 - Language Understanding
 
 ## Translation Providers
 
-### 1. NMT (Neural Machine Translation) - Default
+### 1. NMT (Neural Machine Translation)
 
-**Best for**: Chat messages, general translation, cost-sensitive scenarios
+**Best for**: Cost-sensitive scenarios, high-volume translation
 
 - Uses Azure AI Translator API
 - **Cost**: ~$10/million characters (first 2M free)
@@ -34,9 +34,9 @@ Provides unified access to:
 - **Quality**: Good for general chat messages
 - **API**: REST API v3.0
 
-### 2. LLM-GPT4oMini
+### 2. LLM-GPT4oMini - Default
 
-**Best for**: Context-aware translation, informal language/slang
+**Best for**: Chat messages, context-aware translation, informal language/slang
 
 - Uses GPT-4o-mini model
 - **Cost**: ~$0.15/1M input tokens + $0.60/1M output tokens
@@ -68,7 +68,7 @@ module translation './modules/translation.bicep' = if (enableTranslation) {
     baseName: 'signalrchat'
     environment: 'dev'                           // dev, staging, prod
     location: 'polandcentral'
-    translationProvider: 'NMT'                   // NMT, LLM-GPT4oMini, LLM-GPT4o
+    translationProvider: 'LLM-GPT4oMini'         // Default: LLM-GPT4oMini, also: NMT, LLM-GPT4o
     sku: 'S0'                                    // F0 (free, limited), S0 (standard)
     publicNetworkAccess: true                    // false for private endpoints
     disableLocalAuth: false                      // true for Entra ID only
@@ -85,7 +85,7 @@ In parameter files (`main.parameters.<env>.bicepparam`):
 param enableTranslation = true
 
 // Select provider
-param translationProvider = 'NMT'  // Start with NMT (cost-effective)
+param translationProvider = 'LLM-GPT4oMini'  // Default: LLM-based translation
 ```
 
 ### Deploy Infrastructure
@@ -114,8 +114,8 @@ Translation settings are automatically added as app settings:
 Translation__Enabled=true
 Translation__Endpoint=https://ai-translation-signalrchat-dev.cognitiveservices.azure.com/
 Translation__ApiKey=<api-key>
-Translation__Provider=NMT  # or LLM-GPT4oMini, LLM-GPT4o
-Translation__ModelDeploymentName=  # empty for NMT, gpt-4o-mini for LLM
+Translation__Provider=LLM-GPT4oMini  # Default: LLM-GPT4oMini, also: NMT, LLM-GPT4o
+Translation__ModelDeploymentName=gpt-4o-mini  # empty for NMT, model name for LLM
 ```
 
 ## API Usage
@@ -205,20 +205,20 @@ All 9 languages in the application:
 
 ## Migration Path
 
-**Phase 1**: Start with NMT (dev)
-- Deploy with `translationProvider: 'NMT'`
-- Test translation quality
-- Monitor costs
+**Phase 1**: Start with LLM-GPT4oMini (default)
+- Deploy with `translationProvider: 'LLM-GPT4oMini'`
+- Test translation quality and latency
+- Monitor costs (~$50-100/month in dev)
 
-**Phase 2**: Upgrade to GPT-4o-mini (staging)
-- Change to `translationProvider: 'LLM-GPT4oMini'`
-- A/B test quality vs NMT
-- Adjust capacity based on load
+**Phase 2**: Cost Optimization (if needed)
+- If budget constrained: Switch to `translationProvider: 'NMT'`
+- Compare quality degradation vs cost savings
+- Monitor user feedback
 
-**Phase 3**: Production decision
-- If quality sufficient: Keep GPT-4o-mini
-- If budget constrained: Revert to NMT
-- If quality critical: Upgrade to GPT-4o
+**Phase 3**: Quality Upgrade (if needed)
+- If quality critical: Upgrade to `translationProvider: 'LLM-GPT4o'`
+- Highest quality, higher cost (~$200-300/month)
+- Consider for production only
 
 ## Security
 

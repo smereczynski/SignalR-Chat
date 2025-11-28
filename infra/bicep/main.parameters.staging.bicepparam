@@ -27,6 +27,6 @@ param acsDataLocation = 'Europe'
 param networkingResourceGroupName = 'rg-vnet-signalrchat-staging-plc'
 param otpPepper = 'REPLACE_WITH_STAGING_PEPPER' // REQUIRED - generate with: openssl rand -base64 32
 
-// Translation Service Configuration
+// Translation parameters
 param enableTranslation = true
-param translationProvider = 'LLM-GPT4oMini' // NMT (cost-effective), LLM-GPT4oMini, or LLM-GPT4o
+param translationProvider = 'LLM-GPT4oMini' // LLM-based translation with GPT-4o-mini

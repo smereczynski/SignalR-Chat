@@ -29,4 +29,4 @@ param otpPepper = 'LIgCUBRtfypy1JXTcTH4OXdKYrRVSjyAH4pr5rFBEKM=' // SAMPLE - rep
 
 // Translation parameters
 param enableTranslation = true
-param translationProvider = 'LLM-GPT4oMini' // Start with Neural Machine Translation (cost-effective)
+param translationProvider = 'LLM-GPT4oMini' // LLM-based translation with GPT-4o-mini
