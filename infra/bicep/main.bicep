@@ -230,6 +230,7 @@ module appService './modules/app-service.bicep' = {
     redisConnectionString: redis.outputs.connectionString
     signalRConnectionString: signalR.outputs.connectionString
     acsConnectionString: acs.outputs.connectionString
+    acsSenderEmailAddress: acs.outputs.senderEmailAddress
     otpPepper: otpPepper
     logAnalyticsWorkspaceId: monitoring.outputs.logAnalyticsWorkspaceId
     privateEndpointSubnetId: networking.outputs.privateEndpointsSubnetId
