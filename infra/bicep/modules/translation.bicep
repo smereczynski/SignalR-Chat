@@ -52,12 +52,12 @@ var customSubDomainName = 'ai-translation-${baseName}-${environment}'
 resource aiServices 'Microsoft.CognitiveServices/accounts@2025-06-01' = {
   name: aiServicesName
   location: location
+  sku: {
+    name: sku
+  }
   kind: 'AIServices' // Foundry resource type
   identity: {
     type: 'SystemAssigned'
-  }
-  sku: {
-    name: sku
   }
   properties: {
     // Custom subdomain required for API access
