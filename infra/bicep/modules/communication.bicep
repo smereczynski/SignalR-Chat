@@ -104,7 +104,7 @@ output emailDomainId string = emailDomain.id
 output emailDomainName string = emailDomain.name
 
 @description('The sender email address from Azure Managed Domain')
-output senderEmailAddress string = emailDomain.properties.mailFromSenderDomain
+output senderEmailAddress string = 'DoNotReply@${emailDomain.properties.mailFromSenderDomain}'
 
 @description('The resource ID of the Communication Service')
 output communicationServiceId string = communicationService.id
