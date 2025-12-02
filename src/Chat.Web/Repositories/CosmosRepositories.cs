@@ -163,7 +163,7 @@ namespace Chat.Web.Repositories
             Func<TDoc, T> mapper,
             Activity activity,
             ILogger logger,
-            string operationName) where T : class
+            string operationName) where TDoc : class where T : class
         {
             try
             {
@@ -464,6 +464,7 @@ namespace Chat.Web.Repositories
             using var activity = Tracing.ActivitySource.StartActivity("cosmos.messages.delete", ActivityKind.Client);
             var m = await GetByIdAsync(id);
             if (m?.FromUser?.UserName != byUserName) return;
+            if (m == null) return; // Additional null check to satisfy analyzer
             
             var room = m.ToRoom ?? await _roomsRepo.GetByIdAsync(m.ToRoomId);
             var pk = room?.Name ?? "global";
