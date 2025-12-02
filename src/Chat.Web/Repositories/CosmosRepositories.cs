@@ -140,7 +140,7 @@ namespace Chat.Web.Repositories
                         _ => queryIterator.ReadNextAsync(),
                         Transient.IsCosmosTransient,
                         logger,
-                        $"{operationName}.readnext").ConfigureAwait(false);
+                        $"{operationName}.readnext");
                     activity?.AddEvent(new ActivityEvent("page", tags: new ActivityTagsCollection { { "db.page.count", page.Count } }));
                     list.AddRange(page.Select(mapper));
                 }
@@ -173,7 +173,7 @@ namespace Chat.Web.Repositories
                         _ => queryIterator.ReadNextAsync(),
                         Transient.IsCosmosTransient,
                         logger,
-                        $"{operationName}.readnext").ConfigureAwait(false);
+                        $"{operationName}.readnext");
                     var doc = page.FirstOrDefault();
                     if (doc != null)
                     {
