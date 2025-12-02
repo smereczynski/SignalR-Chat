@@ -17,12 +17,13 @@ Deploy SignalR Chat to Azure using Infrastructure as Code (Bicep) and CI/CD pipe
 
 ## GitHub Actions: Required Variables & Secrets
 
-Before deploying, ensure you have set up all required GitHub environment variables and secrets for your environment:
+Before deploying, ensure you have set up all required GitHub repository variables and secrets:
 
-- [GitHub Variables Guide](github-variables.md) — Resource naming, region, and network configuration
-- [GitHub Secrets Guide](github-secrets.md) — All sensitive values (connection strings, Entra ID, OTP pepper)
+- **[GitHub Variables Guide](github-variables.md)** — 11 repository variables (resource naming, region, network configuration, VPN IP, Entra ID)
+- **[GitHub Secrets Guide](github-secrets.md)** — 5 repository secrets (Azure credentials, Entra ID connection string, OTP pepper)
+- **[GitHub Actions CI/CD](github-actions.md)** — Complete workflow documentation (pipelines, static IPs, private endpoints)
 
-These must be configured in GitHub → Settings → Environments → [dev/staging/prod] for each environment. See guides above for details and examples.
+Configure in **GitHub → Settings → Secrets and variables → Actions** (repository level, shared across all environments).
 
 ---
 

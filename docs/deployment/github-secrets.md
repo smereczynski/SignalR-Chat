@@ -6,17 +6,17 @@ This guide explains how to configure GitHub secrets and build the Entra ID conne
 
 ## 1. Required GitHub Secrets for Deployment
 
-Set these in **GitHub → Settings → Secrets and variables → Actions** for each environment (`dev`, `staging`, `prod`):
+Set these in **GitHub → Settings → Secrets and variables → Actions → Secrets** (repository level):
 
 | Secret Name                  | Description                                 | How to Generate/Find                |
 |------------------------------|---------------------------------------------|-------------------------------------|
 | `AZURE_CLIENT_ID`            | Azure Service Principal Client ID           | Azure Portal / CLI                  |
 | `AZURE_TENANT_ID`            | Azure AD Tenant ID                          | Azure Portal / CLI                  |
 | `AZURE_SUBSCRIPTION_ID`      | Azure Subscription ID                       | Azure Portal / CLI                  |
-| `OTP_PEPPER`                 | OTP hashing pepper (Base64, 32 bytes)       | `openssl rand -base64 32`           |
 | `ENTRA_ID_CONNECTION_STRING` | Entra ID connection string (see below)      | Build as described below            |
+| `OTP_PEPPER`                 | OTP hashing pepper (Base64, 32 bytes)       | `openssl rand -base64 32`           |
 
-> **Note:** Do **not** use individual Entra ID ClientId/ClientSecret secrets—use only the connection string.
+> **Note:** These are repository-level secrets shared across all environments.
 
 ---
 
@@ -57,4 +57,4 @@ ClientId=12345678-aaaa-bbbb-cccc-1234567890ab;ClientSecret=your-very-long-secret
 
 ---
 
-_Last updated: 2025-11-19_
+_Last updated: 2025-12-02_

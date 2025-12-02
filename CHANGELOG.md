@@ -8,6 +8,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- **Infrastructure Configuration Updates** (2025-12-02):
+  - ✅ Updated AI Foundry private endpoint configuration to use 3 static IPs (primary + 2 secondary)
+  - ✅ Added `BICEP_VPN_IP` repository variable for dev environment firewall rules
+  - ✅ Configured Cosmos DB IP firewall rules (VPN IP + 4 Azure Portal IPs for dev environment)
+  - ✅ Configured AI Foundry IP firewall rules (VPN IP for dev environment)
+  - ✅ Added Microsoft Trusted Services bypass for AI Foundry (`AzureServices`)
+  - ✅ Updated static IP allocation: AI Foundry now uses .169, .170, .171 (was single .169)
+  - 📊 **Impact**: Enables secure dev environment access via VPN + Azure Portal while maintaining PE security
+  
+- **Documentation Consolidation** (2025-12-02):
+  - ✅ Merged `.github/workflows/README.md` content into `docs/deployment/` directory
+  - ✅ Replaced `.github/workflows/README.md` with migration notice (will be removed in future release)
+  - ✅ Updated `docs/deployment/github-variables.md` with actual 11 repository variables (added `BICEP_VPN_IP`, `BICEP_SHORT_LOCATION`, `BICEP_VNET_DNS_SERVERS`, `ENTRA_ID_HOME_TENANT_ID`, `ENTRA_ID_ADMIN_ROLE_VALUE`)
+  - ✅ Updated `docs/deployment/github-secrets.md` with actual 5 repository secrets (removed obsolete individual ClientId/Secret references)
+  - ✅ Enhanced `docs/deployment/github-actions.md` with static IP allocation table, private endpoints section, AI Foundry 3-IP configuration
+  - ✅ Updated `docs/deployment/README.md` with consolidated GitHub Actions references
+  - ✅ Updated `docs/DOCUMENTATION-STATUS.md` to reflect consolidation
+  - ✅ Updated `docs/DOCUMENTATION-PLAN.md` to mark migration complete
+  - 📚 **Impact**: Single source of truth for deployment documentation in `docs/` directory (no more `.github/workflows/README.md` duplication)
+
+### Changed
 - **Async Factory Pattern Implementation** (#28, #66, 2025-12-02):
   - ✅ Implemented async factory pattern for Cosmos DB repositories (eliminates thread pool starvation)
   - ✅ Converted all repository interfaces to async signatures (15 methods across 3 interfaces)

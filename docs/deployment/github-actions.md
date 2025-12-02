@@ -20,28 +20,34 @@ This document explains the automated pipelines for **build**, **test**, **deploy
 ### 2.1 Required GitHub Secrets
 | Secret | Purpose |
 |--------|---------|
-| `AZURE_CLIENT_ID` | Federated identity app registration client ID |
+| `AZURE_CLIENT_ID` | Azure Service Principal Client ID (for OIDC federation) |
 | `AZURE_TENANT_ID` | Azure AD tenant ID |
 | `AZURE_SUBSCRIPTION_ID` | Azure subscription for deployments |
-| `ENTRA_ID_CLIENT_ID` | Entra ID app (for infrastructure Bicep param) |
-| `ENTRA_ID_CLIENT_SECRET` | Client secret (used during infra deployment) |
-| `ENTRA_ID_CONNECTION_STRING` | Optional consolidated connection string (`ClientId=...;ClientSecret=...`) |
-| `OTP_PEPPER` | Pepper for OTP hashing (security) |
+| `ENTRA_ID_CONNECTION_STRING` | Entra ID connection string (`ClientId=...;ClientSecret=...;TenantId=...`) |
+| `OTP_PEPPER` | Pepper for OTP hashing (Base64, 32 bytes) |
 
-### 2.2 GitHub Action Variables (Environment Scoped)
+Set in: **Settings → Secrets and variables → Actions → Secrets** (repository level).
+
+See [GitHub Secrets Guide](github-secrets.md) for detailed configuration.
+
+### 2.2 GitHub Action Variables (Repository Level)
 | Variable | Example | Notes |
 |----------|---------|-------|
-| `BICEP_BASE_NAME` | `signalrchat` | Base name prefix for all Azure resources |
-| `BICEP_LOCATION` | `westeurope` | Full Azure region name |
-| `BICEP_SHORT_LOCATION` | `weu` | Short region suffix used in resource names |
-| `BICEP_VNET_ADDRESS_PREFIX` | `10.50.0.0/20` | Virtual network CIDR |
-| `BICEP_APP_SERVICE_SUBNET_PREFIX` | `10.50.1.0/24` | App Service subnet |
-| `BICEP_PRIVATE_ENDPOINTS_SUBNET_PREFIX` | `10.50.2.0/24` | Private endpoints subnet |
-| `BICEP_VNET_DNS_SERVERS` | `[]` or `['10.0.0.4']` | Custom DNS servers (JSON) |
-| `BICEP_ACS_DATA_LOCATION` | `westeurope` | ACS data location |
-| Entra ID flags | Various | Policies: SSO attempt, fallback OTP, tenant validation |
+| `BICEP_BASE_NAME` | `interpres` | Base name prefix for all Azure resources |
+| `BICEP_LOCATION` | `polandcentral` | Full Azure region name |
+| `BICEP_SHORT_LOCATION` | `plc` | Short region suffix used in resource names |
+| `BICEP_VNET_ADDRESS_PREFIX` | `10.50.8.128/26` | Virtual network CIDR (/26) |
+| `BICEP_APP_SERVICE_SUBNET_PREFIX` | `10.50.8.128/27` | App Service subnet (/27) |
+| `BICEP_PRIVATE_ENDPOINTS_SUBNET_PREFIX` | `10.50.8.160/27` | Private endpoints subnet (/27) |
+| `BICEP_VNET_DNS_SERVERS` | `10.50.2.4` | Custom DNS servers (comma-separated) |
+| `BICEP_ACS_DATA_LOCATION` | `Europe` | ACS data location |
+| `BICEP_VPN_IP` | `20.215.181.116` | VPN IP address for firewall rules (dev only) |
+| `ENTRA_ID_HOME_TENANT_ID` | `6d338245-...` | Home tenant ID for Entra ID multi-tenant auth |
+| `ENTRA_ID_ADMIN_ROLE_VALUE` | `Admin.ReadWrite` | Admin role value for authorization |
 
-Set per environment (dev/staging/prod) in: **Settings → Environments → <env> → Variables**.
+Set in: **Settings → Secrets and variables → Actions → Variables** (repository level, shared across all environments).
+
+See [GitHub Variables Guide](github-variables.md) for detailed configuration.
 
 ---
 ## 3. CI Workflow (`ci.yml`)
@@ -138,7 +144,38 @@ Deployment writes JSON to `deployment-output.json` then extracts `appUrl` for su
 ### 5.6 Post-Deployment Validation
 Health endpoint call (`/health`) after short delay. Cosmos DB seeding performed by application startup.
 
-### 5.7 Teardown Safety
+### 5.7 Private Endpoints and Static IP Allocation
+
+**Static IP Allocation Pattern:**
+
+Each private endpoint is assigned **deterministic static IP addresses** calculated from the Private Endpoints subnet prefix:
+
+| Service | IP Offset | Dev Example (10.50.8.x) | Endpoints |
+|---------|-----------|-------------------------|-----------|
+| Cosmos DB (ipconfig1) | +4 | .164 (primary) | Global endpoint |
+| Cosmos DB (ipconfig2) | +5 | .165 (regional) | Regional endpoint |
+| Redis | +6 | .166 | Generic endpoint |
+| SignalR | +7 | .167 | Generic endpoint |
+| App Service | +8 | .168 | Sites endpoint |
+| AI Foundry (ipconfig1) | +9 | .169 (primary) | Account endpoint |
+| AI Foundry (ipconfig2) | +10 | .170 (secondary) | Account endpoint |
+| AI Foundry (ipconfig3) | +11 | .171 (secondary) | Account endpoint |
+
+**Multiple IP Configurations:**
+- **Cosmos DB**: 2 IPs (global + regional endpoints)
+- **AI Foundry**: 3 IPs (primary + 2 secondary endpoints)
+- **Redis, SignalR, App Service**: 1 IP each
+
+**Private DNS Zones Required:**
+- `privatelink.documents.azure.com` (Cosmos DB)
+- `privatelink.cache.azure.net` (Redis)
+- `privatelink.service.signalr.net` (SignalR)
+- `privatelink.azurewebsites.net` (App Service)
+- `privatelink.cognitiveservices.azure.com` (AI Foundry)
+
+DNS zones must be created manually and linked to the VNet. See [Post-Deployment Manual Steps](post-deployment-manual-steps.md) for details.
+
+### 5.8 Teardown Safety
 **Production Protection**: Teardown action is **blocked for `prod` environment** to prevent accidental data loss. Production resources must be deleted manually via Azure Portal or Azure CLI.
 
 **Selective Deletion**: Teardown performs **selective resource deletion** rather than full resource group deletion. This preserves:
@@ -218,4 +255,4 @@ dotnet publish src/Chat.Web/Chat.Web.csproj -c Release -o ./publish
 - `docs/deployment/bootstrap.md`
 
 ---
-**Last Updated**: 2025-11-28
+**Last Updated**: 2025-12-02

@@ -116,10 +116,10 @@ docs/
    - `security.md` (security details)
 2. **docs/GUIDE-OTP-hashing.md** → `docs/features/authentication.md`
 3. **docs/GUIDE-Session-handling.md** → `docs/features/sessions.md`
-4. **docs/GUIDE-Visibility.md** → `docs/features/presence.md`
-5. **docs/BOOTSTRAP.md** → `docs/development/local-setup.md` (section)
-6. **.github/workflows/README.md** → `docs/deployment/github-actions.md`
-7. **infra/bicep/README.md** → `docs/deployment/azure/bicep-templates.md`
+6. **docs/GUIDE-Visibility.md** → `docs/features/presence.md`
+7. **docs/BOOTSTRAP.md** → `docs/development/local-setup.md` (section)
+8. ✅ **.github/workflows/README.md** → `docs/deployment/github-actions.md` (CONSOLIDATED Dec 2, 2025)
+9. ✅ **infra/bicep/README.md** → `docs/deployment/azure/bicep-templates.md` (MIGRATED Dec 2, 2025)
 
 ### Phase 3: Create New Content
 1. Production checklist (security, performance, monitoring)

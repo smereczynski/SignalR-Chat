@@ -75,6 +75,9 @@ param entraIdFallbackEnableOtp bool = true
 @description('Allow OTP for unauthorized tenant users')
 param entraIdFallbackOtpForUnauthorizedUsers bool = false
 
+@description('VPN IP address for firewall rules (optional, only for dev environment)')
+param vpnIpAddress string = ''
+
 @description('Optional Entra ID connection string (ClientId=...;ClientSecret=...)')
 @secure()
 param entraIdConnectionString string = ''
@@ -121,6 +124,10 @@ var redisPrivateIp = '${peSubnetBase}.${peSubnetLastOctet + 6}'
 var signalRPrivateIp = '${peSubnetBase}.${peSubnetLastOctet + 7}'
 // App Service: 1 IP
 var appServicePrivateIp = '${peSubnetBase}.${peSubnetLastOctet + 8}'
+// AI Foundry: 3 IPs (primary + 2 secondary endpoints)
+var aiFoundryPrivateIp1 = '${peSubnetBase}.${peSubnetLastOctet + 9}'
+var aiFoundryPrivateIp2 = '${peSubnetBase}.${peSubnetLastOctet + 10}'
+var aiFoundryPrivateIp3 = '${peSubnetBase}.${peSubnetLastOctet + 11}'
 
 // App Service URL (deterministic, constructed before deployment)
 var appServiceUrl = 'https://${baseName}-${environment}-${shortLocation}.azurewebsites.net'
@@ -169,6 +176,7 @@ module cosmosDb './modules/cosmos-db.bicep' = {
     privateEndpointStaticIp1: cosmosPrivateIp1
     privateEndpointStaticIp2: cosmosPrivateIp2
     logAnalyticsWorkspaceId: monitoring.outputs.logAnalyticsWorkspaceId
+    vpnIpAddress: vpnIpAddress
   }
 }
 
@@ -237,10 +245,15 @@ module translation './modules/translation.bicep' = if (enableTranslation) {
     shortLocation: shortLocation
     translationProvider: translationProvider
     sku: environment == 'prod' ? 'S0' : 'S0' // S0 for all environments (F0 has low quotas)
-    publicNetworkAccess: environment == 'dev' // Public in dev, private in staging/prod
     disableLocalAuth: false // Keep key-based auth for simplicity
-    privateEndpointSubnetId: environment == 'dev' ? '' : networking.outputs.privateEndpointsSubnetId
+    privateEndpointSubnetId: networking.outputs.privateEndpointsSubnetId // PE enabled for all environments
+    privateEndpointStaticIps: [
+      aiFoundryPrivateIp1
+      aiFoundryPrivateIp2
+      aiFoundryPrivateIp3
+    ]
     logAnalyticsWorkspaceId: monitoring.outputs.logAnalyticsWorkspaceId
+    vpnIpAddress: vpnIpAddress
   }
 }
 

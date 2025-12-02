@@ -42,17 +42,18 @@ The SignalR Chat documentation is **substantially complete** with a well-defined
 - ❌ `diagrams/` - **MISSING** (Visual diagrams directory)
 
 #### Deployment (100% complete)
-- ✅ `README.md` - Deployment overview
+- ✅ `README.md` - Deployment overview (updated Dec 2, 2025)
 - ✅ `bootstrap.md` - Complete deployment from scratch (1011 lines)
 - ✅ `production-checklist.md` - Pre-launch verification
 - ✅ `windows-to-linux-migration.md` - Platform migration guide
-- ✅ `github-secrets.md` - Secret configuration guide
-- ✅ `github-variables.md` - Variable configuration guide
-- ✅ `github-actions.md` - **COMPLETE** (P1 added Nov 21, 2025)
+- ✅ `github-secrets.md` - **UPDATED** (5 repository secrets, updated Dec 2, 2025)
+- ✅ `github-variables.md` - **UPDATED** (11 repository variables including VPN IP, Entra ID, updated Dec 2, 2025)
+- ✅ `github-actions.md` - **COMPLETE** (Enhanced with static IP allocation, private endpoints, Dec 2, 2025)
 - ✅ `post-deployment-manual-steps.md` - Manual configuration after deployment
 - ✅ `azure/` - **NEW** (P1 added Dec 2, 2025)
   - ✅ `README.md` - Azure deployment navigation
   - ✅ `bicep-templates.md` - **COMPLETE** (Migrated from infra/bicep/README.md)
+- ✅ `.github/workflows/README.md` - **CONSOLIDATED** (Replaced with migration notice, comprehensive docs moved to docs/deployment/, Dec 2, 2025)
 
 #### Features (40% complete)
 - ✅ `README.md` - Features overview

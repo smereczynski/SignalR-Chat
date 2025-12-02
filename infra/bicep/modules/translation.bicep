@@ -31,14 +31,17 @@ param translationProvider string = 'LLM-GPT4oMini'
 ])
 param sku string = 'S0'
 
-@description('Enable public network access')
-param publicNetworkAccess bool = true
-
 @description('Disable local authentication (use Entra ID only)')
 param disableLocalAuth bool = false
 
 @description('Subnet ID for private endpoint (optional)')
 param privateEndpointSubnetId string = ''
+
+@description('Array of 3 static IP addresses for private endpoint (optional)')
+param privateEndpointStaticIps array = []
+
+@description('VPN IP address for firewall rules (optional, only for dev environment)')
+param vpnIpAddress string = ''
 
 @description('Log Analytics Workspace ID for diagnostic logs')
 param logAnalyticsWorkspaceId string = ''
@@ -58,6 +61,13 @@ var customSubDomainName = 'aif-${baseName}-${environment}-${shortLocation}'
 // - LLM-based translation (GPT-4o-mini, GPT-4o)
 // - Text analytics, language understanding
 
+// Build IP rules array for dev environment only
+var ipRulesArray = environment == 'dev' && !empty(vpnIpAddress) ? [
+  {
+    value: vpnIpAddress
+  }
+] : []
+
 resource aiServices 'Microsoft.CognitiveServices/accounts@2025-06-01' = {
   name: aiServicesName
   location: location
@@ -73,15 +83,18 @@ resource aiServices 'Microsoft.CognitiveServices/accounts@2025-06-01' = {
     customSubDomainName: customSubDomainName
     
     // Network and authentication settings
-    publicNetworkAccess: publicNetworkAccess ? 'Enabled' : 'Disabled'
+    // Enable public access for dev (with IP restrictions), disable for staging/prod
+    publicNetworkAccess: environment == 'dev' ? 'Enabled' : 'Disabled'
     disableLocalAuth: disableLocalAuth
     
     // Enable project management for Foundry
     allowProjectManagement: true
     
-    // Network ACLs (if public access disabled)
-    networkAcls: publicNetworkAccess ? null : {
-      defaultAction: 'Deny'
+    // Network ACLs - configure IP rules and trusted services
+    networkAcls: {
+      defaultAction: environment == 'dev' && !empty(vpnIpAddress) ? 'Deny' : 'Allow'
+      ipRules: ipRulesArray
+      bypass: 'AzureServices' // Allow Azure services bypass
     }
   }
 }
@@ -148,6 +161,33 @@ resource privateEndpoint 'Microsoft.Network/privateEndpoints@2023-11-01' = if (p
         }
       }
     ]
+    // Use 3 static IPs if provided, otherwise dynamic allocation
+    ipConfigurations: length(privateEndpointStaticIps) == 3 ? [
+      {
+        name: 'ipconfig-${aiServicesName}-primary'
+        properties: {
+          privateIPAddress: privateEndpointStaticIps[0]
+          groupId: 'account'
+          memberName: 'account'
+        }
+      }
+      {
+        name: 'ipconfig-${aiServicesName}-secondary1'
+        properties: {
+          privateIPAddress: privateEndpointStaticIps[1]
+          groupId: 'account'
+          memberName: 'account'
+        }
+      }
+      {
+        name: 'ipconfig-${aiServicesName}-secondary2'
+        properties: {
+          privateIPAddress: privateEndpointStaticIps[2]
+          groupId: 'account'
+          memberName: 'account'
+        }
+      }
+    ] : []
     customNetworkInterfaceName: 'nic-pe-${aiServicesName}'
   }
 }

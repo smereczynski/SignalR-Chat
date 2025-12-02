@@ -35,6 +35,9 @@ param privateEndpointStaticIp2 string = ''
 @description('Log Analytics Workspace ID for diagnostic logs')
 param logAnalyticsWorkspaceId string = ''
 
+@description('VPN IP address for firewall rules (optional, only for dev environment)')
+param vpnIpAddress string = ''
+
 // ==========================================
 // Variables
 // ==========================================
@@ -76,6 +79,20 @@ var backupPolicy = environment == 'prod' ? {
 // ==========================================
 // Cosmos DB Account
 // ==========================================
+// Azure Portal IP addresses for Cosmos DB access
+var azurePortalIps = [
+  '4.210.172.107'
+  '13.88.56.148'
+  '13.91.105.215'
+  '40.91.218.243'
+]
+
+// Build IP rules array for dev environment only
+var ipRulesArray = environment == 'dev' ? concat(
+  !empty(vpnIpAddress) ? [{ ipAddressOrRange: vpnIpAddress }] : [],
+  map(azurePortalIps, ip => { ipAddressOrRange: ip })
+) : []
+
 resource cosmosAccount 'Microsoft.DocumentDB/databaseAccounts@2024-11-15' = {
   name: accountName
   location: location
@@ -86,7 +103,8 @@ resource cosmosAccount 'Microsoft.DocumentDB/databaseAccounts@2024-11-15' = {
     locations: locations
     enableAutomaticFailover: false
     enableMultipleWriteLocations: false
-    publicNetworkAccess: privateEndpointSubnetId != '' ? 'Disabled' : 'Enabled'
+    publicNetworkAccess: environment == 'dev' ? 'Enabled' : 'Disabled'
+    ipRules: ipRulesArray
     capabilities: []
     backupPolicy: backupPolicy
   }
