@@ -15,12 +15,12 @@ namespace Chat.Web.Services
     public class CosmosClientsInitializationService : IHostedService
     {
         private readonly CosmosOptions _options;
-        private readonly ILogger<CosmosClients> _logger;
+        private readonly ILogger<CosmosClientsInitializationService> _logger;
         private readonly Action<CosmosClients> _setInstance;
 
         public CosmosClientsInitializationService(
             CosmosOptions options,
-            ILogger<CosmosClients> logger,
+            ILogger<CosmosClientsInitializationService> logger,
             Action<CosmosClients> setInstance)
         {
             _options = options;
@@ -45,9 +45,9 @@ namespace Chat.Web.Services
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to initialize Cosmos DB clients. ConnectionString configured: {HasConnectionString}, Database: {Database}",
+                _logger.LogCritical(ex, "Failed to initialize Cosmos DB clients. ConnectionString configured: {HasConnectionString}, Database: {Database}. Application cannot start without Cosmos DB access.",
                     !string.IsNullOrWhiteSpace(_options.ConnectionString), _options.Database);
-                throw;
+                throw new InvalidOperationException($"Cosmos DB initialization failed for database '{_options.Database}'. See inner exception for details.", ex);
             }
         }
 

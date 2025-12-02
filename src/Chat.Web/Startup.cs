@@ -287,7 +287,7 @@ namespace Chat.Web
                 // Register initialization service that will run async initialization properly
                 services.AddHostedService(sp => new Services.CosmosClientsInitializationService(
                     cosmosOpts,
-                    sp.GetRequiredService<ILogger<CosmosClients>>(),
+                    sp.GetRequiredService<ILogger<Services.CosmosClientsInitializationService>>(),
                     clients => cosmosClientsInstance = clients
                 ));
                 services.AddSingleton<IUsersRepository, CosmosUsersRepository>();
@@ -791,8 +791,6 @@ namespace Chat.Web
                                         Chat.Web.Utilities.LogSanitizer.Sanitize(user.UserName),
                                         Chat.Web.Utilities.LogSanitizer.Sanitize(upn),
                                         Chat.Web.Utilities.LogSanitizer.Sanitize(tenantId ?? "<null>"));
-
-                                    return;
                                 },
                                 OnRemoteFailure = context =>
                                 {
