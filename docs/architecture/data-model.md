@@ -195,13 +195,15 @@ Repositories (Cosmos or InMemory) expose uniform interfaces with **async** signa
 | `IUsersRepository` | `GetByUserNameAsync`, `GetByUpnAsync`, `UpsertAsync`, `GetAllAsync` | `GetByUpnAsync` used for Entra ID login (case-insensitive match). |
 | `IRoomsRepository` | `GetByNameAsync`, `GetByIdAsync`, `GetAllAsync`, `AddUserToRoomAsync`, `RemoveUserFromRoomAsync` | Fixed room list, no dynamic creation. |
 
-**Current Implementation (as of 2025-12-02, Issue #28):**
+**Current Implementation (as of 2025-12-02, Issues #28 and #66):**
 - ✅ Async factory pattern: `CosmosClients.CreateAsync()` with private constructor
 - ✅ All repository methods use proper async/await throughout
 - ✅ Query patterns consolidated via `CosmosQueryHelper` class (reduces code duplication)
 - ✅ Generic helper methods: `ExecutePaginatedQueryAsync<TDoc, T>` and `ExecuteSingleResultQueryAsync<TDoc, T>`
 - ✅ Retry logic, telemetry, and error handling centralized in helpers
-- 📈 **Performance**: Eliminates thread pool starvation from blocking async I/O operations
+- ✅ **ConfigureAwait(false)** on all 60+ async operations in infrastructure code (repositories, services)
+- ✅ Proper async initialization via `CosmosClientsInitializationService` (IHostedService pattern)
+- 📈 **Performance**: Eliminates ALL blocking async calls and SynchronizationContext overhead
 
 **CosmosQueryHelper Implementation Details:**
 - Centralizes paginated query pattern: `while (queryIterator.HasMoreResults)` loop with retry logic
