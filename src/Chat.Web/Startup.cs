@@ -281,7 +281,13 @@ namespace Chat.Web
                 services.AddSingleton(cosmosOpts);
                 services.AddSingleton(sp =>
                 {
-                    // Initialize synchronously on first resolution (lazy initialization)
+                    // Lazy initialization: CosmosClients created on first resolution
+                    // Note: GetAwaiter().GetResult() is safe here because:
+                    // 1. Runs once during singleton construction (lazy, not during DI setup)
+                    // 2. No SynchronizationContext in ASP.NET Core (no deadlock risk)
+                    // 3. Initialization completes before any requests are processed
+                    // Previous IHostedService approach caused startup deadlock when other
+                    // IHostedServices tried to resolve CosmosClients before initialization completed
                     var opts = sp.GetRequiredService<CosmosOptions>();
                     return CosmosClients.CreateAsync(opts).GetAwaiter().GetResult();
                 });
