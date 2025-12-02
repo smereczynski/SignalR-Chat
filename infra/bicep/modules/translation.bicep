@@ -156,8 +156,8 @@ resource privateEndpoint 'Microsoft.Network/privateEndpoints@2023-11-01' = if (p
 // Diagnostic Settings
 // =========================================
 resource diagnosticSettings 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = if (logAnalyticsWorkspaceId != '') {
-  name: 'diagnostics-${aiServicesName}'
   scope: aiServices
+  name: 'diagnostics-${aiServicesName}'
   properties: {
     logs: [
       {
