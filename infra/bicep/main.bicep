@@ -234,10 +234,13 @@ module translation './modules/translation.bicep' = if (enableTranslation) {
     baseName: baseName
     environment: environment
     location: location
+    shortLocation: shortLocation
     translationProvider: translationProvider
     sku: environment == 'prod' ? 'S0' : 'S0' // S0 for all environments (F0 has low quotas)
     publicNetworkAccess: environment == 'dev' // Public in dev, private in staging/prod
     disableLocalAuth: false // Keep key-based auth for simplicity
+    privateEndpointSubnetId: environment == 'dev' ? '' : networking.outputs.privateEndpointsSubnetId
+    logAnalyticsWorkspaceId: monitoring.outputs.logAnalyticsWorkspaceId
   }
 }
 
