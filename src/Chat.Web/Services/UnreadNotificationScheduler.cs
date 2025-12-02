@@ -122,9 +122,9 @@ namespace Chat.Web.Services
             
             try
             {
-                var msg = _messages.GetById(messageId);
+                var msg = await _messages.GetByIdAsync(messageId);
                 if (msg == null) return;
-                var room = msg.ToRoom ?? _rooms.GetById(msg.ToRoomId);
+                var room = msg.ToRoom ?? await _rooms.GetByIdAsync(msg.ToRoomId);
                 var roomName = room?.Name ?? msg.ToRoom?.Name;
                 if (string.IsNullOrWhiteSpace(roomName)) return;
 
@@ -140,7 +140,7 @@ namespace Chat.Web.Services
                 
                 // Gather ALL users assigned to the room from FixedRooms (source of truth for room membership)
                 // Note: room.Users contains only currently connected users (presence tracking), not all assigned users
-                var userNames = _users.GetAll()
+                var userNames = (await _users.GetAllAsync())
                     ?.Where(u => u != null && u.Enabled != false && (u.FixedRooms?.Contains(roomName, StringComparer.OrdinalIgnoreCase) ?? false))
                     ?.Select(u => u.UserName)
                     ?.Where(n => !string.IsNullOrWhiteSpace(n))
@@ -174,7 +174,7 @@ namespace Chat.Web.Services
                 
                 foreach (var uname in toNotify)
                 {
-                    var user = _users.GetByUserName(uname);
+                    var user = await _users.GetByUserNameAsync(uname);
                     if (user == null || user.Enabled == false) continue;
                     
                     // Send email if user has one

@@ -23,7 +23,16 @@ namespace Chat.Web.Repositories
         public Container Rooms { get; }
         public Container Messages { get; }
 
-        public CosmosClients(CosmosOptions options)
+        private CosmosClients(CosmosClient client, Database database, Container users, Container rooms, Container messages)
+        {
+            Client = client;
+            Database = database;
+            Users = users;
+            Rooms = rooms;
+            Messages = messages;
+        }
+
+        public static async Task<CosmosClients> CreateAsync(CosmosOptions options)
         {
             // Use Gateway mode for private endpoint compatibility
             // Gateway mode uses HTTPS and respects DNS resolution for private endpoints
@@ -32,40 +41,45 @@ namespace Chat.Web.Repositories
                 ConnectionMode = ConnectionMode.Gateway
             };
             
-            Client = new CosmosClient(options.ConnectionString, clientOptions);
+            var client = new CosmosClient(options.ConnectionString, clientOptions);
+            Database database;
+            Container users, rooms, messages;
+
             if (options.AutoCreate)
             {
-                Database = Client.CreateDatabaseIfNotExistsAsync(options.Database).GetAwaiter().GetResult();
-                Users = CreateContainerIfNotExists(options.UsersContainer, "/userName", 400);
-                Rooms = CreateContainerIfNotExists(options.RoomsContainer, "/name", 400);
-                Messages = CreateContainerIfNotExists(options.MessagesContainer, "/roomName", 400, options.MessagesTtlSeconds);
+                database = await client.CreateDatabaseIfNotExistsAsync(options.Database);
+                users = await CreateContainerIfNotExistsAsync(database, options.UsersContainer, "/userName", 400);
+                rooms = await CreateContainerIfNotExistsAsync(database, options.RoomsContainer, "/name", 400);
+                messages = await CreateContainerIfNotExistsAsync(database, options.MessagesContainer, "/roomName", 400, options.MessagesTtlSeconds);
             }
             else
             {
-                Database = Client.GetDatabase(options.Database);
-                Users = Database.GetContainer(options.UsersContainer);
-                Rooms = Database.GetContainer(options.RoomsContainer);
-                Messages = Database.GetContainer(options.MessagesContainer);
+                database = client.GetDatabase(options.Database);
+                users = database.GetContainer(options.UsersContainer);
+                rooms = database.GetContainer(options.RoomsContainer);
+                messages = database.GetContainer(options.MessagesContainer);
             }
+
+            return new CosmosClients(client, database, users, rooms, messages);
         }
 
-        private Container CreateContainerIfNotExists(string name, string partitionKey, int? throughput, int? defaultTtlSeconds = null)
+        private static async Task<Container> CreateContainerIfNotExistsAsync(Database database, string name, string partitionKey, int? throughput, int? defaultTtlSeconds = null)
         {
             var props = new ContainerProperties(name, partitionKey);
             if (defaultTtlSeconds.HasValue)
             {
                 props.DefaultTimeToLive = defaultTtlSeconds.Value;
             }
-            var response = Database.CreateContainerIfNotExistsAsync(props, throughput).GetAwaiter().GetResult();
+            var response = await database.CreateContainerIfNotExistsAsync(props, throughput);
             // Reconcile TTL setting on existing container
-            var current = response.Container.ReadContainerAsync().GetAwaiter().GetResult().Resource;
+            var current = (await response.Container.ReadContainerAsync()).Resource;
             if (defaultTtlSeconds.HasValue)
             {
                 // If TTL should be a specific value and differs, update it
                 if (current.DefaultTimeToLive != defaultTtlSeconds.Value)
                 {
                     current.DefaultTimeToLive = defaultTtlSeconds.Value;
-                    response.Container.ReplaceContainerAsync(current).GetAwaiter().GetResult();
+                    await response.Container.ReplaceContainerAsync(current);
                 }
             }
             else
@@ -74,7 +88,7 @@ namespace Chat.Web.Repositories
                 if (current.DefaultTimeToLive != null)
                 {
                     current.DefaultTimeToLive = null;
-                    response.Container.ReplaceContainerAsync(current).GetAwaiter().GetResult();
+                    await response.Container.ReplaceContainerAsync(current);
                 }
             }
             return response.Container;
@@ -135,7 +149,7 @@ namespace Chat.Web.Repositories
             };
         }
 
-        public IEnumerable<ApplicationUser> GetAll()
+        public async Task<IEnumerable<ApplicationUser>> GetAllAsync()
         {
             using var activity = Tracing.ActivitySource.StartActivity("cosmos.users.getall", ActivityKind.Client);
             var q = _users.GetItemQueryIterator<UserDoc>(new QueryDefinition("SELECT * FROM c"));
@@ -145,12 +159,12 @@ namespace Chat.Web.Repositories
                 while (q.HasMoreResults)
                 {
                     // retry each page fetch
-                    var page = Resilience.RetryHelper.ExecuteAsync(
+                    var page = await Resilience.RetryHelper.ExecuteAsync(
                         _ => q.ReadNextAsync(),
                         Transient.IsCosmosTransient,
                         _logger,
                         "cosmos.users.getall.readnext"
-                    ).GetAwaiter().GetResult();
+                    );
                     activity?.AddEvent(new ActivityEvent("page", tags: new ActivityTagsCollection {{"db.page.count", page.Count}}));
                     list.AddRange(page.Select(MapUser));
                 }
@@ -165,7 +179,7 @@ namespace Chat.Web.Repositories
             }
         }
 
-        private string GetDocumentId(string userName)
+        private async Task<string> GetDocumentIdAsync(string userName)
         {
             using var activity = Tracing.ActivitySource.StartActivity("cosmos.users.getid", ActivityKind.Client);
             activity?.SetTag("app.userName", userName);
@@ -174,11 +188,11 @@ namespace Chat.Web.Repositories
             {
                 while (q.HasMoreResults)
                 {
-                    var page = Resilience.RetryHelper.ExecuteAsync(
+                    var page = await Resilience.RetryHelper.ExecuteAsync(
                         _ => q.ReadNextAsync(),
                         Transient.IsCosmosTransient,
                         _logger,
-                        "cosmos.users.getid.readnext").GetAwaiter().GetResult();
+                        "cosmos.users.getid.readnext");
                     var d = page.FirstOrDefault();
                     if (d != null)
                     {
@@ -195,7 +209,7 @@ namespace Chat.Web.Repositories
             }
         }
 
-        public ApplicationUser GetByUserName(string userName)
+        public async Task<ApplicationUser> GetByUserNameAsync(string userName)
         {
             using var activity = Tracing.ActivitySource.StartActivity("cosmos.users.get", ActivityKind.Client);
             activity?.SetTag("app.userName", userName);
@@ -205,11 +219,11 @@ namespace Chat.Web.Repositories
             {
                 while (q.HasMoreResults)
                 {
-                    var page = Resilience.RetryHelper.ExecuteAsync(
+                    var page = await Resilience.RetryHelper.ExecuteAsync(
                         _ => q.ReadNextAsync(),
                         Transient.IsCosmosTransient,
                         _logger,
-                        "cosmos.users.get.readnext").GetAwaiter().GetResult();
+                        "cosmos.users.get.readnext");
                     var d = page.FirstOrDefault();
                     if (d != null)
                     {
@@ -227,7 +241,7 @@ namespace Chat.Web.Repositories
             }
         }
 
-        public ApplicationUser GetByUpn(string upn)
+        public async Task<ApplicationUser> GetByUpnAsync(string upn)
         {
             using var activity = Tracing.ActivitySource.StartActivity("cosmos.users.getbyupn", ActivityKind.Client);
             activity?.SetTag("app.upn", upn);
@@ -239,11 +253,11 @@ namespace Chat.Web.Repositories
             {
                 while (q.HasMoreResults)
                 {
-                    var page = Resilience.RetryHelper.ExecuteAsync(
+                    var page = await Resilience.RetryHelper.ExecuteAsync(
                         _ => q.ReadNextAsync(),
                         Transient.IsCosmosTransient,
                         _logger,
-                        "cosmos.users.getbyupn.readnext").GetAwaiter().GetResult();
+                        "cosmos.users.getbyupn.readnext");
                     var d = page.FirstOrDefault();
                     if (d != null)
                     {
@@ -261,14 +275,14 @@ namespace Chat.Web.Repositories
             }
         }
 
-        public void Upsert(ApplicationUser user)
+        public async Task UpsertAsync(ApplicationUser user)
         {
             using var activity = Tracing.ActivitySource.StartActivity("cosmos.users.upsert", ActivityKind.Client);
             activity?.SetTag("app.userName", user.UserName);
             
             // Check if user already exists to preserve their ID
-            var existing = GetByUserName(user.UserName);
-            var documentId = existing != null ? GetDocumentId(user.UserName) : Guid.NewGuid().ToString();
+            var existing = await GetByUserNameAsync(user.UserName);
+            var documentId = existing != null ? await GetDocumentIdAsync(user.UserName) : Guid.NewGuid().ToString();
             
                 var doc = new UserDoc 
             { 
@@ -289,11 +303,11 @@ namespace Chat.Web.Repositories
             };
             try
             {
-                var resp = Resilience.RetryHelper.ExecuteAsync(
+                var resp = await Resilience.RetryHelper.ExecuteAsync(
                     _ => _users.UpsertItemAsync(doc, new PartitionKey(doc.userName)),
                     Transient.IsCosmosTransient,
                     _logger,
-                    "cosmos.users.upsert").GetAwaiter().GetResult();
+                    "cosmos.users.upsert");
                 activity?.SetTag("db.status_code", (int)resp.StatusCode);
             }
             catch (CosmosException ex)
@@ -316,7 +330,7 @@ namespace Chat.Web.Repositories
             _logger = logger;
         }
 
-        public IEnumerable<Room> GetAll()
+        public async Task<IEnumerable<Room>> GetAllAsync()
         {
             using var activity = Tracing.ActivitySource.StartActivity("cosmos.rooms.getall", ActivityKind.Client);
             var q = _rooms.GetItemQueryIterator<RoomDoc>(new QueryDefinition("SELECT * FROM c ORDER BY c.name"));
@@ -325,11 +339,11 @@ namespace Chat.Web.Repositories
             {
                 while (q.HasMoreResults)
                 {
-                    var page = Resilience.RetryHelper.ExecuteAsync(
+                    var page = await Resilience.RetryHelper.ExecuteAsync(
                         _ => q.ReadNextAsync(),
                         Transient.IsCosmosTransient,
                         _logger,
-                        "cosmos.rooms.getall.readnext").GetAwaiter().GetResult();
+                        "cosmos.rooms.getall.readnext");
                     activity?.AddEvent(new ActivityEvent("page", tags: new ActivityTagsCollection {{"db.page.count", page.Count}}));
                     list.AddRange(page.Select(d => new Room { Id = DocIdUtil.TryParseRoomId(d.id), Name = d.name, Users = d.users != null ? new List<string>(d.users) : new List<string>() }));
                 }
@@ -345,7 +359,7 @@ namespace Chat.Web.Repositories
             }
         }
 
-        public Room GetById(int id)
+        public async Task<Room> GetByIdAsync(int id)
         {
             using var activity = Tracing.ActivitySource.StartActivity("cosmos.rooms.getbyid", ActivityKind.Client);
             activity?.SetTag("app.room.id", id);
@@ -354,11 +368,11 @@ namespace Chat.Web.Repositories
             {
                 while (q.HasMoreResults)
                 {
-                    var page = Resilience.RetryHelper.ExecuteAsync(
+                    var page = await Resilience.RetryHelper.ExecuteAsync(
                         _ => q.ReadNextAsync(),
                         Transient.IsCosmosTransient,
                         _logger,
-                        "cosmos.rooms.getbyid.readnext").GetAwaiter().GetResult();
+                        "cosmos.rooms.getbyid.readnext");
                     var d = page.FirstOrDefault();
                     if (d != null) return new Room { Id = DocIdUtil.TryParseRoomId(d.id), Name = d.name, Users = d.users != null ? new List<string>(d.users) : new List<string>() };
                 }
@@ -372,7 +386,7 @@ namespace Chat.Web.Repositories
             }
         }
 
-        public Room GetByName(string name)
+        public async Task<Room> GetByNameAsync(string name)
         {
             using var activity = Tracing.ActivitySource.StartActivity("cosmos.rooms.getbyname", ActivityKind.Client);
             activity?.SetTag("app.room", name);
@@ -381,11 +395,11 @@ namespace Chat.Web.Repositories
             {
                 while (q.HasMoreResults)
                 {
-                    var page = Resilience.RetryHelper.ExecuteAsync(
+                    var page = await Resilience.RetryHelper.ExecuteAsync(
                         _ => q.ReadNextAsync(),
                         Transient.IsCosmosTransient,
                         _logger,
-                        "cosmos.rooms.getbyname.readnext").GetAwaiter().GetResult();
+                        "cosmos.rooms.getbyname.readnext");
                     var d = page.FirstOrDefault();
                     if (d != null) return new Room { Id = DocIdUtil.TryParseRoomId(d.id), Name = d.name, Users = d.users != null ? new List<string>(d.users) : new List<string>() };
                 }
@@ -400,27 +414,27 @@ namespace Chat.Web.Repositories
             }
         }
 
-        public void AddUserToRoom(string roomName, string userName)
+        public async Task AddUserToRoomAsync(string roomName, string userName)
         {
-            UpsertRoomUser(roomName, userName, add: true);
+            await UpsertRoomUserAsync(roomName, userName, add: true);
         }
 
-        public void RemoveUserFromRoom(string roomName, string userName)
+        public async Task RemoveUserFromRoomAsync(string roomName, string userName)
         {
-            UpsertRoomUser(roomName, userName, add: false);
+            await UpsertRoomUserAsync(roomName, userName, add: false);
         }
 
-        private void UpsertRoomUser(string roomName, string userName, bool add)
+        private async Task UpsertRoomUserAsync(string roomName, string userName, bool add)
         {
             var q = _rooms.GetItemQueryIterator<RoomDoc>(new QueryDefinition("SELECT * FROM c WHERE c.name = @n").WithParameter("@n", roomName));
             RoomDoc room = null;
             while (q.HasMoreResults && room == null)
             {
-                var page = Resilience.RetryHelper.ExecuteAsync(
+                var page = await Resilience.RetryHelper.ExecuteAsync(
                     _ => q.ReadNextAsync(),
                     Transient.IsCosmosTransient,
                     _logger,
-                    "cosmos.rooms.byname.forRoomRepo").GetAwaiter().GetResult();
+                    "cosmos.rooms.byname.forRoomRepo");
                 room = page.FirstOrDefault();
             }
             if (room == null) return;
@@ -428,7 +442,7 @@ namespace Chat.Web.Repositories
             if (add ? users.Add(userName) : users.Remove(userName))
             {
                 room.users = users.ToArray();
-                _rooms.UpsertItemAsync(room, new PartitionKey(roomName)).GetAwaiter().GetResult();
+                await _rooms.UpsertItemAsync(room, new PartitionKey(roomName));
             }
         }
     }
@@ -476,20 +490,20 @@ namespace Chat.Web.Repositories
             };
         }
 
-        public Message Create(Message message)
+        public async Task<Message> CreateAsync(Message message)
         {
             using var activity = Tracing.ActivitySource.StartActivity("cosmos.messages.create", ActivityKind.Client);
-            var room = message.ToRoom ?? _roomsRepo.GetById(message.ToRoomId);
+            var room = message.ToRoom ?? await _roomsRepo.GetByIdAsync(message.ToRoomId);
             var pk = room?.Name ?? "global";
             message.Id = message.Id == 0 ? new Random().Next(1, int.MaxValue) : message.Id;
             var doc = new MessageDoc { id = message.Id.ToString(), roomName = pk, content = message.Content, fromUser = message.FromUser?.UserName, timestamp = message.Timestamp, readBy = (message.ReadBy != null ? message.ReadBy.ToArray() : Array.Empty<string>()) };
             try
             {
-                var resp = Resilience.RetryHelper.ExecuteAsync(
+                var resp = await Resilience.RetryHelper.ExecuteAsync(
                     _ => _messages.UpsertItemAsync(doc, new PartitionKey(pk)),
                     Transient.IsCosmosTransient,
                     _logger,
-                    "cosmos.messages.create").GetAwaiter().GetResult();
+                    "cosmos.messages.create");
                 activity?.SetTag("db.status_code", (int)resp.StatusCode);
             }
             catch (CosmosException ex)
@@ -501,21 +515,21 @@ namespace Chat.Web.Repositories
             return message;
         }
 
-        public void Delete(int id, string byUserName)
+        public async Task DeleteAsync(int id, string byUserName)
         {
             using var activity = Tracing.ActivitySource.StartActivity("cosmos.messages.delete", ActivityKind.Client);
-            var m = GetById(id);
+            var m = await GetByIdAsync(id);
             if (m?.FromUser?.UserName == byUserName)
             {
-                var room = m.ToRoom ?? _roomsRepo.GetById(m.ToRoomId);
+                var room = m.ToRoom ?? await _roomsRepo.GetByIdAsync(m.ToRoomId);
                 var pk = room?.Name ?? "global";
                 try
                 {
-                    var resp = Resilience.RetryHelper.ExecuteAsync(
+                    var resp = await Resilience.RetryHelper.ExecuteAsync(
                         _ => _messages.DeleteItemAsync<MessageDoc>(id.ToString(), new PartitionKey(pk)),
                         Transient.IsCosmosTransient,
                         _logger,
-                        "cosmos.messages.delete").GetAwaiter().GetResult();
+                        "cosmos.messages.delete");
                     activity?.SetTag("db.status_code", (int)resp.StatusCode);
                 }
                 catch (CosmosException ex)
@@ -527,7 +541,7 @@ namespace Chat.Web.Repositories
             }
         }
 
-        public Message GetById(int id)
+        public async Task<Message> GetByIdAsync(int id)
         {
             using var activity = Tracing.ActivitySource.StartActivity("cosmos.messages.getbyid", ActivityKind.Client);
             activity?.SetTag("app.message.id", id);
@@ -536,11 +550,11 @@ namespace Chat.Web.Repositories
             {
                 while (q.HasMoreResults)
                 {
-                    var page = Resilience.RetryHelper.ExecuteAsync(
+                    var page = await Resilience.RetryHelper.ExecuteAsync(
                         _ => q.ReadNextAsync(),
                         Transient.IsCosmosTransient,
                         _logger,
-                        "cosmos.messages.getbyid.readnext").GetAwaiter().GetResult();
+                        "cosmos.messages.getbyid.readnext");
                     var d = page.FirstOrDefault();
                     if (d != null)
                     {
@@ -557,7 +571,7 @@ namespace Chat.Web.Repositories
             }
         }
 
-        public IEnumerable<Message> GetRecentByRoom(string roomName, int take = 20)
+        public async Task<IEnumerable<Message>> GetRecentByRoomAsync(string roomName, int take = 20)
         {
             using var activity = Tracing.ActivitySource.StartActivity("cosmos.messages.recent", ActivityKind.Client);
             activity?.SetTag("app.room", roomName);
@@ -567,11 +581,11 @@ namespace Chat.Web.Repositories
             {
                 while (q.HasMoreResults)
                 {
-                    var page = Resilience.RetryHelper.ExecuteAsync(
+                    var page = await Resilience.RetryHelper.ExecuteAsync(
                         _ => q.ReadNextAsync(),
                         Transient.IsCosmosTransient,
                         _logger,
-                        "cosmos.messages.recent.readnext").GetAwaiter().GetResult();
+                        "cosmos.messages.recent.readnext");
                     activity?.AddEvent(new ActivityEvent("page", tags: new ActivityTagsCollection {{"db.page.count", page.Count}}));
                     list.AddRange(page.Select(MapMessage));
                 }
@@ -588,7 +602,7 @@ namespace Chat.Web.Repositories
             }
         }
 
-    public IEnumerable<Message> GetBeforeByRoom(string roomName, DateTime before, int take = 20)
+    public async Task<IEnumerable<Message>> GetBeforeByRoomAsync(string roomName, DateTime before, int take = 20)
         {
             using var activity = Tracing.ActivitySource.StartActivity("cosmos.messages.before", ActivityKind.Client);
             activity?.SetTag("app.room", roomName);
@@ -604,11 +618,11 @@ namespace Chat.Web.Repositories
             {
                 while (q.HasMoreResults)
                 {
-                    var page = Resilience.RetryHelper.ExecuteAsync(
+                    var page = await Resilience.RetryHelper.ExecuteAsync(
                         _ => q.ReadNextAsync(),
                         Transient.IsCosmosTransient,
                         _logger,
-                        "cosmos.messages.before.readnext").GetAwaiter().GetResult();
+                        "cosmos.messages.before.readnext");
                     activity?.AddEvent(new ActivityEvent("page", tags: new ActivityTagsCollection {{"db.page.count", page.Count}}));
                     list.AddRange(page.Select(MapMessage));
                 }
@@ -626,7 +640,7 @@ namespace Chat.Web.Repositories
             }
         }
 
-        public Message MarkRead(int id, string userName)
+        public async Task<Message> MarkReadAsync(int id, string userName)
         {
             using var activity = Tracing.ActivitySource.StartActivity("cosmos.messages.markread", ActivityKind.Client);
             activity?.SetTag("app.message.id", id);
@@ -635,11 +649,11 @@ namespace Chat.Web.Repositories
             MessageDoc d = null;
             while (q.HasMoreResults && d == null)
             {
-                var page = Resilience.RetryHelper.ExecuteAsync(
+                var page = await Resilience.RetryHelper.ExecuteAsync(
                     _ => q.ReadNextAsync(),
                     Transient.IsCosmosTransient,
                     _logger,
-                    "cosmos.messages.markread.lookup").GetAwaiter().GetResult();
+                    "cosmos.messages.markread.lookup");
                 d = page.FirstOrDefault();
             }
             if (d == null) return null;
@@ -650,11 +664,11 @@ namespace Chat.Web.Repositories
                 d.readBy = set.ToArray();
                 try
                 {
-                    var resp = Resilience.RetryHelper.ExecuteAsync(
+                    var resp = await Resilience.RetryHelper.ExecuteAsync(
                         _ => _messages.UpsertItemAsync(d, new PartitionKey(pk)),
                         Transient.IsCosmosTransient,
                         _logger,
-                        "cosmos.messages.markread.upsert").GetAwaiter().GetResult();
+                        "cosmos.messages.markread.upsert");
                     activity?.SetTag("db.status_code", (int)resp.StatusCode);
                 }
                 catch (CosmosException ex)

@@ -65,18 +65,18 @@ namespace Chat.Tests
         {
             var (rooms, users, messages) = SetupRepos();
             // Prepare users assigned to #general via FixedRooms
-            users.Upsert(MkUser("alice", "general"));
-            users.Upsert(MkUser("bob", "general"));
-            users.Upsert(MkUser("charlie")); // not in general -> should not get notified
+            await users.UpsertAsync(MkUser("alice", "general"));
+            await users.UpsertAsync(MkUser("bob", "general"));
+            await users.UpsertAsync(MkUser("charlie")); // not in general -> should not get notified
 
-            var room = rooms.GetByName("general");
+            var room = await rooms.GetByNameAsync("general");
             Assert.NotNull(room);
 
             // Create message from alice in #general
-            var msg = messages.Create(new Message
+            var msg = await messages.CreateAsync(new Message
             {
                 Content = "Hello",
-                FromUser = users.GetByUserName("alice"),
+                FromUser = await users.GetByUserNameAsync("alice"),
                 ToRoom = room,
                 Timestamp = DateTime.UtcNow
             });
@@ -111,14 +111,14 @@ namespace Chat.Tests
         public async Task Skips_notifications_if_message_marked_read_before_delay()
         {
             var (rooms, users, messages) = SetupRepos();
-            users.Upsert(MkUser("alice", "general"));
-            users.Upsert(MkUser("bob", "general"));
+            await users.UpsertAsync(MkUser("alice", "general"));
+            await users.UpsertAsync(MkUser("bob", "general"));
 
-            var room = rooms.GetByName("general");
-            var msg = messages.Create(new Message
+            var room = await rooms.GetByNameAsync("general");
+            var msg = await messages.CreateAsync(new Message
             {
                 Content = "Check read",
-                FromUser = users.GetByUserName("alice"),
+                FromUser = await users.GetByUserNameAsync("alice"),
                 ToRoom = room,
                 Timestamp = DateTime.UtcNow
             });
@@ -131,7 +131,7 @@ namespace Chat.Tests
             {
                 scheduler.Schedule(msg);
                 // Mark as read by bob before the delay elapses
-                messages.MarkRead(msg.Id, "bob");
+                await messages.MarkReadAsync(msg.Id, "bob");
 
                 // Wait longer than delay and assert no notifications were sent
                 await Task.Delay(TimeSpan.FromMilliseconds(1300));

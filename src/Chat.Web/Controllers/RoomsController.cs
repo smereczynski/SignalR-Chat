@@ -1,5 +1,6 @@
 ﻿using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using Chat.Web.Repositories;
 using Microsoft.AspNetCore.Authorization;
@@ -33,12 +34,12 @@ namespace Chat.Web.Controllers
         /// Returns rooms the authenticated user is authorized to see (intersection with user FixedRooms whitelist).
         /// </summary>
         [HttpGet]
-        public ActionResult<IEnumerable<RoomViewModel>> Get()
+        public async Task<ActionResult<IEnumerable<RoomViewModel>>> Get()
         {
             var userName = User?.Identity?.Name;
-            var profile = string.IsNullOrWhiteSpace(userName) ? null : _users.GetByUserName(userName);
+            var profile = string.IsNullOrWhiteSpace(userName) ? null : await _users.GetByUserNameAsync(userName);
             var allowed = profile?.FixedRooms ?? [];
-            var rooms = _rooms.GetAll()
+            var rooms = (await _rooms.GetAllAsync())
                 .Where(r => allowed.Contains(r.Name))
                 .Select(r => new RoomViewModel { Id = r.Id, Name = r.Name })
                 .ToList();
@@ -51,13 +52,13 @@ namespace Chat.Web.Controllers
         /// Returns a single room by id (only if in user whitelist).
         /// </summary>
         [HttpGet("{id}")]
-        public ActionResult<RoomViewModel> Get(int id)
+        public async Task<ActionResult<RoomViewModel>> Get(int id)
         {
             var userName = User?.Identity?.Name;
-            var profile = string.IsNullOrWhiteSpace(userName) ? null : _users.GetByUserName(userName);
+            var profile = string.IsNullOrWhiteSpace(userName) ? null : await _users.GetByUserNameAsync(userName);
             var allowed = profile?.FixedRooms ?? new List<string>();
 
-            var room = _rooms.GetById(id);
+            var room = await _rooms.GetByIdAsync(id);
             if (room == null || !allowed.Contains(room.Name))
                 return NotFound();
 

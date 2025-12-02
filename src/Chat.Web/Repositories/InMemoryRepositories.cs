@@ -17,14 +17,15 @@ namespace Chat.Web.Repositories
         {
             _rooms = rooms;
         }
-        public IEnumerable<ApplicationUser> GetAll() => _users.Values;
-        public ApplicationUser GetByUserName(string userName) => _users.TryGetValue(userName, out var user) ? user : null;
-        public ApplicationUser GetByUpn(string upn) => _users.Values.FirstOrDefault(u => u.Upn == upn);
-        public void Upsert(ApplicationUser user)
+        public Task<IEnumerable<ApplicationUser>> GetAllAsync() => Task.FromResult<IEnumerable<ApplicationUser>>(_users.Values);
+        public Task<ApplicationUser> GetByUserNameAsync(string userName) => Task.FromResult(_users.TryGetValue(userName, out var user) ? user : null);
+        public Task<ApplicationUser> GetByUpnAsync(string upn) => Task.FromResult(_users.Values.FirstOrDefault(u => u.Upn == upn));
+        public Task UpsertAsync(ApplicationUser user)
         {
-            if (user == null || string.IsNullOrWhiteSpace(user.UserName)) return;
+            if (user == null || string.IsNullOrWhiteSpace(user.UserName)) return Task.CompletedTask;
             // Do not attempt to sync room membership here; Chat.Web treats room users list as externally managed.
             _users[user.UserName] = user;
+            return Task.CompletedTask;
         }
     }
 
@@ -38,24 +39,26 @@ namespace Chat.Web.Repositories
             var rooms = new[]{"general","ops","random"};
             int id=1; foreach(var r in rooms){ var room=new Room{Id=id++, Name=r, Users = new List<string>()}; _roomsById[room.Id]=room; _roomsByName[room.Name]=room; }
         }
-        public IEnumerable<Room> GetAll() => _roomsById.Values;
-        public Room GetById(int id) => _roomsById.TryGetValue(id, out var r) ? r : null;
-        public Room GetByName(string name) => _roomsByName.TryGetValue(name, out var r) ? r : null;
-        public void AddUserToRoom(string roomName, string userName)
+        public Task<IEnumerable<Room>> GetAllAsync() => Task.FromResult<IEnumerable<Room>>(_roomsById.Values);
+        public Task<Room> GetByIdAsync(int id) => Task.FromResult(_roomsById.TryGetValue(id, out var r) ? r : null);
+        public Task<Room> GetByNameAsync(string name) => Task.FromResult(_roomsByName.TryGetValue(name, out var r) ? r : null);
+        public Task AddUserToRoomAsync(string roomName, string userName)
         {
             if (_roomsByName.TryGetValue(roomName, out var room))
             {
                 var set = new HashSet<string>(room.Users ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
                 if (set.Add(userName)) room.Users = set.ToList();
             }
+            return Task.CompletedTask;
         }
-        public void RemoveUserFromRoom(string roomName, string userName)
+        public Task RemoveUserFromRoomAsync(string roomName, string userName)
         {
             if (_roomsByName.TryGetValue(roomName, out var room) && room.Users != null)
             {
                 var set = new HashSet<string>(room.Users, StringComparer.OrdinalIgnoreCase);
                 if (set.Remove(userName)) room.Users = set.ToList();
             }
+            return Task.CompletedTask;
         }
     }
 
@@ -63,22 +66,26 @@ namespace Chat.Web.Repositories
     {
         private readonly ConcurrentDictionary<int, Message> _messages = new();
         private int _id = 0;
-        public Message Create(Message message)
+        public Task<Message> CreateAsync(Message message)
         {
             message.Id = System.Threading.Interlocked.Increment(ref _id);
             _messages[message.Id] = message;
-            return message;
+            return Task.FromResult(message);
         }
-        public void Delete(int id, string byUserName) => _messages.TryRemove(id, out _);
-        public Message GetById(int id) => _messages.TryGetValue(id, out var m) ? m : null;
-        public IEnumerable<Message> GetBeforeByRoom(string roomName, DateTime before, int take = 20) => GetRecentByRoom(roomName, take);
-        public IEnumerable<Message> GetRecentByRoom(string roomName, int take = 20) => _messages.Values.Where(m => m.ToRoom != null && m.ToRoom.Name == roomName).OrderByDescending(m => m.Timestamp).Take(take);
-        public Message MarkRead(int id, string userName)
+        public Task DeleteAsync(int id, string byUserName)
         {
-            if (!_messages.TryGetValue(id, out var m) || string.IsNullOrWhiteSpace(userName)) return null;
+            _messages.TryRemove(id, out _);
+            return Task.CompletedTask;
+        }
+        public Task<Message> GetByIdAsync(int id) => Task.FromResult(_messages.TryGetValue(id, out var m) ? m : null);
+        public Task<IEnumerable<Message>> GetBeforeByRoomAsync(string roomName, DateTime before, int take = 20) => GetRecentByRoomAsync(roomName, take);
+        public Task<IEnumerable<Message>> GetRecentByRoomAsync(string roomName, int take = 20) => Task.FromResult<IEnumerable<Message>>(_messages.Values.Where(m => m.ToRoom != null && m.ToRoom.Name == roomName).OrderByDescending(m => m.Timestamp).Take(take));
+        public Task<Message> MarkReadAsync(int id, string userName)
+        {
+            if (!_messages.TryGetValue(id, out var m) || string.IsNullOrWhiteSpace(userName)) return Task.FromResult<Message>(null);
             var set = new HashSet<string>(m.ReadBy ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
             if (set.Add(userName)) m.ReadBy = set.ToList();
-            return m;
+            return Task.FromResult(m);
         }
     }
 

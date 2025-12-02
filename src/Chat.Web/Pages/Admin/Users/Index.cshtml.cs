@@ -16,17 +16,17 @@ public class UsersIndexModel : PageModel
     public UsersIndexModel(IUsersRepository users) => _users = users;
     public IEnumerable<ApplicationUser> Users { get; set; } = Enumerable.Empty<ApplicationUser>();
 
-    public void OnGet()
+    public async Task OnGetAsync()
     {
-        Users = _users.GetAll();
+        Users = await _users.GetAllAsync();
     }
 
-    public IActionResult OnPostToggleEnabled(string userName)
+    public async Task<IActionResult> OnPostToggleEnabled(string userName)
     {
-        var u = _users.GetByUserName(userName);
+        var u = await _users.GetByUserNameAsync(userName);
         if (u == null) return RedirectToPage();
         u.Enabled = !u.Enabled;
-        _users.Upsert(u);
+        await _users.UpsertAsync(u);
         return RedirectToPage();
     }
 }

@@ -51,11 +51,11 @@ namespace Chat.Web.Services
             try
             {
                 // Check if any rooms exist
-                var existingRooms = _roomsRepo.GetAll()?.ToList();
+                var existingRooms = (await _roomsRepo.GetAllAsync())?.ToList();
                 var hasRooms = existingRooms != null && existingRooms.Any();
 
                 // Check if any users exist
-                var existingUsers = _usersRepo.GetAll()?.ToList();
+                var existingUsers = (await _usersRepo.GetAllAsync())?.ToList();
                 var hasUsers = existingUsers != null && existingUsers.Any();
 
                 if (hasRooms && hasUsers)
@@ -118,7 +118,7 @@ namespace Chat.Web.Services
             }
         }
 
-        private Task SeedUsersAsync()
+        private async Task SeedUsersAsync()
         {
             _logger.LogInformation("Seeding default users...");
 
@@ -181,7 +181,7 @@ namespace Chat.Web.Services
             {
                 try
                 {
-                    _usersRepo.Upsert(user);
+                    await _usersRepo.UpsertAsync(user);
                     _logger.LogInformation("  ✓ Created user: {UserName} ({FullName})", user.UserName, user.FullName);
                 }
                 catch (Exception ex)
@@ -189,8 +189,6 @@ namespace Chat.Web.Services
                     _logger.LogError(ex, "Failed to create user: {UserName}", user.UserName);
                 }
             }
-
-            return Task.CompletedTask;
         }
     }
 }

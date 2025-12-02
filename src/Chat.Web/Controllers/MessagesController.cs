@@ -73,9 +73,9 @@ namespace Chat.Web.Controllers
         /// Retrieve a single message by id.
         /// </summary>
         [HttpGet("{id}")]
-        public ActionResult<MessageViewModel> Get(int id)
+        public async Task<ActionResult<MessageViewModel>> Get(int id)
         {
-            var message = _messages.GetById(id);
+            var message = await _messages.GetByIdAsync(id);
             if (message == null)
                 return NotFound();
 
@@ -97,17 +97,17 @@ namespace Chat.Web.Controllers
         /// Get recent messages for a room. Optionally page backwards using a 'before' timestamp.
         /// </summary>
         [HttpGet("Room/{roomName}")]
-        public IActionResult GetMessages(string roomName, [FromQuery] DateTime? before = null, [FromQuery] int take = 20)
+        public async Task<IActionResult> GetMessages(string roomName, [FromQuery] DateTime? before = null, [FromQuery] int take = 20)
         {
             if (take <= 0) take = 1;
             if (take > 100) take = 100; // cap
-            var room = _rooms.GetByName(roomName);
+            var room = await _rooms.GetByNameAsync(roomName);
             if (room == null)
                 return BadRequest();
 
             IEnumerable<Message> source = before.HasValue
-                ? _messages.GetBeforeByRoom(room.Name, before.Value, take)
-                : _messages.GetRecentByRoom(room.Name, take);
+                ? await _messages.GetBeforeByRoomAsync(room.Name, before.Value, take)
+                : await _messages.GetRecentByRoomAsync(room.Name, take);
 
             var items = source.Select(m => new MessageViewModel
             {
@@ -139,7 +139,7 @@ namespace Chat.Web.Controllers
         }
 
         [HttpPost]
-        public IActionResult Post([FromBody] CreateMessageDto dto,
+        public async Task<IActionResult> Post([FromBody] CreateMessageDto dto,
             [FromServices] Services.IInProcessMetrics metrics,
             [FromServices] Services.UnreadNotificationScheduler unreadScheduler)
         {
@@ -152,12 +152,12 @@ namespace Chat.Web.Controllers
             if (dto == null || string.IsNullOrWhiteSpace(dto.Room) || string.IsNullOrWhiteSpace(dto.Content))
                 return BadRequest();
 
-            var room = _rooms.GetByName(dto.Room);
+            var room = await _rooms.GetByNameAsync(dto.Room);
             if (room == null)
                 return NotFound();
 
             // Basic authz: ensure user profile allows this room when FixedRooms is defined.
-            var user = _users.GetByUserName(User?.Identity?.Name);
+            var user = await _users.GetByUserNameAsync(User?.Identity?.Name);
             if (user?.FixedRooms != null && user.FixedRooms.Any() && !user.FixedRooms.Contains(room.Name))
             {
                 return Forbid();
@@ -174,7 +174,7 @@ namespace Chat.Web.Controllers
             };
             try
             {
-                message = _messages.Create(message);
+                message = await _messages.CreateAsync(message);
             }
             catch (Exception ex)
             {
@@ -218,9 +218,9 @@ namespace Chat.Web.Controllers
         /// Mark a message as read for the current user. Broadcasts update via hub.
         /// </summary>
         [HttpPost("{id}/read")]
-        public IActionResult MarkRead(int id)
+        public async Task<IActionResult> MarkRead(int id)
         {
-            var updated = _messages.MarkRead(id, User?.Identity?.Name);
+            var updated = await _messages.MarkReadAsync(id, User?.Identity?.Name);
             if (updated == null) return NotFound();
             // Fire-and-forget broadcast of readers list to the room
             _ = _hubContext.Clients.Group(updated.ToRoom?.Name ?? string.Empty)

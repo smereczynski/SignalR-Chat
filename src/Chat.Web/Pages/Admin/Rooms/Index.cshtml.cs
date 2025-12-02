@@ -13,8 +13,8 @@ public class RoomsIndexModel : PageModel
     private readonly IRoomsRepository _rooms;
     public RoomsIndexModel(IRoomsRepository rooms) => _rooms = rooms;
     public IEnumerable<string> Rooms { get; set; } = Enumerable.Empty<string>();
-    public void OnGet()
+    public async Task OnGetAsync()
     {
-        Rooms = _rooms.GetAll().Select(r => r.Name);
+        Rooms = (await _rooms.GetAllAsync()).Select(r => r.Name);
     }
 }

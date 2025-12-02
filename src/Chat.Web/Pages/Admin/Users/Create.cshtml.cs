@@ -35,7 +35,7 @@ public class UsersCreateModel : PageModel
         // Actual user creation happens in OnPost handler
     }
 
-    public IActionResult OnPost()
+    public async Task<IActionResult> OnPost()
     {
         if (!ModelState.IsValid) return Page();
         var user = new ApplicationUser
@@ -46,7 +46,7 @@ public class UsersCreateModel : PageModel
             Enabled = Input.Enabled,
             FixedRooms = new List<string>()
         };
-        _users.Upsert(user);
+        await _users.UpsertAsync(user);
         return RedirectToPage("Index");
     }
 }

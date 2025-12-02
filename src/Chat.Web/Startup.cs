@@ -284,7 +284,8 @@ namespace Chat.Web
                     {
                         logger.LogInformation("Initializing Cosmos DB clients for database '{Database}' with containers: Users={Users}, Rooms={Rooms}, Messages={Messages}",
                             cosmosOpts.Database, cosmosOpts.UsersContainer, cosmosOpts.RoomsContainer, cosmosOpts.MessagesContainer);
-                        var clients = new CosmosClients(cosmosOpts);
+                        // Use async factory pattern - this is acceptable in singleton initialization
+                        var clients = CosmosClients.CreateAsync(cosmosOpts).GetAwaiter().GetResult();
                         logger.LogInformation("Cosmos DB clients initialized successfully");
                         return clients;
                     }
@@ -602,7 +603,7 @@ namespace Chat.Web
                                     }
                                     return Task.CompletedTask;
                                 },
-                                OnTokenValidated = context =>
+                                OnTokenValidated = async context =>
                                 {
                                     var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Startup>>();
                                     logger.LogWarning("===== OnTokenValidated START =====");
@@ -656,7 +657,7 @@ namespace Chat.Web
                                     {
                                         logger.LogWarning("OnTokenValidated: UPN (preferred_username) claim is missing from token");
                                         context.Fail("UPN claim is required");
-                                        return Task.CompletedTask;
+                                        return;
                                     }
                                     
                                     // Explicitly deny Microsoft consumer (MSA) accounts
@@ -672,7 +673,7 @@ namespace Chat.Web
                                             Chat.Web.Utilities.LogSanitizer.Sanitize(issuerClaim ?? "<null>"));
                                         context.HandleResponse();
                                         context.Response.Redirect("/login?reason=not_authorized");
-                                        return Task.CompletedTask;
+                                        return;
                                     }
                                     
                                     // Validate tenant if configured
@@ -691,7 +692,7 @@ namespace Chat.Web
                                             // Both silent SSO and normal login follow same path
                                             context.HandleResponse();
                                             context.Response.Redirect("/login?reason=not_authorized");
-                                            return Task.CompletedTask;
+                                            return;
                                         }
                                     }
                                     
@@ -750,7 +751,7 @@ namespace Chat.Web
                                     // Lookup user by UPN (STRICT MATCHING - no fallback to email/username)
                                     // Admin MUST pre-populate the Upn field in database before user's first Entra ID login
                                     // Example: UPDATE users SET upn = 'alice@contoso.com' WHERE username = 'alice'
-                                    var user = usersRepo.GetByUpn(upn);
+                                    var user = await usersRepo.GetByUpnAsync(upn);
                                     if (user == null)
                                     {
                                         // User not found by UPN - DENY ACCESS (no auto-provisioning)
@@ -764,7 +765,7 @@ namespace Chat.Web
                                             // Redirect to login with reason
                                             context.HandleResponse();
                                             context.Response.Redirect("/login?reason=not_authorized");
-                                            return Task.CompletedTask;
+                                            return;
                                         }
                                         else
                                         {
@@ -775,7 +776,7 @@ namespace Chat.Web
                                             // Redirect to login with reason
                                             context.HandleResponse();
                                             context.Response.Redirect("/login?reason=not_authorized");
-                                            return Task.CompletedTask;
+                                            return;
                                         }
                                     }
                                     
@@ -789,7 +790,7 @@ namespace Chat.Web
                                     if (!string.IsNullOrWhiteSpace(country)) user.Country = country;
                                     if (!string.IsNullOrWhiteSpace(region)) user.Region = region;
                                     
-                                    usersRepo.Upsert(user);
+                                    await usersRepo.UpsertAsync(user);
                                     
                                     logger.LogInformation(
                                         "OnTokenValidated: User {UserName} authenticated via Entra ID (UPN: {Upn}, Tenant: {TenantId})",
@@ -797,7 +798,7 @@ namespace Chat.Web
                                         Chat.Web.Utilities.LogSanitizer.Sanitize(upn),
                                         Chat.Web.Utilities.LogSanitizer.Sanitize(tenantId ?? "<null>"));
 
-                                    return Task.CompletedTask;
+                                    return;
                                 },
                                 OnRemoteFailure = context =>
                                 {

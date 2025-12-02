@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using Chat.Web.Models;
 
 namespace Chat.Web.Repositories
@@ -8,14 +9,14 @@ namespace Chat.Web.Repositories
     /// </summary>
     public interface IMessagesRepository
     {
-        Message GetById(int id);
-        IEnumerable<Message> GetRecentByRoom(string roomName, int take = 20);
-        IEnumerable<Message> GetBeforeByRoom(string roomName, System.DateTime before, int take = 20);
-        Message Create(Message message);
-        void Delete(int id, string byUserName);
+        Task<Message> GetByIdAsync(int id);
+        Task<IEnumerable<Message>> GetRecentByRoomAsync(string roomName, int take = 20);
+        Task<IEnumerable<Message>> GetBeforeByRoomAsync(string roomName, System.DateTime before, int take = 20);
+        Task<Message> CreateAsync(Message message);
+        Task DeleteAsync(int id, string byUserName);
         /// <summary>
         /// Marks a message as read by the specified user. Returns the updated message or null if not found.
         /// </summary>
-        Message MarkRead(int id, string userName);
+        Task<Message> MarkReadAsync(int id, string userName);
     }
 }
