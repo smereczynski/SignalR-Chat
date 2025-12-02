@@ -116,6 +116,81 @@ namespace Chat.Web.Repositories
     internal class RoomDoc { public string id { get; set; } public string name { get; set; } public string admin { get; set; } public string[] users { get; set; } }
     internal class MessageDoc { public string id { get; set; } public string roomName { get; set; } public string content { get; set; } public string fromUser { get; set; } public DateTime timestamp { get; set; } public string[] readBy { get; set; } }
 
+    /// <summary>
+    /// Helper class to reduce duplication in paginated Cosmos query patterns
+    /// </summary>
+    internal static class CosmosQueryHelper
+    {
+        /// <summary>
+        /// Executes a paginated Cosmos query with retry logic and telemetry
+        /// </summary>
+        public static async Task<List<T>> ExecutePaginatedQueryAsync<TDoc, T>(
+            FeedIterator<TDoc> queryIterator,
+            Func<TDoc, T> mapper,
+            Activity activity,
+            ILogger logger,
+            string operationName)
+        {
+            var list = new List<T>();
+            try
+            {
+                while (queryIterator.HasMoreResults)
+                {
+                    var page = await Resilience.RetryHelper.ExecuteAsync(
+                        _ => queryIterator.ReadNextAsync(),
+                        Transient.IsCosmosTransient,
+                        logger,
+                        $"{operationName}.readnext");
+                    activity?.AddEvent(new ActivityEvent("page", tags: new ActivityTagsCollection { { "db.page.count", page.Count } }));
+                    list.AddRange(page.Select(mapper));
+                }
+                activity?.SetTag("app.result.count", list.Count);
+                return list;
+            }
+            catch (CosmosException ex)
+            {
+                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+                logger.LogError(ex, "{Operation} failed", operationName);
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// Executes a single-result Cosmos query with retry logic and telemetry
+        /// </summary>
+        public static async Task<T> ExecuteSingleResultQueryAsync<TDoc, T>(
+            FeedIterator<TDoc> queryIterator,
+            Func<TDoc, T> mapper,
+            Activity activity,
+            ILogger logger,
+            string operationName) where T : class
+        {
+            try
+            {
+                while (queryIterator.HasMoreResults)
+                {
+                    var page = await Resilience.RetryHelper.ExecuteAsync(
+                        _ => queryIterator.ReadNextAsync(),
+                        Transient.IsCosmosTransient,
+                        logger,
+                        $"{operationName}.readnext");
+                    var doc = page.FirstOrDefault();
+                    if (doc != null)
+                    {
+                        return mapper(doc);
+                    }
+                }
+                return null;
+            }
+            catch (CosmosException ex)
+            {
+                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+                logger.LogError(ex, "{Operation} failed", operationName);
+                throw;
+            }
+        }
+    }
+
     public class CosmosUsersRepository : IUsersRepository
     {
         private readonly Container _users;
@@ -153,30 +228,7 @@ namespace Chat.Web.Repositories
         {
             using var activity = Tracing.ActivitySource.StartActivity("cosmos.users.getall", ActivityKind.Client);
             var q = _users.GetItemQueryIterator<UserDoc>(new QueryDefinition("SELECT * FROM c"));
-            var list = new List<ApplicationUser>();
-            try
-            {
-                while (q.HasMoreResults)
-                {
-                    // retry each page fetch
-                    var page = await Resilience.RetryHelper.ExecuteAsync(
-                        _ => q.ReadNextAsync(),
-                        Transient.IsCosmosTransient,
-                        _logger,
-                        "cosmos.users.getall.readnext"
-                    );
-                    activity?.AddEvent(new ActivityEvent("page", tags: new ActivityTagsCollection {{"db.page.count", page.Count}}));
-                    list.AddRange(page.Select(MapUser));
-                }
-                activity?.SetTag("app.result.count", list.Count);
-                return list;
-            }
-            catch (CosmosException ex)
-            {
-                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-                _logger.LogError(ex, "Cosmos users get all failed");
-                throw;
-            }
+            return await CosmosQueryHelper.ExecutePaginatedQueryAsync(q, MapUser, activity, _logger, "cosmos.users.getall");
         }
 
         private async Task<string> GetDocumentIdAsync(string userName)
@@ -184,29 +236,7 @@ namespace Chat.Web.Repositories
             using var activity = Tracing.ActivitySource.StartActivity("cosmos.users.getid", ActivityKind.Client);
             activity?.SetTag("app.userName", userName);
             var q = _users.GetItemQueryIterator<UserDoc>(new QueryDefinition("SELECT c.id FROM c WHERE c.userName = @u").WithParameter("@u", userName));
-            try
-            {
-                while (q.HasMoreResults)
-                {
-                    var page = await Resilience.RetryHelper.ExecuteAsync(
-                        _ => q.ReadNextAsync(),
-                        Transient.IsCosmosTransient,
-                        _logger,
-                        "cosmos.users.getid.readnext");
-                    var d = page.FirstOrDefault();
-                    if (d != null)
-                    {
-                        return d.id;
-                    }
-                }
-                return null;
-            }
-            catch (CosmosException ex)
-            {
-                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-                _logger.LogError(ex, "Cosmos user ID lookup failed");
-                throw;
-            }
+            return await CosmosQueryHelper.ExecuteSingleResultQueryAsync(q, d => d.id, activity, _logger, "cosmos.users.getid");
         }
 
         public async Task<ApplicationUser> GetByUserNameAsync(string userName)
@@ -215,30 +245,7 @@ namespace Chat.Web.Repositories
             activity?.SetTag("app.userName", userName);
             // Use cross-partition query to find user by userName
             var q = _users.GetItemQueryIterator<UserDoc>(new QueryDefinition("SELECT * FROM c WHERE c.userName = @u").WithParameter("@u", userName));
-            try
-            {
-                while (q.HasMoreResults)
-                {
-                    var page = await Resilience.RetryHelper.ExecuteAsync(
-                        _ => q.ReadNextAsync(),
-                        Transient.IsCosmosTransient,
-                        _logger,
-                        "cosmos.users.get.readnext");
-                    var d = page.FirstOrDefault();
-                    if (d != null)
-                    {
-                        return MapUser(d);
-                    }
-                }
-                return null;
-            }
-            catch (CosmosException ex)
-            {
-                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-                // Removed user-supplied value from log to avoid any disclosure/log forging risk
-                _logger.LogError(ex, "Cosmos user lookup failed");
-                throw;
-            }
+            return await CosmosQueryHelper.ExecuteSingleResultQueryAsync(q, MapUser, activity, _logger, "cosmos.users.get");
         }
 
         public async Task<ApplicationUser> GetByUpnAsync(string upn)
@@ -249,30 +256,12 @@ namespace Chat.Web.Repositories
             var q = _users.GetItemQueryIterator<UserDoc>(
                 new QueryDefinition("SELECT * FROM c WHERE LOWER(c.upn) = LOWER(@upn)")
                     .WithParameter("@upn", upn));
-            try
+            var result = await CosmosQueryHelper.ExecuteSingleResultQueryAsync(q, MapUser, activity, _logger, "cosmos.users.getbyupn");
+            if (result == null)
             {
-                while (q.HasMoreResults)
-                {
-                    var page = await Resilience.RetryHelper.ExecuteAsync(
-                        _ => q.ReadNextAsync(),
-                        Transient.IsCosmosTransient,
-                        _logger,
-                        "cosmos.users.getbyupn.readnext");
-                    var d = page.FirstOrDefault();
-                    if (d != null)
-                    {
-                        return MapUser(d);
-                    }
-                }
                 _logger.LogDebug("GetByUpn: No user found with upn={Upn}", upn);
-                return null;
             }
-            catch (CosmosException ex)
-            {
-                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-                _logger.LogError(ex, "Cosmos user lookup by UPN failed for upn={Upn}", upn);
-                throw;
-            }
+            return result;
         }
 
         public async Task UpsertAsync(ApplicationUser user)
@@ -334,29 +323,13 @@ namespace Chat.Web.Repositories
         {
             using var activity = Tracing.ActivitySource.StartActivity("cosmos.rooms.getall", ActivityKind.Client);
             var q = _rooms.GetItemQueryIterator<RoomDoc>(new QueryDefinition("SELECT * FROM c ORDER BY c.name"));
-            var list = new List<Room>();
-            try
-            {
-                while (q.HasMoreResults)
-                {
-                    var page = await Resilience.RetryHelper.ExecuteAsync(
-                        _ => q.ReadNextAsync(),
-                        Transient.IsCosmosTransient,
-                        _logger,
-                        "cosmos.rooms.getall.readnext");
-                    activity?.AddEvent(new ActivityEvent("page", tags: new ActivityTagsCollection {{"db.page.count", page.Count}}));
-                    list.AddRange(page.Select(d => new Room { Id = DocIdUtil.TryParseRoomId(d.id), Name = d.name, Users = d.users != null ? new List<string>(d.users) : new List<string>() }));
-                }
-                list = list.OrderBy(r => r.Name).ToList();
-                activity?.SetTag("app.result.count", list.Count);
-                return list;
-            }
-            catch (CosmosException ex)
-            {
-                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-                _logger.LogError(ex, "Cosmos rooms get all failed");
-                throw;
-            }
+            var list = await CosmosQueryHelper.ExecutePaginatedQueryAsync(
+                q,
+                d => new Room { Id = DocIdUtil.TryParseRoomId(d.id), Name = d.name, Users = d.users != null ? new List<string>(d.users) : new List<string>() },
+                activity,
+                _logger,
+                "cosmos.rooms.getall");
+            return list.OrderBy(r => r.Name).ToList();
         }
 
         public async Task<Room> GetByIdAsync(int id)
@@ -364,26 +337,12 @@ namespace Chat.Web.Repositories
             using var activity = Tracing.ActivitySource.StartActivity("cosmos.rooms.getbyid", ActivityKind.Client);
             activity?.SetTag("app.room.id", id);
             var q = _rooms.GetItemQueryIterator<RoomDoc>(new QueryDefinition("SELECT * FROM c WHERE c.id = @id").WithParameter("@id", id.ToString()));
-            try
-            {
-                while (q.HasMoreResults)
-                {
-                    var page = await Resilience.RetryHelper.ExecuteAsync(
-                        _ => q.ReadNextAsync(),
-                        Transient.IsCosmosTransient,
-                        _logger,
-                        "cosmos.rooms.getbyid.readnext");
-                    var d = page.FirstOrDefault();
-                    if (d != null) return new Room { Id = DocIdUtil.TryParseRoomId(d.id), Name = d.name, Users = d.users != null ? new List<string>(d.users) : new List<string>() };
-                }
-                return null;
-            }
-            catch (CosmosException ex)
-            {
-                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-                _logger.LogError(ex, "Cosmos room get by id failed {Id}", id);
-                throw;
-            }
+            return await CosmosQueryHelper.ExecuteSingleResultQueryAsync(
+                q,
+                d => new Room { Id = DocIdUtil.TryParseRoomId(d.id), Name = d.name, Users = d.users != null ? new List<string>(d.users) : new List<string>() },
+                activity,
+                _logger,
+                "cosmos.rooms.getbyid");
         }
 
         public async Task<Room> GetByNameAsync(string name)
@@ -391,27 +350,12 @@ namespace Chat.Web.Repositories
             using var activity = Tracing.ActivitySource.StartActivity("cosmos.rooms.getbyname", ActivityKind.Client);
             activity?.SetTag("app.room", name);
             var q = _rooms.GetItemQueryIterator<RoomDoc>(new QueryDefinition("SELECT * FROM c WHERE c.name = @n").WithParameter("@n", name));
-            try
-            {
-                while (q.HasMoreResults)
-                {
-                    var page = await Resilience.RetryHelper.ExecuteAsync(
-                        _ => q.ReadNextAsync(),
-                        Transient.IsCosmosTransient,
-                        _logger,
-                        "cosmos.rooms.getbyname.readnext");
-                    var d = page.FirstOrDefault();
-                    if (d != null) return new Room { Id = DocIdUtil.TryParseRoomId(d.id), Name = d.name, Users = d.users != null ? new List<string>(d.users) : new List<string>() };
-                }
-                return null;
-            }
-            catch (CosmosException ex)
-            {
-                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-                // Removed user-supplied room name from log to avoid disclosure/log forging risk
-                _logger.LogError(ex, "Cosmos room get by name failed");
-                throw;
-            }
+            return await CosmosQueryHelper.ExecuteSingleResultQueryAsync(
+                q,
+                d => new Room { Id = DocIdUtil.TryParseRoomId(d.id), Name = d.name, Users = d.users != null ? new List<string>(d.users) : new List<string>() },
+                activity,
+                _logger,
+                "cosmos.rooms.getbyname");
         }
 
         public async Task AddUserToRoomAsync(string roomName, string userName)
@@ -519,25 +463,24 @@ namespace Chat.Web.Repositories
         {
             using var activity = Tracing.ActivitySource.StartActivity("cosmos.messages.delete", ActivityKind.Client);
             var m = await GetByIdAsync(id);
-            if (m?.FromUser?.UserName == byUserName)
+            if (m?.FromUser?.UserName != byUserName) return;
+            
+            var room = m.ToRoom ?? await _roomsRepo.GetByIdAsync(m.ToRoomId);
+            var pk = room?.Name ?? "global";
+            try
             {
-                var room = m.ToRoom ?? await _roomsRepo.GetByIdAsync(m.ToRoomId);
-                var pk = room?.Name ?? "global";
-                try
-                {
-                    var resp = await Resilience.RetryHelper.ExecuteAsync(
-                        _ => _messages.DeleteItemAsync<MessageDoc>(id.ToString(), new PartitionKey(pk)),
-                        Transient.IsCosmosTransient,
-                        _logger,
-                        "cosmos.messages.delete");
-                    activity?.SetTag("db.status_code", (int)resp.StatusCode);
-                }
-                catch (CosmosException ex)
-                {
-                    activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-                    _logger.LogError(ex, "Cosmos message delete failed {Id}", id); // id is integer; no sanitization needed
-                    throw;
-                }
+                var resp = await Resilience.RetryHelper.ExecuteAsync(
+                    _ => _messages.DeleteItemAsync<MessageDoc>(id.ToString(), new PartitionKey(pk)),
+                    Transient.IsCosmosTransient,
+                    _logger,
+                    "cosmos.messages.delete");
+                activity?.SetTag("db.status_code", (int)resp.StatusCode);
+            }
+            catch (CosmosException ex)
+            {
+                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+                _logger.LogError(ex, "Cosmos message delete failed {Id}", id); // id is integer; no sanitization needed
+                throw;
             }
         }
 
@@ -546,29 +489,7 @@ namespace Chat.Web.Repositories
             using var activity = Tracing.ActivitySource.StartActivity("cosmos.messages.getbyid", ActivityKind.Client);
             activity?.SetTag("app.message.id", id);
             var q = _messages.GetItemQueryIterator<MessageDoc>(new QueryDefinition("SELECT TOP 1 * FROM c WHERE c.id = @id").WithParameter("@id", id.ToString()));
-            try
-            {
-                while (q.HasMoreResults)
-                {
-                    var page = await Resilience.RetryHelper.ExecuteAsync(
-                        _ => q.ReadNextAsync(),
-                        Transient.IsCosmosTransient,
-                        _logger,
-                        "cosmos.messages.getbyid.readnext");
-                    var d = page.FirstOrDefault();
-                    if (d != null)
-                    {
-                        return MapMessage(d);
-                    }
-                }
-                return null;
-            }
-            catch (CosmosException ex)
-            {
-                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-                _logger.LogError(ex, "Cosmos message get by id failed {Id}", id);
-                throw;
-            }
+            return await CosmosQueryHelper.ExecuteSingleResultQueryAsync(q, MapMessage, activity, _logger, "cosmos.messages.getbyid");
         }
 
         public async Task<IEnumerable<Message>> GetRecentByRoomAsync(string roomName, int take = 20)
@@ -576,30 +497,8 @@ namespace Chat.Web.Repositories
             using var activity = Tracing.ActivitySource.StartActivity("cosmos.messages.recent", ActivityKind.Client);
             activity?.SetTag("app.room", roomName);
             var q = _messages.GetItemQueryIterator<MessageDoc>(new QueryDefinition($"SELECT TOP {take} * FROM c WHERE c.roomName = @n ORDER BY c.timestamp DESC").WithParameter("@n", roomName), requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey(roomName) });
-            var list = new List<Message>();
-            try
-            {
-                while (q.HasMoreResults)
-                {
-                    var page = await Resilience.RetryHelper.ExecuteAsync(
-                        _ => q.ReadNextAsync(),
-                        Transient.IsCosmosTransient,
-                        _logger,
-                        "cosmos.messages.recent.readnext");
-                    activity?.AddEvent(new ActivityEvent("page", tags: new ActivityTagsCollection {{"db.page.count", page.Count}}));
-                    list.AddRange(page.Select(MapMessage));
-                }
-                list = list.OrderBy(m => m.Timestamp).ToList();
-                activity?.SetTag("app.result.count", list.Count);
-                return list;
-            }
-            catch (CosmosException ex)
-            {
-                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-                // Removed user-supplied room name from log
-                _logger.LogError(ex, "Cosmos recent messages failed");
-                throw;
-            }
+            var list = await CosmosQueryHelper.ExecutePaginatedQueryAsync(q, MapMessage, activity, _logger, "cosmos.messages.recent");
+            return list.OrderBy(m => m.Timestamp).ToList();
         }
 
     public async Task<IEnumerable<Message>> GetBeforeByRoomAsync(string roomName, DateTime before, int take = 20)
@@ -613,31 +512,9 @@ namespace Chat.Web.Repositories
                     .WithParameter("@n", roomName)
                     .WithParameter("@b", before),
                 requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey(roomName) });
-            var list = new List<Message>();
-            try
-            {
-                while (q.HasMoreResults)
-                {
-                    var page = await Resilience.RetryHelper.ExecuteAsync(
-                        _ => q.ReadNextAsync(),
-                        Transient.IsCosmosTransient,
-                        _logger,
-                        "cosmos.messages.before.readnext");
-                    activity?.AddEvent(new ActivityEvent("page", tags: new ActivityTagsCollection {{"db.page.count", page.Count}}));
-                    list.AddRange(page.Select(MapMessage));
-                }
-                // Keep only the newest 'take' items and return ascending order
-                list = list.OrderByDescending(m => m.Timestamp).Take(take).OrderBy(m => m.Timestamp).ToList();
-                activity?.SetTag("app.result.count", list.Count);
-                return list;
-            }
-            catch (CosmosException ex)
-            {
-                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-                // Removed user-supplied room name from log
-                _logger.LogError(ex, "Cosmos messages before failed");
-                throw;
-            }
+            var list = await CosmosQueryHelper.ExecutePaginatedQueryAsync(q, MapMessage, activity, _logger, "cosmos.messages.before");
+            // Keep only the newest 'take' items and return ascending order
+            return list.OrderByDescending(m => m.Timestamp).Take(take).OrderBy(m => m.Timestamp).ToList();
         }
 
         public async Task<Message> MarkReadAsync(int id, string userName)
