@@ -55,7 +55,7 @@ param acsSenderEmailAddress string
 param otpPepper string
 
 @description('Entra ID instance base URL (provide externally, blank by default)')
-param entraIdInstance string = ''
+param entraIdInstance string = 'https://login.microsoftonline.com/'
 
 @description('Entra ID tenant ID or "organizations" for multi-tenant')
 param entraIdTenantId string = 'organizations'

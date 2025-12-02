@@ -46,7 +46,7 @@ param vnetDnsServers string = ''
 param otpPepper string
 
 @description('Entra ID instance base URL (blank to use default)')
-param entraIdInstance string = ''
+param entraIdInstance string = 'https://login.microsoftonline.com/'
 
 @description('Entra ID tenant ID or "organizations" for multi-tenant')
 param entraIdTenantId string = 'organizations'
