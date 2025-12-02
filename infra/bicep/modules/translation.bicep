@@ -13,13 +13,16 @@ param baseName string
 @description('Location for resources')
 param location string = 'polandcentral'
 
+@description('Short location abbreviation for resource names (e.g., plc for polandcentral)')
+param shortLocation string
+
 @description('Translation provider: NMT (Neural Machine Translation), LLM-GPT4oMini, or LLM-GPT4o')
 @allowed([
   'NMT'
   'LLM-GPT4oMini'
   'LLM-GPT4o'
 ])
-param translationProvider string = 'NMT'
+param translationProvider string = 'LLM-GPT4oMini'
 
 @description('SKU for AI Services account')
 @allowed([
@@ -34,12 +37,18 @@ param publicNetworkAccess bool = true
 @description('Disable local authentication (use Entra ID only)')
 param disableLocalAuth bool = false
 
+@description('Subnet ID for private endpoint (optional)')
+param privateEndpointSubnetId string = ''
+
+@description('Log Analytics Workspace ID for diagnostic logs')
+param logAnalyticsWorkspaceId string = ''
+
 // =========================================
 // Resource Naming
 // =========================================
 
-var aiServicesName = 'ai-translation-${baseName}-${environment}'
-var customSubDomainName = 'ai-translation-${baseName}-${environment}'
+var aiServicesName = 'aif-${baseName}-${environment}-${shortLocation}'
+var customSubDomainName = 'aif-${baseName}-${environment}-${shortLocation}'
 
 // =========================================
 // Microsoft Foundry (AI Services) Account
@@ -115,6 +124,48 @@ resource gpt4oDeployment 'Microsoft.CognitiveServices/accounts/deployments@2025-
       version: '2024-11-20' // Latest stable version
     }
     raiPolicyName: 'Microsoft.DefaultV2'
+  }
+}
+
+// =========================================
+// Private Endpoint (Optional)
+// =========================================
+resource privateEndpoint 'Microsoft.Network/privateEndpoints@2023-11-01' = if (privateEndpointSubnetId != '') {
+  name: 'pe-${aiServicesName}'
+  location: location
+  properties: {
+    subnet: {
+      id: privateEndpointSubnetId
+    }
+    privateLinkServiceConnections: [
+      {
+        name: 'pe-${aiServicesName}'
+        properties: {
+          privateLinkServiceId: aiServices.id
+          groupIds: [
+            'account'
+          ]
+        }
+      }
+    ]
+    customNetworkInterfaceName: 'nic-pe-${aiServicesName}'
+  }
+}
+
+// =========================================
+// Diagnostic Settings
+// =========================================
+resource diagnosticSettings 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = if (logAnalyticsWorkspaceId != '') {
+  scope: aiServices
+  name: 'diagnostics-${aiServicesName}'
+  properties: {
+    logs: [
+      {
+        categoryGroup: 'allLogs'
+        enabled: true
+      }
+    ]
+    workspaceId: logAnalyticsWorkspaceId
   }
 }
 
