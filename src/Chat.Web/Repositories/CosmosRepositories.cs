@@ -463,8 +463,8 @@ namespace Chat.Web.Repositories
         {
             using var activity = Tracing.ActivitySource.StartActivity("cosmos.messages.delete", ActivityKind.Client);
             var m = await GetByIdAsync(id);
-            if (m?.FromUser?.UserName != byUserName) return;
-            if (m == null) return; // Additional null check to satisfy analyzer
+            if (m == null) return;
+            if (m.FromUser?.UserName != byUserName) return;
             
             var room = m.ToRoom ?? await _roomsRepo.GetByIdAsync(m.ToRoomId);
             var pk = room?.Name ?? "global";
