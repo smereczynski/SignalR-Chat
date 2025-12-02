@@ -192,7 +192,7 @@ jobs:
             --parameters networkingResourceGroupName=${{ env.NETWORKING_RESOURCE_GROUP }} \
             --parameters otpPepper="${{ secrets.OTP_PEPPER }}" \
             --parameters entraIdConnectionString="${{ secrets.ENTRA_ID_CONNECTION_STRING }}" \
-            --parameters entraIdAuthorizationHomeTenantId="${{ secrets.ENTRA_ID_HOME_TENANT_ID }}" \
+            --parameters entraIdAuthorizationHomeTenantId="${{ vars.ENTRA_ID_HOME_TENANT_ID }}" \
             --parameters entraIdAuthorizationAdminRoleValue="${{ vars.ENTRA_ID_ADMIN_ROLE_VALUE }}" \
             --parameters enableTranslation=${{ vars.ENABLE_TRANSLATION || 'true' }} \
             --parameters translationProvider="${{ vars.TRANSLATION_PROVIDER || 'LLM-GPT4oMini' }}"
@@ -218,7 +218,7 @@ jobs:
             --parameters networkingResourceGroupName=${{ env.NETWORKING_RESOURCE_GROUP }} \
             --parameters otpPepper="${{ secrets.OTP_PEPPER }}" \
             --parameters entraIdConnectionString="${{ secrets.ENTRA_ID_CONNECTION_STRING }}" \
-            --parameters entraIdAuthorizationHomeTenantId="${{ secrets.ENTRA_ID_HOME_TENANT_ID }}" \
+            --parameters entraIdAuthorizationHomeTenantId="${{ vars.ENTRA_ID_HOME_TENANT_ID }}" \
             --parameters entraIdAuthorizationAdminRoleValue="${{ vars.ENTRA_ID_ADMIN_ROLE_VALUE }}" \
             --parameters enableTranslation=${{ vars.ENABLE_TRANSLATION || 'true' }} \
             --parameters translationProvider="${{ vars.TRANSLATION_PROVIDER || 'LLM-GPT4oMini' }}" \
@@ -248,7 +248,7 @@ jobs:
             --parameters networkingResourceGroupName=${{ env.NETWORKING_RESOURCE_GROUP }} \
             --parameters otpPepper="${{ secrets.OTP_PEPPER }}" \
             --parameters entraIdConnectionString="${{ secrets.ENTRA_ID_CONNECTION_STRING }}" \
-            --parameters entraIdAuthorizationHomeTenantId="${{ secrets.ENTRA_ID_HOME_TENANT_ID }}" \
+            --parameters entraIdAuthorizationHomeTenantId="${{ vars.ENTRA_ID_HOME_TENANT_ID }}" \
             --parameters entraIdAuthorizationAdminRoleValue="${{ vars.ENTRA_ID_ADMIN_ROLE_VALUE }}" \
             --parameters enableTranslation=${{ vars.ENABLE_TRANSLATION || 'true' }} \
             --parameters translationProvider="${{ vars.TRANSLATION_PROVIDER || 'LLM-GPT4oMini' }}" \
