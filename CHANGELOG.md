@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Async Factory Pattern Implementation** (#28, 2025-12-02):
+  - ✅ Implemented async factory pattern for Cosmos DB repositories (eliminates thread pool starvation)
+  - ✅ Converted all repository interfaces to async signatures (15 methods across 3 interfaces)
+  - ✅ Updated all Cosmos repository implementations to use proper async/await (30+ blocking calls eliminated)
+  - ✅ Updated in-memory repository implementations for test compatibility
+  - ✅ Updated dependency injection registration to use `CosmosClients.CreateAsync()`
+  - ✅ Updated all service consumers (ChatHub, controllers, admin pages, services) - 10 files modified
+  - ✅ Reduced code duplication via `CosmosQueryHelper` class (18% file size reduction, 688→564 lines)
+  - ✅ Created reusable query helpers: `ExecutePaginatedQueryAsync`, `ExecuteSingleResultQueryAsync`
+  - ✅ Fixed null reference analyzer warnings with proper constraints and checks
+  - 🎯 **Impact**: Resolved P1 blocking issue for Chat RC1 milestone
+  - 📈 **Performance**: Eliminated `.GetAwaiter().GetResult()` deadlock risk in async contexts
+  - 🧹 **Code Quality**: Reduced duplication from 9.2% to <3% (SonarCloud quality gate passing)
+
 ### Added
 - **Microsoft Foundry Translation Infrastructure** (#130, 2025-11-28):
   - ✅ Azure AI Foundry Serverless API deployment for real-time message translation

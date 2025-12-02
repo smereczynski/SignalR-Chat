@@ -187,18 +187,30 @@ ZCOUNT ratelimit:markread:{user} <cutoff> +inf
 
 ---
 ## 6. Data Access Layer
-Repositories (Cosmos or InMemory) expose uniform interfaces with **synchronous** signatures (async refactoring pending - see Issue #28):
+Repositories (Cosmos or InMemory) expose uniform interfaces with **async** signatures:
 
 | Interface | Key Methods | Notes |
 |-----------|-------------|-------|
-| `IMessagesRepository` | `Create`, `GetRecentByRoom`, `GetBeforeByRoom`, `MarkRead`, `Delete` | Queries always scoped by partition key (roomName). |
-| `IUsersRepository` | `GetByUserName`, `GetByUpn`, `Upsert`, `GetAll` | `GetByUpn` used for Entra ID login (case-insensitive match). |
-| `IRoomsRepository` | `GetByName`, `GetById`, `GetAll`, `AddUserToRoom`, `RemoveUserFromRoom` | Fixed room list, no dynamic creation. |
+| `IMessagesRepository` | `CreateAsync`, `GetRecentByRoomAsync`, `GetBeforeByRoomAsync`, `MarkReadAsync`, `DeleteAsync` | Queries always scoped by partition key (roomName). |
+| `IUsersRepository` | `GetByUserNameAsync`, `GetByUpnAsync`, `UpsertAsync`, `GetAllAsync` | `GetByUpnAsync` used for Entra ID login (case-insensitive match). |
+| `IRoomsRepository` | `GetByNameAsync`, `GetByIdAsync`, `GetAllAsync`, `AddUserToRoomAsync`, `RemoveUserFromRoomAsync` | Fixed room list, no dynamic creation. |
 
-**Current Implementation:** All Cosmos repository methods use blocking `.GetAwaiter().GetResult()` calls internally.  
-**Planned Refactoring (Issue #28):** Convert to async factory pattern with proper async/await throughout.
+**Current Implementation (as of 2025-12-02, Issue #28):**
+- ✅ Async factory pattern: `CosmosClients.CreateAsync()` with private constructor
+- ✅ All repository methods use proper async/await throughout
+- ✅ Query patterns consolidated via `CosmosQueryHelper` class (reduces code duplication)
+- ✅ Generic helper methods: `ExecutePaginatedQueryAsync<TDoc, T>` and `ExecuteSingleResultQueryAsync<TDoc, T>`
+- ✅ Retry logic, telemetry, and error handling centralized in helpers
+- 📈 **Performance**: Eliminates thread pool starvation from blocking async I/O operations
 
-In-memory implementations mimic behavior without network latency for integration tests.
+**CosmosQueryHelper Implementation Details:**
+- Centralizes paginated query pattern: `while (queryIterator.HasMoreResults)` loop with retry logic
+- Handles single-result queries with `FirstOrDefault()` pattern
+- Integrates OpenTelemetry activity events (page count tracking, result count tagging)
+- Consistent error handling with activity status tracking and structured logging
+- Generic constraints ensure type safety (`where TDoc : class where T : class`)
+
+In-memory implementations mimic behavior without network latency for integration tests (use `Task.FromResult()` pattern).
 
 ---
 ## 7. Multi-Tenancy & Future Evolution
