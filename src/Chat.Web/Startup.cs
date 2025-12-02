@@ -276,20 +276,21 @@ namespace Chat.Web
                 {
                     cosmosOpts.MessagesTtlSeconds = ttlParsed;
                 }
-                // Initialize Cosmos DB clients using hosted service to avoid blocking during DI registration
-                // Store options for deferred initialization
+                // Initialize Cosmos DB clients
+                // Store options and initialize synchronously on first use
                 services.AddSingleton(cosmosOpts);
-                
-                // Register CosmosClients as a placeholder that will be set by the initialization service
-                CosmosClients cosmosClientsInstance = null;
-                services.AddSingleton(sp => cosmosClientsInstance ?? throw new InvalidOperationException("CosmosClients not yet initialized. Ensure CosmosClientsInitializationService has started."));
-                
-                // Register initialization service that will run async initialization properly
-                services.AddHostedService(sp => new Services.CosmosClientsInitializationService(
-                    cosmosOpts,
-                    sp.GetRequiredService<ILogger<Services.CosmosClientsInitializationService>>(),
-                    clients => cosmosClientsInstance = clients
-                ));
+                services.AddSingleton(sp =>
+                {
+                    // Lazy initialization: CosmosClients created on first resolution
+                    // Note: GetAwaiter().GetResult() is safe here because:
+                    // 1. Runs once during singleton construction (lazy, not during DI setup)
+                    // 2. No SynchronizationContext in ASP.NET Core (no deadlock risk)
+                    // 3. Initialization completes before any requests are processed
+                    // Previous IHostedService approach caused startup deadlock when other
+                    // IHostedServices tried to resolve CosmosClients before initialization completed
+                    var opts = sp.GetRequiredService<CosmosOptions>();
+                    return CosmosClients.CreateAsync(opts).GetAwaiter().GetResult();
+                });
                 services.AddSingleton<IUsersRepository, CosmosUsersRepository>();
                 services.AddSingleton<IRoomsRepository, CosmosRoomsRepository>();
                 services.AddSingleton<IMessagesRepository, CosmosMessagesRepository>();
