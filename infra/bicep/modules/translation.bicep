@@ -159,13 +159,13 @@ resource diagnosticSettings 'Microsoft.Insights/diagnosticSettings@2021-05-01-pr
   name: 'diagnostics-${aiServicesName}'
   scope: aiServices
   properties: {
-    workspaceId: logAnalyticsWorkspaceId
     logs: [
       {
         categoryGroup: 'allLogs'
         enabled: true
       }
     ]
+    workspaceId: logAnalyticsWorkspaceId
   }
 }
 
