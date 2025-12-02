@@ -72,7 +72,7 @@ namespace Chat.Web.Services
                     "acs.email.send",
                     maxAttempts: 3,
                     baseDelayMs: 200,
-                    perAttemptTimeoutMs: 5000);
+                    perAttemptTimeoutMs: 5000).ConfigureAwait(false);
                 }
                 catch (Exception ex)
                 {
@@ -101,7 +101,7 @@ namespace Chat.Web.Services
                     "acs.sms.send",
                     maxAttempts: 3,
                     baseDelayMs: 200,
-                    perAttemptTimeoutMs: 5000);
+                    perAttemptTimeoutMs: 5000).ConfigureAwait(false);
                 }
                 catch (Exception ex)
                 {

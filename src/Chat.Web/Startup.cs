@@ -276,26 +276,20 @@ namespace Chat.Web
                 {
                     cosmosOpts.MessagesTtlSeconds = ttlParsed;
                 }
-                // Initialize Cosmos DB clients with logging
-                services.AddSingleton(sp =>
-                {
-                    var logger = sp.GetRequiredService<ILogger<CosmosClients>>();
-                    try
-                    {
-                        logger.LogInformation("Initializing Cosmos DB clients for database '{Database}' with containers: Users={Users}, Rooms={Rooms}, Messages={Messages}",
-                            cosmosOpts.Database, cosmosOpts.UsersContainer, cosmosOpts.RoomsContainer, cosmosOpts.MessagesContainer);
-                        // Use async factory pattern - this is acceptable in singleton initialization
-                        var clients = CosmosClients.CreateAsync(cosmosOpts).GetAwaiter().GetResult();
-                        logger.LogInformation("Cosmos DB clients initialized successfully");
-                        return clients;
-                    }
-                    catch (Exception ex)
-                    {
-                        logger.LogError(ex, "Failed to initialize Cosmos DB clients. ConnectionString configured: {HasConnectionString}, Database: {Database}",
-                            !string.IsNullOrWhiteSpace(cosmosOpts.ConnectionString), cosmosOpts.Database);
-                        throw;
-                    }
-                });
+                // Initialize Cosmos DB clients using hosted service to avoid blocking during DI registration
+                // Store options for deferred initialization
+                services.AddSingleton(cosmosOpts);
+                
+                // Register CosmosClients as a placeholder that will be set by the initialization service
+                CosmosClients cosmosClientsInstance = null;
+                services.AddSingleton(sp => cosmosClientsInstance ?? throw new InvalidOperationException("CosmosClients not yet initialized. Ensure CosmosClientsInitializationService has started."));
+                
+                // Register initialization service that will run async initialization properly
+                services.AddHostedService(sp => new Services.CosmosClientsInitializationService(
+                    cosmosOpts,
+                    sp.GetRequiredService<ILogger<CosmosClients>>(),
+                    clients => cosmosClientsInstance = clients
+                ));
                 services.AddSingleton<IUsersRepository, CosmosUsersRepository>();
                 services.AddSingleton<IRoomsRepository, CosmosRoomsRepository>();
                 services.AddSingleton<IMessagesRepository, CosmosMessagesRepository>();

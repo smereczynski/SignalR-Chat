@@ -51,7 +51,7 @@ namespace Chat.Web.Services
                     "redis.otp.get",
                     maxAttempts: 3,
                     baseDelayMs: 200,
-                    perAttemptTimeoutMs: 1500);
+                    perAttemptTimeoutMs: 1500).ConfigureAwait(false);
                 
                 if (val.IsNullOrEmpty)
                 {
@@ -164,7 +164,7 @@ namespace Chat.Web.Services
                     "redis.otp.incr_attempts",
                     maxAttempts: 3,
                     baseDelayMs: 200,
-                    perAttemptTimeoutMs: 1500);
+                    perAttemptTimeoutMs: 1500).ConfigureAwait(false);
                 
                 // Set TTL only on first increment (when count is 1)
                 if (count == 1)
@@ -176,7 +176,7 @@ namespace Chat.Web.Services
                         "redis.otp.expire_attempts",
                         maxAttempts: 3,
                         baseDelayMs: 200,
-                        perAttemptTimeoutMs: 1500);
+                        perAttemptTimeoutMs: 1500).ConfigureAwait(false);
                 }
                 
                 return (int)count;
@@ -208,7 +208,7 @@ namespace Chat.Web.Services
                     "redis.otp.get_attempts",
                     maxAttempts: 3,
                     baseDelayMs: 200,
-                    perAttemptTimeoutMs: 1500);
+                    perAttemptTimeoutMs: 1500).ConfigureAwait(false);
                 
                 return val.IsNullOrEmpty ? 0 : (int)val;
             }

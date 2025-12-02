@@ -13,15 +13,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - ✅ Converted all repository interfaces to async signatures (15 methods across 3 interfaces)
   - ✅ Updated all Cosmos repository implementations to use proper async/await (30+ blocking calls eliminated)
   - ✅ Updated in-memory repository implementations for test compatibility
-  - ✅ Updated dependency injection registration to use `CosmosClients.CreateAsync()`
+  - ✅ Replaced blocking `CosmosClients` DI registration with `IHostedService` pattern (removes last blocking call)
+  - ✅ Created `CosmosClientsInitializationService` for proper async initialization during startup
   - ✅ Updated all service consumers (ChatHub, controllers, admin pages, services) - 10 files modified
   - ✅ Reduced code duplication via `CosmosQueryHelper` class (18% file size reduction, 688→564 lines)
   - ✅ Created reusable query helpers: `ExecutePaginatedQueryAsync`, `ExecuteSingleResultQueryAsync`
   - ✅ Fixed null reference analyzer warnings with proper constraints and checks
-  - ✅ Added `.ConfigureAwait(false)` to all 35 await calls in repository layer (Issue #66)
-  - 🎯 **Impact**: Resolved P1 blocking issues #28 and #66 for Chat RC1 milestone
-  - 📈 **Performance**: Eliminated `.GetAwaiter().GetResult()` deadlock risk and SynchronizationContext overhead
+  - ✅ Added `.ConfigureAwait(false)` to ALL async infrastructure code:
+    - Repository layer: 35 await calls in CosmosRepositories.cs
+    - Service layer: 26+ await calls across 7 services (RedisOtpStore, AcsOtpSender, RedisPresenceTracker, NotificationSender, DataSeederService, UnreadNotificationScheduler, PresenceCleanupService)
+    - Startup initialization: CosmosClientsInitializationService
+    - Controllers: Verified no private async helpers (action methods correctly omit ConfigureAwait per ASP.NET Core guidelines)
+  - 🎯 **Impact**: Fully resolved P1 blocking issues #28 and #66 for Chat RC1 milestone
+  - 📈 **Performance**: Eliminated ALL `.GetAwaiter().GetResult()` deadlock risks and SynchronizationContext overhead throughout entire codebase
   - 🧹 **Code Quality**: Reduced duplication from 9.2% to <3% (SonarCloud quality gate passing)
+  - ✅ **Testing**: All 135 tests pass after comprehensive async refactoring
 
 ### Added
 - **Microsoft Foundry Translation Infrastructure** (#130, 2025-11-28):
