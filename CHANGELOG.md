@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
-- **Async Factory Pattern Implementation** (#28, 2025-12-02):
+- **Async Factory Pattern Implementation** (#28, #66, 2025-12-02):
   - ✅ Implemented async factory pattern for Cosmos DB repositories (eliminates thread pool starvation)
   - ✅ Converted all repository interfaces to async signatures (15 methods across 3 interfaces)
   - ✅ Updated all Cosmos repository implementations to use proper async/await (30+ blocking calls eliminated)
@@ -18,8 +18,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - ✅ Reduced code duplication via `CosmosQueryHelper` class (18% file size reduction, 688→564 lines)
   - ✅ Created reusable query helpers: `ExecutePaginatedQueryAsync`, `ExecuteSingleResultQueryAsync`
   - ✅ Fixed null reference analyzer warnings with proper constraints and checks
-  - 🎯 **Impact**: Resolved P1 blocking issue for Chat RC1 milestone
-  - 📈 **Performance**: Eliminated `.GetAwaiter().GetResult()` deadlock risk in async contexts
+  - ✅ Added `.ConfigureAwait(false)` to all 35 await calls in repository layer (Issue #66)
+  - 🎯 **Impact**: Resolved P1 blocking issues #28 and #66 for Chat RC1 milestone
+  - 📈 **Performance**: Eliminated `.GetAwaiter().GetResult()` deadlock risk and SynchronizationContext overhead
   - 🧹 **Code Quality**: Reduced duplication from 9.2% to <3% (SonarCloud quality gate passing)
 
 ### Added

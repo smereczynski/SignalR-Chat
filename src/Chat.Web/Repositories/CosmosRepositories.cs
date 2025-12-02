@@ -47,10 +47,10 @@ namespace Chat.Web.Repositories
 
             if (options.AutoCreate)
             {
-                database = await client.CreateDatabaseIfNotExistsAsync(options.Database);
-                users = await CreateContainerIfNotExistsAsync(database, options.UsersContainer, "/userName", 400);
-                rooms = await CreateContainerIfNotExistsAsync(database, options.RoomsContainer, "/name", 400);
-                messages = await CreateContainerIfNotExistsAsync(database, options.MessagesContainer, "/roomName", 400, options.MessagesTtlSeconds);
+                database = await client.CreateDatabaseIfNotExistsAsync(options.Database).ConfigureAwait(false);
+                users = await CreateContainerIfNotExistsAsync(database, options.UsersContainer, "/userName", 400).ConfigureAwait(false);
+                rooms = await CreateContainerIfNotExistsAsync(database, options.RoomsContainer, "/name", 400).ConfigureAwait(false);
+                messages = await CreateContainerIfNotExistsAsync(database, options.MessagesContainer, "/roomName", 400, options.MessagesTtlSeconds).ConfigureAwait(false);
             }
             else
             {
@@ -70,16 +70,16 @@ namespace Chat.Web.Repositories
             {
                 props.DefaultTimeToLive = defaultTtlSeconds.Value;
             }
-            var response = await database.CreateContainerIfNotExistsAsync(props, throughput);
+            var response = await database.CreateContainerIfNotExistsAsync(props, throughput).ConfigureAwait(false);
             // Reconcile TTL setting on existing container
-            var current = (await response.Container.ReadContainerAsync()).Resource;
+            var current = (await response.Container.ReadContainerAsync().ConfigureAwait(false)).Resource;
             if (defaultTtlSeconds.HasValue)
             {
                 // If TTL should be a specific value and differs, update it
                 if (current.DefaultTimeToLive != defaultTtlSeconds.Value)
                 {
                     current.DefaultTimeToLive = defaultTtlSeconds.Value;
-                    await response.Container.ReplaceContainerAsync(current);
+                    await response.Container.ReplaceContainerAsync(current).ConfigureAwait(false);
                 }
             }
             else
@@ -88,7 +88,7 @@ namespace Chat.Web.Repositories
                 if (current.DefaultTimeToLive != null)
                 {
                     current.DefaultTimeToLive = null;
-                    await response.Container.ReplaceContainerAsync(current);
+                    await response.Container.ReplaceContainerAsync(current).ConfigureAwait(false);
                 }
             }
             return response.Container;
@@ -228,7 +228,7 @@ namespace Chat.Web.Repositories
         {
             using var activity = Tracing.ActivitySource.StartActivity("cosmos.users.getall", ActivityKind.Client);
             var q = _users.GetItemQueryIterator<UserDoc>(new QueryDefinition("SELECT * FROM c"));
-            return await CosmosQueryHelper.ExecutePaginatedQueryAsync(q, MapUser, activity, _logger, "cosmos.users.getall");
+            return await CosmosQueryHelper.ExecutePaginatedQueryAsync(q, MapUser, activity, _logger, "cosmos.users.getall").ConfigureAwait(false);
         }
 
         private async Task<string> GetDocumentIdAsync(string userName)
@@ -236,7 +236,7 @@ namespace Chat.Web.Repositories
             using var activity = Tracing.ActivitySource.StartActivity("cosmos.users.getid", ActivityKind.Client);
             activity?.SetTag("app.userName", userName);
             var q = _users.GetItemQueryIterator<UserDoc>(new QueryDefinition("SELECT c.id FROM c WHERE c.userName = @u").WithParameter("@u", userName));
-            return await CosmosQueryHelper.ExecuteSingleResultQueryAsync(q, d => d.id, activity, _logger, "cosmos.users.getid");
+            return await CosmosQueryHelper.ExecuteSingleResultQueryAsync(q, d => d.id, activity, _logger, "cosmos.users.getid").ConfigureAwait(false);
         }
 
         public async Task<ApplicationUser> GetByUserNameAsync(string userName)
@@ -245,7 +245,7 @@ namespace Chat.Web.Repositories
             activity?.SetTag("app.userName", userName);
             // Use cross-partition query to find user by userName
             var q = _users.GetItemQueryIterator<UserDoc>(new QueryDefinition("SELECT * FROM c WHERE c.userName = @u").WithParameter("@u", userName));
-            return await CosmosQueryHelper.ExecuteSingleResultQueryAsync(q, MapUser, activity, _logger, "cosmos.users.get");
+            return await CosmosQueryHelper.ExecuteSingleResultQueryAsync(q, MapUser, activity, _logger, "cosmos.users.get").ConfigureAwait(false);
         }
 
         public async Task<ApplicationUser> GetByUpnAsync(string upn)
@@ -256,7 +256,7 @@ namespace Chat.Web.Repositories
             var q = _users.GetItemQueryIterator<UserDoc>(
                 new QueryDefinition("SELECT * FROM c WHERE LOWER(c.upn) = LOWER(@upn)")
                     .WithParameter("@upn", upn));
-            var result = await CosmosQueryHelper.ExecuteSingleResultQueryAsync(q, MapUser, activity, _logger, "cosmos.users.getbyupn");
+            var result = await CosmosQueryHelper.ExecuteSingleResultQueryAsync(q, MapUser, activity, _logger, "cosmos.users.getbyupn").ConfigureAwait(false);
             if (result == null)
             {
                 _logger.LogDebug("GetByUpn: No user found with upn={Upn}", upn);
@@ -270,8 +270,8 @@ namespace Chat.Web.Repositories
             activity?.SetTag("app.userName", user.UserName);
             
             // Check if user already exists to preserve their ID
-            var existing = await GetByUserNameAsync(user.UserName);
-            var documentId = existing != null ? await GetDocumentIdAsync(user.UserName) : Guid.NewGuid().ToString();
+            var existing = await GetByUserNameAsync(user.UserName).ConfigureAwait(false);
+            var documentId = existing != null ? await GetDocumentIdAsync(user.UserName).ConfigureAwait(false) : Guid.NewGuid().ToString();
             
                 var doc = new UserDoc 
             { 
@@ -296,7 +296,7 @@ namespace Chat.Web.Repositories
                     _ => _users.UpsertItemAsync(doc, new PartitionKey(doc.userName)),
                     Transient.IsCosmosTransient,
                     _logger,
-                    "cosmos.users.upsert");
+                    "cosmos.users.upsert").ConfigureAwait(false);
                 activity?.SetTag("db.status_code", (int)resp.StatusCode);
             }
             catch (CosmosException ex)
@@ -360,12 +360,12 @@ namespace Chat.Web.Repositories
 
         public async Task AddUserToRoomAsync(string roomName, string userName)
         {
-            await UpsertRoomUserAsync(roomName, userName, add: true);
+            await UpsertRoomUserAsync(roomName, userName, add: true).ConfigureAwait(false);
         }
 
         public async Task RemoveUserFromRoomAsync(string roomName, string userName)
         {
-            await UpsertRoomUserAsync(roomName, userName, add: false);
+            await UpsertRoomUserAsync(roomName, userName, add: false).ConfigureAwait(false);
         }
 
         private async Task UpsertRoomUserAsync(string roomName, string userName, bool add)
@@ -378,7 +378,7 @@ namespace Chat.Web.Repositories
                     _ => q.ReadNextAsync(),
                     Transient.IsCosmosTransient,
                     _logger,
-                    "cosmos.rooms.byname.forRoomRepo");
+                    "cosmos.rooms.byname.forRoomRepo").ConfigureAwait(false);
                 room = page.FirstOrDefault();
             }
             if (room == null) return;
@@ -386,7 +386,7 @@ namespace Chat.Web.Repositories
             if (add ? users.Add(userName) : users.Remove(userName))
             {
                 room.users = users.ToArray();
-                await _rooms.UpsertItemAsync(room, new PartitionKey(roomName));
+                await _rooms.UpsertItemAsync(room, new PartitionKey(roomName)).ConfigureAwait(false);
             }
         }
     }
@@ -437,7 +437,7 @@ namespace Chat.Web.Repositories
         public async Task<Message> CreateAsync(Message message)
         {
             using var activity = Tracing.ActivitySource.StartActivity("cosmos.messages.create", ActivityKind.Client);
-            var room = message.ToRoom ?? await _roomsRepo.GetByIdAsync(message.ToRoomId);
+            var room = message.ToRoom ?? await _roomsRepo.GetByIdAsync(message.ToRoomId).ConfigureAwait(false);
             var pk = room?.Name ?? "global";
             message.Id = message.Id == 0 ? new Random().Next(1, int.MaxValue) : message.Id;
             var doc = new MessageDoc { id = message.Id.ToString(), roomName = pk, content = message.Content, fromUser = message.FromUser?.UserName, timestamp = message.Timestamp, readBy = (message.ReadBy != null ? message.ReadBy.ToArray() : Array.Empty<string>()) };
@@ -447,7 +447,7 @@ namespace Chat.Web.Repositories
                     _ => _messages.UpsertItemAsync(doc, new PartitionKey(pk)),
                     Transient.IsCosmosTransient,
                     _logger,
-                    "cosmos.messages.create");
+                    "cosmos.messages.create").ConfigureAwait(false);
                 activity?.SetTag("db.status_code", (int)resp.StatusCode);
             }
             catch (CosmosException ex)
@@ -462,11 +462,11 @@ namespace Chat.Web.Repositories
         public async Task DeleteAsync(int id, string byUserName)
         {
             using var activity = Tracing.ActivitySource.StartActivity("cosmos.messages.delete", ActivityKind.Client);
-            var m = await GetByIdAsync(id);
+            var m = await GetByIdAsync(id).ConfigureAwait(false);
             if (m == null) return;
             if (m.FromUser?.UserName != byUserName) return;
             
-            var room = m.ToRoom ?? await _roomsRepo.GetByIdAsync(m.ToRoomId);
+            var room = m.ToRoom ?? await _roomsRepo.GetByIdAsync(m.ToRoomId).ConfigureAwait(false);
             var pk = room?.Name ?? "global";
             try
             {
@@ -474,7 +474,7 @@ namespace Chat.Web.Repositories
                     _ => _messages.DeleteItemAsync<MessageDoc>(id.ToString(), new PartitionKey(pk)),
                     Transient.IsCosmosTransient,
                     _logger,
-                    "cosmos.messages.delete");
+                    "cosmos.messages.delete").ConfigureAwait(false);
                 activity?.SetTag("db.status_code", (int)resp.StatusCode);
             }
             catch (CosmosException ex)
@@ -490,7 +490,7 @@ namespace Chat.Web.Repositories
             using var activity = Tracing.ActivitySource.StartActivity("cosmos.messages.getbyid", ActivityKind.Client);
             activity?.SetTag("app.message.id", id);
             var q = _messages.GetItemQueryIterator<MessageDoc>(new QueryDefinition("SELECT TOP 1 * FROM c WHERE c.id = @id").WithParameter("@id", id.ToString()));
-            return await CosmosQueryHelper.ExecuteSingleResultQueryAsync(q, MapMessage, activity, _logger, "cosmos.messages.getbyid");
+            return await CosmosQueryHelper.ExecuteSingleResultQueryAsync(q, MapMessage, activity, _logger, "cosmos.messages.getbyid").ConfigureAwait(false);
         }
 
         public async Task<IEnumerable<Message>> GetRecentByRoomAsync(string roomName, int take = 20)
@@ -498,7 +498,7 @@ namespace Chat.Web.Repositories
             using var activity = Tracing.ActivitySource.StartActivity("cosmos.messages.recent", ActivityKind.Client);
             activity?.SetTag("app.room", roomName);
             var q = _messages.GetItemQueryIterator<MessageDoc>(new QueryDefinition($"SELECT TOP {take} * FROM c WHERE c.roomName = @n ORDER BY c.timestamp DESC").WithParameter("@n", roomName), requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey(roomName) });
-            var list = await CosmosQueryHelper.ExecutePaginatedQueryAsync(q, MapMessage, activity, _logger, "cosmos.messages.recent");
+            var list = await CosmosQueryHelper.ExecutePaginatedQueryAsync(q, MapMessage, activity, _logger, "cosmos.messages.recent").ConfigureAwait(false);
             return list.OrderBy(m => m.Timestamp).ToList();
         }
 
@@ -513,7 +513,7 @@ namespace Chat.Web.Repositories
                     .WithParameter("@n", roomName)
                     .WithParameter("@b", before),
                 requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey(roomName) });
-            var list = await CosmosQueryHelper.ExecutePaginatedQueryAsync(q, MapMessage, activity, _logger, "cosmos.messages.before");
+            var list = await CosmosQueryHelper.ExecutePaginatedQueryAsync(q, MapMessage, activity, _logger, "cosmos.messages.before").ConfigureAwait(false);
             // Keep only the newest 'take' items and return ascending order
             return list.OrderByDescending(m => m.Timestamp).Take(take).OrderBy(m => m.Timestamp).ToList();
         }
@@ -531,7 +531,7 @@ namespace Chat.Web.Repositories
                     _ => q.ReadNextAsync(),
                     Transient.IsCosmosTransient,
                     _logger,
-                    "cosmos.messages.markread.lookup");
+                    "cosmos.messages.markread.lookup").ConfigureAwait(false);
                 d = page.FirstOrDefault();
             }
             if (d == null) return null;
@@ -546,7 +546,7 @@ namespace Chat.Web.Repositories
                         _ => _messages.UpsertItemAsync(d, new PartitionKey(pk)),
                         Transient.IsCosmosTransient,
                         _logger,
-                        "cosmos.messages.markread.upsert");
+                        "cosmos.messages.markread.upsert").ConfigureAwait(false);
                     activity?.SetTag("db.status_code", (int)resp.StatusCode);
                 }
                 catch (CosmosException ex)
