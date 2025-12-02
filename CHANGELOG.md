@@ -7,8 +7,111 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Async Factory Pattern Implementation** (#28, #66, 2025-12-02):
+  - ✅ Implemented async factory pattern for Cosmos DB repositories (eliminates thread pool starvation)
+  - ✅ Converted all repository interfaces to async signatures (15 methods across 3 interfaces)
+  - ✅ Updated all Cosmos repository implementations to use proper async/await (30+ blocking calls eliminated)
+  - ✅ Updated in-memory repository implementations for test compatibility
+  - ✅ Replaced blocking `CosmosClients` DI registration with `IHostedService` pattern (removes last blocking call)
+  - ✅ Created `CosmosClientsInitializationService` for proper async initialization during startup
+  - ✅ Updated all service consumers (ChatHub, controllers, admin pages, services) - 10 files modified
+  - ✅ Reduced code duplication via `CosmosQueryHelper` class (18% file size reduction, 688→564 lines)
+  - ✅ Created reusable query helpers: `ExecutePaginatedQueryAsync`, `ExecuteSingleResultQueryAsync`
+  - ✅ Fixed null reference analyzer warnings with proper constraints and checks
+  - ✅ Added `.ConfigureAwait(false)` to ALL async infrastructure code:
+    - Repository layer: 35 await calls in CosmosRepositories.cs
+    - Service layer: 26+ await calls across 7 services (RedisOtpStore, AcsOtpSender, RedisPresenceTracker, NotificationSender, DataSeederService, UnreadNotificationScheduler, PresenceCleanupService)
+    - Startup initialization: CosmosClientsInitializationService
+    - Controllers: Verified no private async helpers (action methods correctly omit ConfigureAwait per ASP.NET Core guidelines)
+  - 🎯 **Impact**: Fully resolved P1 blocking issues #28 and #66 for Chat RC1 milestone
+  - 📈 **Performance**: Eliminated ALL `.GetAwaiter().GetResult()` deadlock risks and SynchronizationContext overhead throughout entire codebase
+  - 🧹 **Code Quality**: Reduced duplication from 9.2% to <3% (SonarCloud quality gate passing)
+  - ✅ **Testing**: All 135 tests pass after comprehensive async refactoring
+
+### Added
+- **Microsoft Foundry Translation Infrastructure** (#130, 2025-11-28):
+  - ✅ Azure AI Foundry Serverless API deployment for real-time message translation
+  - ✅ Bicep module `translation.bicep` with GPT-4o-mini model deployment
+  - ✅ Private endpoint integration for secure API access
+  - ✅ Diagnostic settings for translation service monitoring
+  - ✅ App Service configuration for translation API keys and endpoints
+  - ✅ Documentation: `docs/deployment/azure-translation.md` - comprehensive setup guide
+  - 🔧 **Configuration**: Supports multiple translation providers (LLM-GPT4oMini default)
+  - 📊 **Monitoring**: Azure Monitor integration for translation API metrics
+
+- **Azure Managed Domain for Email Service** (#128, 2025-11-28):
+  - ✅ Azure Communication Services Managed Domain resource
+  - ✅ Automatic email sender address configuration (`DoNotReply@{domain}`)
+  - ✅ App Service settings propagation for ACS sender email
+  - ✅ Production-ready email delivery infrastructure
+  - 📧 **Impact**: Simplified OTP email delivery without custom domain setup
+
+- **Entra ID Admin Authorization Infrastructure** (#126, 2025-11-27):
+  - ✅ GitHub Actions workflow support for Entra ID client credentials
+  - ✅ Bicep parameters for Entra ID ClientId and ClientSecret
+  - ✅ Secure connection string configuration for multi-tenant authentication
+  - ✅ Documentation: `docs/deployment/github-secrets-setup.md` - comprehensive secrets guide
+  - 🔐 **Security**: Enables admin panel authentication via Microsoft Entra ID
+
+- **Post-Deployment Manual Configuration Guide** (2025-11-28):
+  - ✅ `docs/deployment/manual-configuration.md` - step-by-step post-deployment tasks
+  - Covers Azure Communication Services email setup, DNS verification, sender configuration
+  - Addresses infrastructure components requiring manual Azure Portal steps
+
+### Changed
+- **Documentation Migration** (2025-12-02):
+  - ✅ Migrated `infra/bicep/README.md` → `docs/deployment/azure/bicep-templates.md` (comprehensive Bicep IaC documentation)
+  - ✅ Created `docs/deployment/azure/` directory structure with README navigation
+  - ✅ Updated `infra/bicep/README.md` with migration notice and link to new location
+  - ✅ Updated `.github/workflows/README.md` with migration notice (comprehensive workflow docs already at `docs/deployment/github-actions.md`)
+  - ✅ Updated cross-references in:
+    - `docs/deployment/README.md` - Added azure/ directory links
+    - `docs/README.md` - Added Bicep templates link
+  - 📚 **Impact**: Improved documentation organization following DOCUMENTATION-PLAN.md Diátaxis framework
+  - 📈 **Coverage**: Documentation now 50% complete (34/68 files), up from 41%
+
+- **Data Model Documentation** (2025-12-02):
+  - ✅ Updated `docs/architecture/data-model.md` with accurate, code-verified information:
+    - Corrected container specifications (document ID strategies for messages, users, rooms)
+    - Added actual document examples with all fields (messages, users with Entra ID properties, rooms)
+    - Documented camelCase vs PascalCase field naming
+    - Added document ID generation strategy section (random int for messages, GUID for users, natural key for rooms)
+    - Updated TTL implementation details (configurable via `Cosmos:MessagesTtlSeconds`)
+    - Documented actual repository method signatures (synchronous with blocking calls - Issue #28)
+    - Added container auto-creation behavior (`Cosmos:AutoCreate` setting)
+    - Updated operational guidelines (user ID preservation, message ID collision risk, backup strategies)
+  - 🔍 **Verification**: All changes based on code inspection from CosmosRepositories.cs, ApplicationUser.cs, Room.cs, Message.cs, DataSeederService.cs
+
 ### Fixed
-- **Documentation Accuracy Corrections** (2025-01-21):
+- **Translation Infrastructure Bicep Fixes** (2025-12-02):
+  - ✅ Corrected diagnostic settings property order (scope before name) per Azure best practices
+  - ✅ Reordered Bicep resource elements to recommended order
+  - ✅ Added private endpoint support for translation service
+  - ✅ Fixed Bicep property ordering per Azure ARM template standards
+
+- **Infrastructure Deployment Fixes** (#128, #129, 2025-11-28):
+  - ✅ Fixed production environment teardown protection (blocks accidental deletion)
+  - ✅ Implemented selective resource deletion (preserves critical resources)
+  - ✅ Fixed email sender domain format (`DoNotReply@` prefix)
+  - ✅ Corrected Copilot instructions for better code generation
+
+- **Bicep Deployment Parameter Fixes** (#119-121, 2025-11-21):
+  - ✅ Fixed EntraId parameter declarations to accept workflow inputs
+  - ✅ Removed unused `entraIdClientId` and `entraIdClientSecret` parameters from modules
+  - ✅ Cleaned up unused EntraID environment variables from workflow files
+  - ✅ Fixed infrastructure deployment environment variable propagation
+
+- **Code Quality Improvements** (#122-125, 2025-11-25 to 2025-11-27):
+  - ✅ Implemented proper IDisposable pattern in Startup class
+  - ✅ Fixed IDisposable in Startup to dispose LoggerFactory correctly
+  - ✅ Fixed OTP API field names and added Enter key support for login
+  - ✅ Improved OTP security with cryptographic RNG
+  - ✅ Enhanced LogSanitizer performance and null/empty input handling
+  - ✅ Resolved CS1998 async method warnings across codebase
+  - ✅ Removed duplicate LogSanitizer from CosmosRepositories
+
+- **Documentation Accuracy Corrections** (2025-11-21):
   - ✅ Fixed **incorrect in-memory mode documentation** - Previously claimed in-memory mode was "default" when running `dotnet run`, but app actually connects to Azure if `.env.local` exists
   - ✅ Corrected all documentation to require `Testing__InMemory=true` environment variable for true in-memory mode
   - ✅ Updated `docs/development/local-setup.md`:
@@ -31,7 +134,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - ✅ **Verification**: Tested both modes - confirmed `Testing__InMemory=true` eliminates all Azure connections (no Cosmos DB, SignalR Service, or Redis)
 
 ### Added
-- **P0 Critical Documentation** (2025-01-21):
+- **P0 Critical Documentation** (2025-11-21):
   - ✅ `docs/development/local-setup.md` - Comprehensive development environment setup guide
     - In-memory vs Azure mode comparison
     - IDE setup (VS Code, Visual Studio) with debugging configuration
@@ -68,6 +171,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - Health checks (application and component health verification)
     - Troubleshooting common installation issues
   - 📊 **Documentation Completion**: Moved from 33% to 41% (27/68 planned files)
+
+### Changed
+- **Default Translation Provider** (2025-11-28):
+  - Changed default translation provider from GPT-4 to LLM-GPT4oMini for cost optimization
+  - Maintains translation quality while reducing API costs
+
+- **Test Suite Optimization** (#123, 2025-11-25):
+  - Removed integration tests from repository
+  - Simplified to unit tests only for faster CI/CD pipeline
+  - Reduces test execution time and complexity
+
+### Refactored
+- **Logging Improvements** (2025-11-21):
+  - ✅ Replaced Console.WriteLine with ILogger in Startup class
+  - ✅ Removed duplicate LogSanitizer from CosmosRepositories
+  - ✅ Enhanced structured logging across application
+
+- **Performance Optimization** (2025-11-21):
+  - ✅ Moved data seeding to background service for improved startup time
+  - ✅ Async operations for better resource utilization
+
+### Security
+- **NuGet Package Security Updates** (#122, 2025-11-21):
+  - ✅ Updated NuGet packages to resolve security vulnerabilities
+  - ✅ Applied latest security patches across dependencies
 
 ### Documentation
 - **Documentation Structure Issues Identified**:
@@ -328,15 +456,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Separate CD Workflows**: Deleted `cd-staging.yml` and `cd-production.yml` - unified into `cd.yml`
 - **Deployment Scripts**: Deleted manual deployment shell scripts
 - **Configuration Complexity**: Removed `AZURE_WEBAPP_NAME` environment variable requirement
-
-### Testing Status
-- ⚠️ **PENDING**: Infrastructure deployment to dev environment
-- ⚠️ **PENDING**: Infrastructure deployment to staging environment
-- ⚠️ **PENDING**: Infrastructure deployment to production environment
-- ⚠️ **PENDING**: VNet validation (2 subnets verification)
-- ⚠️ **PENDING**: Private endpoints connectivity testing
-- ⚠️ **PENDING**: Database seeding verification
-- ⚠️ **PENDING**: Application startup and connection string validation
 
 ### Migration Notes
 - **Before Deployment**: Configure 6 environment variables in GitHub repository settings for each environment

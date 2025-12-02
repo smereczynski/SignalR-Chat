@@ -57,7 +57,7 @@ namespace Chat.Web.Controllers
         [EnableRateLimiting("AuthEndpoints")]
         public async Task<IActionResult> Start([FromBody] StartRequest req)
         {
-            var user = _users.GetByUserName(req.UserName);
+            var user = await _users.GetByUserNameAsync(req.UserName);
             if (user == null)
             {
                 _logger.LogWarning("OTP Start: User not found {UserName}", Chat.Web.Utilities.LogSanitizer.Sanitize(req.UserName));
@@ -132,7 +132,7 @@ namespace Chat.Web.Controllers
         public async Task<IActionResult> Verify([FromBody] VerifyRequest req)
         {
             _logger.LogInformation("OTP Verify: Looking up user {UserName}", Chat.Web.Utilities.LogSanitizer.Sanitize(req.UserName));
-            var user = _users.GetByUserName(req.UserName);
+            var user = await _users.GetByUserNameAsync(req.UserName);
             // WORKAROUND: ContentResult to avoid PipeWriter UnflushedBytes issue in test harness.
             if (user == null)
             {
@@ -237,8 +237,8 @@ namespace Chat.Web.Controllers
     /// Returns lightweight profile information for the authenticated user.
     /// </summary>
     [Authorize]
-    [HttpGet("me")]
-    public IActionResult Me()
+        [HttpGet("me")]
+        public async Task<IActionResult> Me()
         {
             var userName = User?.Identity?.Name;
             if (string.IsNullOrEmpty(userName))
@@ -246,7 +246,7 @@ namespace Chat.Web.Controllers
                 return Unauthorized();
             }
             
-            var user = _users.GetByUserName(userName);
+            var user = await _users.GetByUserNameAsync(userName);
             if (user == null) return Unauthorized();
             var payload = new { userName = user.UserName, fullName = user.FullName, avatar = user.Avatar };
             // WORKAROUND: Manual serialization to avoid PipeWriter UnflushedBytes issue in test harness.

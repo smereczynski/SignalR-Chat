@@ -81,7 +81,7 @@ namespace Chat.Web.Hubs
             }
             try
             {
-                var profile = _users.GetByUserName(IdentityName);
+                var profile = await _users.GetByUserNameAsync(IdentityName);
                 bool hasFixed = profile?.FixedRooms != null;
                 bool hasAny = hasFixed && profile.FixedRooms.Any();
                 if (!hasAny)
@@ -196,7 +196,7 @@ namespace Chat.Web.Hubs
             using var activity = Tracing.ActivitySource.StartActivity("ChatHub.OnConnected");
             try
             {
-                var user = _users.GetByUserName(IdentityName);
+                var user = await _users.GetByUserNameAsync(IdentityName);
                 
                 var userViewModel = new UserViewModel
                 {
@@ -367,7 +367,7 @@ namespace Chat.Web.Hubs
                 return;
             }
             
-            var domainUser = _users.GetByUserName(IdentityName);
+            var domainUser = await _users.GetByUserNameAsync(IdentityName);
             if (domainUser?.FixedRooms != null && domainUser.FixedRooms.Any() && !domainUser.FixedRooms.Contains(currentRoom))
             {
                 _logger.LogWarning("SendMessage unauthorized user={User} room={Room}", IdentityName, currentRoom);
@@ -375,7 +375,7 @@ namespace Chat.Web.Hubs
                 await Clients.Caller.SendAsync("onError", _localizer["ErrorNotAuthorizedRoom"].Value);
                 return;
             }
-            var room = _rooms.GetByName(currentRoom);
+            var room = await _rooms.GetByNameAsync(currentRoom);
             if (room == null)
             {
                 _logger.LogWarning("SendMessage room missing user={User} room={Room}", IdentityName, currentRoom);
@@ -396,7 +396,7 @@ namespace Chat.Web.Hubs
             };
             try
             {
-                msg = _messages.Create(msg);
+                msg = await _messages.CreateAsync(msg);
             }
             catch (System.Exception ex)
             {
@@ -455,7 +455,7 @@ namespace Chat.Web.Hubs
             
             if (user == null || string.IsNullOrEmpty(currentRoom)) return;
             
-            var updated = _messages.MarkRead(messageId, IdentityName);
+            var updated = await _messages.MarkReadAsync(messageId, IdentityName);
             if (updated == null) return;
             
             // Cancel any pending unread notification for this message since someone has read it

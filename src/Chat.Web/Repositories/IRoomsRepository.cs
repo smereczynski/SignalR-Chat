@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using Chat.Web.Models;
 
 namespace Chat.Web.Repositories
@@ -8,12 +9,12 @@ namespace Chat.Web.Repositories
     /// </summary>
     public interface IRoomsRepository
     {
-        IEnumerable<Room> GetAll();
-        Room GetById(int id);
-        Room GetByName(string name);
+        Task<IEnumerable<Room>> GetAllAsync();
+        Task<Room> GetByIdAsync(int id);
+        Task<Room> GetByNameAsync(string name);
         // Maintain denormalized user membership in room document
-        void AddUserToRoom(string roomName, string userName);
-        void RemoveUserFromRoom(string roomName, string userName);
+        Task AddUserToRoomAsync(string roomName, string userName);
+        Task RemoveUserFromRoomAsync(string roomName, string userName);
     // Static rooms: names/ids are fixed; membership is maintained
     }
 }

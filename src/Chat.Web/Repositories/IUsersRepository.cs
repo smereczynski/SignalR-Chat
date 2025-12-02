@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using Chat.Web.Models;
 
 namespace Chat.Web.Repositories
@@ -8,9 +9,9 @@ namespace Chat.Web.Repositories
     /// </summary>
     public interface IUsersRepository
     {
-        ApplicationUser GetByUserName(string userName);
-        ApplicationUser GetByUpn(string upn);
-        IEnumerable<ApplicationUser> GetAll();
-        void Upsert(ApplicationUser user);
+        Task<ApplicationUser> GetByUserNameAsync(string userName);
+        Task<ApplicationUser> GetByUpnAsync(string upn);
+        Task<IEnumerable<ApplicationUser>> GetAllAsync();
+        Task UpsertAsync(ApplicationUser user);
     }
 }

@@ -32,8 +32,8 @@ namespace Chat.Web.Services
             {
                 try
                 {
-                    await Task.Delay(TimeSpan.FromMinutes(CleanupIntervalMinutes), stoppingToken);
-                    await CleanupStalePresenceAsync(stoppingToken);
+                    await Task.Delay(TimeSpan.FromMinutes(CleanupIntervalMinutes), stoppingToken).ConfigureAwait(false);
+                    await CleanupStalePresenceAsync(stoppingToken).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException ex) when (stoppingToken.IsCancellationRequested)
                 {
@@ -58,10 +58,10 @@ namespace Chat.Web.Services
                 _logger.LogDebug("Starting presence cleanup scan");
 
                 // Get all users currently in presence tracker
-                var allPresenceUsers = await _presenceTracker.GetAllUsersAsync();
+                var allPresenceUsers = await _presenceTracker.GetAllUsersAsync().ConfigureAwait(false);
                 
                 // Get users with active heartbeats (not stale)
-                var activeHeartbeats = await _presenceTracker.GetActiveHeartbeatsAsync();
+                var activeHeartbeats = await _presenceTracker.GetActiveHeartbeatsAsync().ConfigureAwait(false);
                 var activeHeartbeatsSet = activeHeartbeats.ToHashSet(StringComparer.OrdinalIgnoreCase);
 
                 // Find stale users: in presence but no active heartbeat
@@ -89,7 +89,7 @@ namespace Chat.Web.Services
 
                     try
                     {
-                        await _presenceTracker.RemoveUserAsync(staleUser.UserName);
+                        await _presenceTracker.RemoveUserAsync(staleUser.UserName).ConfigureAwait(false);
                         _logger.LogInformation(
                             "Removed stale presence: {User} (room: {Room})",
                             staleUser.UserName, staleUser.CurrentRoom

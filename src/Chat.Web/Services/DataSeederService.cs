@@ -38,7 +38,7 @@ namespace Chat.Web.Services
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
             // Run seeding once at startup
-            await SeedIfEmptyAsync();
+            await SeedIfEmptyAsync().ConfigureAwait(false);
         }
 
         /// <summary>
@@ -51,11 +51,11 @@ namespace Chat.Web.Services
             try
             {
                 // Check if any rooms exist
-                var existingRooms = _roomsRepo.GetAll()?.ToList();
+                var existingRooms = (await _roomsRepo.GetAllAsync().ConfigureAwait(false))?.ToList();
                 var hasRooms = existingRooms != null && existingRooms.Any();
 
                 // Check if any users exist
-                var existingUsers = _usersRepo.GetAll()?.ToList();
+                var existingUsers = (await _usersRepo.GetAllAsync().ConfigureAwait(false))?.ToList();
                 var hasUsers = existingUsers != null && existingUsers.Any();
 
                 if (hasRooms && hasUsers)
@@ -69,13 +69,13 @@ namespace Chat.Web.Services
                 if (!hasRooms)
                 {
                     _logger.LogInformation("Rooms dataset empty - seeding default rooms");
-                    await SeedRoomsAsync();
+                    await SeedRoomsAsync().ConfigureAwait(false);
                 }
 
                 if (!hasUsers)
                 {
                     _logger.LogInformation("Users dataset empty - seeding default users");
-                    await SeedUsersAsync();
+                    await SeedUsersAsync().ConfigureAwait(false);
                 }
 
                 _logger.LogInformation("✓ Database seeding completed successfully (RoomsSeeded: {RoomsSeeded}, UsersSeeded: {UsersSeeded})",
@@ -118,7 +118,7 @@ namespace Chat.Web.Services
             }
         }
 
-        private Task SeedUsersAsync()
+        private async Task SeedUsersAsync()
         {
             _logger.LogInformation("Seeding default users...");
 
@@ -181,7 +181,7 @@ namespace Chat.Web.Services
             {
                 try
                 {
-                    _usersRepo.Upsert(user);
+                    await _usersRepo.UpsertAsync(user).ConfigureAwait(false);
                     _logger.LogInformation("  ✓ Created user: {UserName} ({FullName})", user.UserName, user.FullName);
                 }
                 catch (Exception ex)
@@ -189,8 +189,6 @@ namespace Chat.Web.Services
                     _logger.LogError(ex, "Failed to create user: {UserName}", user.UserName);
                 }
             }
-
-            return Task.CompletedTask;
         }
     }
 }

@@ -23,36 +23,36 @@ public class UsersAssignRoomsModel : PageModel
     [BindProperty]
     public List<string> SelectedRooms { get; set; } = new();
 
-    public IActionResult OnGet()
+    public async Task<IActionResult> OnGet()
     {
         if (string.IsNullOrWhiteSpace(UserName)) return RedirectToPage("Index");
-        var user = _users.GetByUserName(UserName);
+        var user = await _users.GetByUserNameAsync(UserName);
         if (user == null) return RedirectToPage("Index");
-        var rooms = _rooms.GetAll();
+        var rooms = await _rooms.GetAllAsync();
         AllRooms = rooms.Select(r => r.Name).ToList();
         SelectedRooms = user.FixedRooms.ToList();
         return Page();
     }
 
-    public IActionResult OnPost()
+    public async Task<IActionResult> OnPost()
     {
-        var user = _users.GetByUserName(UserName);
+        var user = await _users.GetByUserNameAsync(UserName);
         if (user == null) return RedirectToPage("Index");
         var nextRooms = new HashSet<string>(SelectedRooms ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
         var prevRooms = new HashSet<string>(user.FixedRooms ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
 
         // Persist user first
         user.FixedRooms = nextRooms.ToList();
-        _users.Upsert(user);
+        await _users.UpsertAsync(user);
 
         // Update denormalized helper list in room docs
         foreach (var add in nextRooms.Except(prevRooms))
         {
-            _rooms.AddUserToRoom(add, user.UserName);
+            await _rooms.AddUserToRoomAsync(add, user.UserName);
         }
         foreach (var rem in prevRooms.Except(nextRooms))
         {
-            _rooms.RemoveUserFromRoom(rem, user.UserName);
+            await _rooms.RemoveUserFromRoomAsync(rem, user.UserName);
         }
         return RedirectToPage("Index");
     }

@@ -31,12 +31,12 @@ namespace Chat.Web.Services
             // Send to both email and mobile if available
             if (!string.IsNullOrWhiteSpace(user.Email))
             {
-                await SafeSend(user.UserName, user.Email, code);
+                await SafeSend(user.UserName, user.Email, code).ConfigureAwait(false);
                 _logger.LogInformation("Notification (email) queued for user {User}", user.UserName);
             }
             if (!string.IsNullOrWhiteSpace(user.MobileNumber))
             {
-                await SafeSend(user.UserName, user.MobileNumber, code);
+                await SafeSend(user.UserName, user.MobileNumber, code).ConfigureAwait(false);
                 _logger.LogInformation("Notification (sms) queued for user {User}", user.UserName);
             }
         }

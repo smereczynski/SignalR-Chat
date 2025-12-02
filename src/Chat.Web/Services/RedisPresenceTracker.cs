@@ -46,8 +46,8 @@ namespace Chat.Web.Services
                 };
 
                 var json = JsonSerializer.Serialize(user);
-                await db.HashSetAsync(PresenceHashKey, userName, json);
-                await db.KeyExpireAsync(PresenceHashKey, TimeSpan.FromSeconds(PresenceTtlSeconds));
+                await db.HashSetAsync(PresenceHashKey, userName, json).ConfigureAwait(false);
+                await db.KeyExpireAsync(PresenceHashKey, TimeSpan.FromSeconds(PresenceTtlSeconds)).ConfigureAwait(false);
                 _logger.LogDebug("Redis: User {User} set to room {Room}", userName, roomName);
             }
             catch (Exception ex)
@@ -64,7 +64,7 @@ namespace Chat.Web.Services
             try
             {
                 var db = _redis.GetDatabase();
-                var json = await db.HashGetAsync(PresenceHashKey, userName);
+                var json = await db.HashGetAsync(PresenceHashKey, userName).ConfigureAwait(false);
                 
                 if (!json.HasValue)
                     return null;
@@ -86,7 +86,7 @@ namespace Chat.Web.Services
             try
             {
                 var db = _redis.GetDatabase();
-                await db.HashDeleteAsync(PresenceHashKey, userName);
+                await db.HashDeleteAsync(PresenceHashKey, userName).ConfigureAwait(false);
                 _logger.LogDebug("Redis: User {User} removed", userName);
             }
             catch (Exception ex)
@@ -100,7 +100,7 @@ namespace Chat.Web.Services
             try
             {
                 var db = _redis.GetDatabase();
-                var entries = await db.HashGetAllAsync(PresenceHashKey);
+                var entries = await db.HashGetAllAsync(PresenceHashKey).ConfigureAwait(false);
 
                 if (entries.Length == 0)
                     return Array.Empty<UserViewModel>();
@@ -143,7 +143,7 @@ namespace Chat.Web.Services
                 var timestamp = DateTime.UtcNow.ToString("o"); // ISO 8601 format
                 
                 // Set heartbeat key with 2-minute TTL (automatically expires if no updates)
-                await db.StringSetAsync(key, timestamp, TimeSpan.FromSeconds(HeartbeatTtlSeconds));
+                await db.StringSetAsync(key, timestamp, TimeSpan.FromSeconds(HeartbeatTtlSeconds)).ConfigureAwait(false);
                 
                 _logger.LogTrace("Heartbeat updated for user {User}", userName);
             }
