@@ -30,11 +30,18 @@ Source: `infra/bicep/modules/cosmos-db.bicep`
 ## 3. Cosmos Database & Containers
 Database name: `chat` (configurable via `Cosmos:Database`).
 
+**Container Auto-Creation:**
+- Controlled by `Cosmos:AutoCreate` setting (default: true)
+- When enabled: Database and containers created automatically during `CosmosClients` initialization
+- When disabled: Application expects pre-existing database and containers
+- TTL settings reconciled on every startup (existing containers updated to match config)
+
 ### 3.1 Container: `messages`
 | Aspect | Value |
 |--------|-------|
 | Partition Key | `/roomName` |
-| TTL | `defaultTtl: -1` (enabled, no expiry by default; adjustable via config) |
+| Document ID | Random integer (1 to int.MaxValue) converted to string |
+| TTL | Configurable via `Cosmos:MessagesTtlSeconds` (default: no TTL) |
 | Indexing | All paths included (no exclusions yet) |
 | Rationale | Writes & reads are room-scoped. Partition key aligns with dominant access pattern ("get messages for room"). |
 
@@ -42,48 +49,58 @@ Database name: `chat` (configurable via `Cosmos:Database`).
 | Aspect | Value |
 |--------|-------|
 | Partition Key | `/userName` |
-| Unique Key | `/phoneNumber` (enforces uniqueness for phone-based OTP users) |
+| Document ID | GUID (preserved on upsert, generated on first create) |
+| Unique Constraint | Email used for OTP login; userName is primary identifier |
 | Rationale | User-centric lookups and updates; per-user isolation prevents partition hotspots. |
 
 ### 3.3 Container: `rooms`
 | Aspect | Value |
 |--------|-------|
 | Partition Key | `/name` |
+| Document ID | Same as room name (e.g., "general", "ops") |
 | Rationale | Low cardinality but stable. Acceptable because room metadata volume is tiny; avoid coupling to message volume. |
 
 ### 3.4 Item Shape Examples
+
+**Note:** Cosmos documents use camelCase field names (different from C# models which use PascalCase). Internal DTOs (`UserDoc`, `RoomDoc`, `MessageDoc`) handle this mapping.
+
 ```jsonc
 // messages container document
 {
-  "id": "msg_2025_11_21_123456789",
-  "roomName": "general",
-  "userName": "alice",
+  "id": "1847293847",              // Random integer as string
+  "roomName": "general",            // Partition key
   "content": "Hello world",
-  "sentUtc": "2025-11-21T12:34:56.789Z",
-  "readBy": ["bob", "charlie"], // optional array
-  "type": "text" // reserved for future message types
+  "fromUser": "alice@example.com",  // Username of sender
+  "timestamp": "2025-11-21T12:34:56.789Z",
+  "readBy": ["bob@example.com", "charlie@example.com"] // Array of usernames (optional)
 }
 
 // users container document
 {
-  "id": "alice",          // mirrors userName as id
-  "userName": "alice",
-  "phoneNumber": "+15550001111", // unique key
-  "upn": "alice@contoso.com",    // set on Entra ID login
-  "email": "alice@contoso.com",
-  "fullName": "Alice Example",
-  "fixedRooms": ["general", "alerts"],
-  "enabled": true,
-  "tenantId": "<GUID>" // optional (Entra ID)
+  "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890", // GUID (preserved on upsert)
+  "userName": "alice@example.com",               // Partition key, primary identifier
+  "fullName": "Alice Johnson",
+  "avatar": null,                                // Optional avatar URL
+  "email": "alice@example.com",                  // Email for notifications
+  "mobile": "+1234567890",                       // E.164 format mobile number
+  "enabled": true,                               // Account status flag
+  "fixedRooms": ["general", "ops"],              // Array of room names
+  "defaultRoom": "general",                      // Preferred starting room
+  
+  // Entra ID fields (null for OTP-only users)
+  "upn": "alice@contoso.com",                    // User Principal Name
+  "tenantId": "12345678-1234-1234-1234-123456789abc", // Entra ID tenant GUID
+  "displayName": "Alice Johnson",                // Display name from Entra ID
+  "country": "US",                               // ISO 3166-1 alpha-2 code
+  "region": "California"                         // State/region
 }
 
 // rooms container document
 {
-  "id": "general",
-  "name": "general",
-  "displayName": "General",
-  "description": "All-purpose chat room",
-  "restricted": false
+  "id": "general",           // Same as name
+  "name": "general",         // Partition key, unique identifier
+  "admin": null,             // Reserved for future admin assignment
+  "users": []                // Array of usernames (denormalized for quick lookup)
 }
 ```
 
@@ -94,7 +111,16 @@ Database name: `chat` (configurable via `Cosmos:Database`).
 | Targeted queries | Always filter by `roomName` or `userName` to avoid cross-partition fan-out. |
 | Simplicity | Single-field hash keys; hierarchical partition keys (HPK) deferred until multi-tenant scale. |
 
-### 3.6 Future: Hierarchical Partition Keys (HPK)
+### 3.6 Document ID Generation
+| Container | Strategy | Rationale |
+|-----------|----------|-----------|
+| `messages` | Random integer (1 to int.MaxValue) as string | Simple, collision-unlikely given partition scope; avoids timestamp-based hotspots. |
+| `users` | GUID (generated once, preserved on upsert) | Stable identifier across updates; userName serves as lookup key via partition. |
+| `rooms` | Same as room name (e.g., "general") | Natural key, human-readable, enforces uniqueness. |
+
+**Important:** For users, the Upsert operation preserves existing document ID by querying for the user first. New users get a fresh GUID.
+
+### 3.7 Future: Hierarchical Partition Keys (HPK)
 Potential evolution for multi-tenant isolation:
 ```text
 /tenantId /roomName   // messages
@@ -107,9 +133,15 @@ Constraints: Requires enabling HPK on new containers (migration strategy: dual-w
 
 ---
 ## 4. Message Retention & TTL
-`defaultTtl: -1` enables TTL but no automatic expiry. Future configuration:
-- Set `Cosmos:MessagesTtlSeconds` to a positive integer to auto-expire messages.
-- Set to `null` or omit to disable TTL entirely (application keeps historic data).
+Messages container supports configurable TTL via `Cosmos:MessagesTtlSeconds` app setting:
+- **Not set or null**: TTL disabled, messages persist indefinitely
+- **Positive integer**: Messages auto-expire after specified seconds (e.g., 604800 = 7 days)
+- TTL reconciliation: On container creation/startup, existing TTL settings are updated to match configuration
+
+**Implementation Details:**
+- Container property `DefaultTimeToLive` is set/updated during `CosmosClients` initialization
+- Existing containers have their TTL setting reconciled on every app startup
+- Individual messages can override TTL using item-level `ttl` property (not currently used)
 
 TTL Considerations:
 | Scenario | Suggested TTL |
@@ -155,12 +187,16 @@ ZCOUNT ratelimit:markread:{user} <cutoff> +inf
 
 ---
 ## 6. Data Access Layer
-Repositories (Cosmos or InMemory) expose uniform interfaces:
-| Interface | Methods (Representative) | Notes |
-|-----------|--------------------------|-------|
-| `IMessagesRepository` | Add, QueryByRoom(roomName, paging), MarkRead | Query always scoped by partition key. |
-| `IUsersRepository` | GetByUserName, GetByUpn, Upsert, GetAll | `GetByUpn` used in Entra ID login flow (strict match). |
-| `IRoomsRepository` | GetByName, GetAllFixed, Upsert | Room creation restricted (no arbitrary dynamic rooms). |
+Repositories (Cosmos or InMemory) expose uniform interfaces with **synchronous** signatures (async refactoring pending - see Issue #28):
+
+| Interface | Key Methods | Notes |
+|-----------|-------------|-------|
+| `IMessagesRepository` | `Create`, `GetRecentByRoom`, `GetBeforeByRoom`, `MarkRead`, `Delete` | Queries always scoped by partition key (roomName). |
+| `IUsersRepository` | `GetByUserName`, `GetByUpn`, `Upsert`, `GetAll` | `GetByUpn` used for Entra ID login (case-insensitive match). |
+| `IRoomsRepository` | `GetByName`, `GetById`, `GetAll`, `AddUserToRoom`, `RemoveUserFromRoom` | Fixed room list, no dynamic creation. |
+
+**Current Implementation:** All Cosmos repository methods use blocking `.GetAwaiter().GetResult()` calls internally.  
+**Planned Refactoring (Issue #28):** Convert to async factory pattern with proper async/await throughout.
 
 In-memory implementations mimic behavior without network latency for integration tests.
 
@@ -190,9 +226,11 @@ Index policy changes require re-computation: schedule during low-traffic windows
 | Task | Action |
 |------|--------|
 | Hot partition detection | Use Azure Metrics: Normalized RU Consumption per partition key (roomName). |
-| Large item prevention | Enforce max message length (already in validation layer). |
-| Backups | Continuous backup covers point-in-time restore; document restore playbook separately. |
-| Data seeding | `DataSeederService` runs only in non-in-memory mode at startup when empty. |
+| Large item prevention | Enforce max message length (currently 1000 characters in validation layer). |
+| Backups | Continuous backup (prod) covers point-in-time restore; Periodic backup (dev/staging). |
+| Data seeding | `DataSeederService` seeds default rooms/users only when containers are empty. |
+| User ID preservation | Upsert operation queries existing user by userName to preserve document ID (GUID). |
+| Message ID conflicts | Random integer generation (1 to int.MaxValue) has negligible collision risk per room partition. |
 
 ---
 ## 10. Migration Playbooks

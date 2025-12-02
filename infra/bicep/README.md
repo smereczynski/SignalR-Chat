@@ -1,5 +1,11 @@
 # Azure Infrastructure as Code (Bicep)
 
+> **📖 Documentation Moved**: The comprehensive documentation for Bicep templates has been moved to **[docs/deployment/azure/bicep-templates.md](../../docs/deployment/azure/bicep-templates.md)**.
+> 
+> This file is kept for quick local reference when working in the `infra/bicep/` directory.
+
+---
+
 This directory contains the complete Infrastructure as Code (IaC) implementation for the SignalR Chat application using Azure Bicep templates.
 
 ## 📋 Table of Contents

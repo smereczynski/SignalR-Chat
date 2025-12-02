@@ -1,5 +1,11 @@
 # GitHub Actions CI/CD Pipelines
 
+> **📖 Documentation Moved**: The comprehensive documentation for GitHub Actions workflows has been moved to **[docs/deployment/github-actions.md](../../docs/deployment/github-actions.md)**.
+> 
+> This file is kept for quick local reference when working with workflows in the `.github/workflows/` directory.
+
+---
+
 This repository uses GitHub Actions for continuous integration, infrastructure deployment, and application deployment to Azure.
 
 ## 📋 Pipeline Overview

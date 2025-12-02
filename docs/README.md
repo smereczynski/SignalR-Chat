@@ -37,11 +37,13 @@ Learn about specific features and how they work.
 ### 🚀 Deployment
 Deploy to Azure and configure environments.
 
-- **[Azure Deployment](deployment/azure/)** - Deploy to Azure with Bicep
-- **[Environments](deployment/environments.md)** - Dev, Staging, Production configs
+- **[Azure Deployment](deployment/azure/)** - Azure infrastructure and Bicep templates
+  - **[Bicep Templates](deployment/azure/bicep-templates.md)** - Infrastructure as Code details
+- **[Bootstrap Guide](deployment/bootstrap.md)** - Complete deployment from scratch
 - **[GitHub Actions](deployment/github-actions.md)** - CI/CD pipelines
 - **[Production Checklist](deployment/production-checklist.md)** - Pre-launch checklist
-- **[Troubleshooting](deployment/troubleshooting.md)** - Common deployment issues
+- **[GitHub Secrets](deployment/github-secrets.md)** - Azure credentials configuration
+- **[GitHub Variables](deployment/github-variables.md)** - Environment variables setup
 
 ### 💻 Development
 Contributing and local development.
