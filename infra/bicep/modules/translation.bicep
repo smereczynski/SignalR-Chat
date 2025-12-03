@@ -62,6 +62,8 @@ var customSubDomainName = 'aif-${baseName}-${environment}-${shortLocation}'
 // - Text analytics, language understanding
 
 // Build IP rules array for dev environment only
+// Dev: Allow VPN IP + Azure Portal IPs (for manual management)
+// Staging/Prod: No IP rules (private endpoint only)
 var ipRulesArray = environment == 'dev' && !empty(vpnIpAddress) ? [
   {
     value: vpnIpAddress
@@ -91,8 +93,11 @@ resource aiServices 'Microsoft.CognitiveServices/accounts@2025-06-01' = {
     allowProjectManagement: true
     
     // Network ACLs - configure IP rules and trusted services
+    // Dev with VPN IP: Deny all except VPN IP + Azure services
+    // Dev without VPN IP: Allow all (for local development)
+    // Staging/Prod: Deny all except Azure services (private endpoint only)
     networkAcls: {
-      defaultAction: environment == 'dev' && !empty(vpnIpAddress) ? 'Deny' : 'Allow'
+      defaultAction: (environment == 'dev' && !empty(vpnIpAddress)) || (environment != 'dev') ? 'Deny' : 'Allow'
       ipRules: ipRulesArray
       bypass: 'AzureServices' // Allow Azure services bypass
     }
