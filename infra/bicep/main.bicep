@@ -246,8 +246,10 @@ module translation './modules/translation.bicep' = if (enableTranslation) {
     translationProvider: translationProvider
     sku: environment == 'prod' ? 'S0' : 'S0' // S0 for all environments (F0 has low quotas)
     disableLocalAuth: false // Keep key-based auth for simplicity
-    privateEndpointSubnetId: networking.outputs.privateEndpointsSubnetId // PE enabled for all environments
-    privateEndpointStaticIps: [
+    // Private endpoint disabled in dev to support LLM translation (deploymentName parameter)
+    // See: https://learn.microsoft.com/en-us/azure/ai-services/translator/text-translation/preview/translate-api#private-endpoint
+    privateEndpointSubnetId: environment == 'dev' ? '' : networking.outputs.privateEndpointsSubnetId
+    privateEndpointStaticIps: environment == 'dev' ? [] : [
       aiFoundryPrivateIp1 // default
       aiFoundryPrivateIp2 // secondary
       aiFoundryPrivateIp3 // third
