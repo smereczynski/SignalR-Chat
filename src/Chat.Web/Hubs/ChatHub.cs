@@ -47,13 +47,13 @@ namespace Chat.Web.Hubs
             Repositories.IRoomsRepository rooms,
             ILogger<ChatHub> logger,
             Services.IInProcessMetrics metrics,
-            Services.UnreadNotificationScheduler unreadScheduler,
             Services.IMarkReadRateLimiter markReadRateLimiter,
             Services.IPresenceTracker presenceTracker,
             IStringLocalizer<Resources.SharedResources> localizer,
             HealthCheckService healthCheckService,
             Services.ITranslationJobQueue translationQueue,
-            Microsoft.Extensions.Options.IOptions<Options.TranslationOptions> translationOptions)
+            Microsoft.Extensions.Options.IOptions<Options.TranslationOptions> translationOptions,
+            Services.UnreadNotificationScheduler unreadScheduler = null)
         {
             _users = users;
             _messages = messages;
