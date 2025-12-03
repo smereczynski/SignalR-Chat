@@ -249,7 +249,7 @@ public class ManualRetryTests
         // Verify queue requeue
         _mockQueue.Verify(q => q.RequeueAsync(
             It.IsAny<MessageTranslationJob>(),
-            It.Is<bool>(b => b == true),
+            It.Is<bool>(b => b),
             It.IsAny<CancellationToken>()), Times.Once);
     }
 

@@ -96,7 +96,6 @@ public class TranslationJobQueue : ITranslationJobQueue
         try
         {
             var queueKey = _options.QueueName;
-            var timeout = TimeSpan.FromSeconds(_options.DequeueTimeoutSeconds);
 
             // BRPOP removes from tail (blocking, returns null if timeout)
             // Note: StackExchange.Redis doesn't have true BRPOP, so we use RPOP with manual retry
@@ -163,17 +162,11 @@ public class TranslationJobQueue : ITranslationJobQueue
             var json = JsonSerializer.Serialize(job, _jsonOptions);
             var queueKey = _options.QueueName;
 
-            long length;
-            if (highPriority)
-            {
+            long length = highPriority
                 // RPUSH adds to tail (will be dequeued first with BRPOP)
-                length = await _redis!.ListRightPushAsync(queueKey, json).ConfigureAwait(false);
-            }
-            else
-            {
+                ? await _redis!.ListRightPushAsync(queueKey, json).ConfigureAwait(false)
                 // LPUSH adds to head (normal priority)
-                length = await _redis!.ListLeftPushAsync(queueKey, json).ConfigureAwait(false);
-            }
+                : await _redis!.ListLeftPushAsync(queueKey, json).ConfigureAwait(false);
 
             activity?.SetTag("queue.length", length);
             _logger.LogInformation(

@@ -71,19 +71,18 @@ public class TranslationServiceIntegrationTests : IAsyncLifetime, IDisposable
         if (File.Exists(envLocalPath))
         {
             var envVars = new Dictionary<string, string?>();
-            foreach (var line in File.ReadAllLines(envLocalPath))
+            var lines = File.ReadAllLines(envLocalPath);
+            var validLines = lines
+                .Select(line => line.Trim())
+                .Where(trimmedLine => !string.IsNullOrWhiteSpace(trimmedLine) && !trimmedLine.StartsWith("#"))
+                .Select(trimmedLine => trimmedLine.Split('=', 2))
+                .Where(parts => parts.Length == 2);
+
+            foreach (var parts in validLines)
             {
-                var trimmedLine = line.Trim();
-                if (string.IsNullOrWhiteSpace(trimmedLine) || trimmedLine.StartsWith("#"))
-                    continue;
-                    
-                var parts = trimmedLine.Split('=', 2);
-                if (parts.Length == 2)
-                {
-                    var key = parts[0].Trim().Replace("__", ":");
-                    var value = parts[1].Trim().Trim('\'', '"');
-                    envVars[key] = value;
-                }
+                var key = parts[0].Trim().Replace("__", ":");
+                var value = parts[1].Trim().Trim('\'', '"');
+                envVars[key] = value;
             }
             configBuilder.AddInMemoryCollection(envVars);
         }
