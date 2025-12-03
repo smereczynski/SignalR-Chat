@@ -483,6 +483,16 @@ namespace Chat.Web
                 // HttpClient configuration if needed (timeout, headers, etc.)
             });
             
+            // Translation job queue (Redis-based)
+            services.AddSingleton<Services.ITranslationJobQueue, Services.TranslationJobQueue>();
+            
+            // Translation background service (processes queued translation jobs)
+            var translationOptions = Configuration.GetSection("Translation").Get<Options.TranslationOptions>();
+            if (translationOptions?.Enabled == true)
+            {
+                services.AddHostedService<Services.TranslationBackgroundService>();
+            }
+            
             // Notification plumbing
             services.AddSingleton<Services.INotificationSender, Services.NotificationSender>();
             services.AddSingleton<Services.UnreadNotificationScheduler>(sp =>

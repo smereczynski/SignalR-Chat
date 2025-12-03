@@ -25,5 +25,18 @@ namespace Chat.Web.ViewModels
         /// Optional list of usernames who have read the message.
         /// </summary>
         public string[] ReadBy { get; set; }
+        /// <summary>
+        /// Translation status (None, Pending, InProgress, Completed, Failed).
+        /// </summary>
+        public string TranslationStatus { get; set; }
+        /// <summary>
+        /// Translated versions of the message (key: language code, value: translated text).
+        /// Example: { "en": "Hello", "pl": "Cześć", "de": "Hallo" }
+        /// </summary>
+        public System.Collections.Generic.Dictionary<string, string> Translations { get; set; }
+        /// <summary>
+        /// True if translation is completed successfully.
+        /// </summary>
+        public bool IsTranslated { get; set; }
     }
 }

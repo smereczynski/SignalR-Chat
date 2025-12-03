@@ -57,4 +57,38 @@ public class TranslationOptions
     /// Set to 0 to disable caching.
     /// </summary>
     public int CacheTtlSeconds { get; set; } = 3600;
+
+    /// <summary>
+    /// Redis queue name for translation jobs (default: "translation:jobs").
+    /// </summary>
+    public string QueueName { get; set; } = "translation:jobs";
+
+    /// <summary>
+    /// Maximum number of concurrent translation jobs to process (default: 5).
+    /// Limits parallel API calls to avoid rate limiting and resource exhaustion.
+    /// </summary>
+    public int MaxConcurrentJobs { get; set; } = 5;
+
+    /// <summary>
+    /// Timeout in seconds for individual translation API calls (default: 30).
+    /// </summary>
+    public int JobTimeoutSeconds { get; set; } = 30;
+
+    /// <summary>
+    /// Maximum number of retries for failed translations (default: 3).
+    /// After max retries, message is marked as Failed and requires manual retry.
+    /// </summary>
+    public int MaxRetries { get; set; } = 3;
+
+    /// <summary>
+    /// Base delay in seconds between retries (default: 5).
+    /// Uses exponential backoff: delay = RetryDelaySeconds * retryCount.
+    /// </summary>
+    public int RetryDelaySeconds { get; set; } = 5;
+
+    /// <summary>
+    /// Dequeue blocking timeout in seconds (default: 5).
+    /// How long to wait for new jobs before checking cancellation token.
+    /// </summary>
+    public int DequeueTimeoutSeconds { get; set; } = 5;
 }
