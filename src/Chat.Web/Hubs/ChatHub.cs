@@ -631,5 +631,78 @@ namespace Chat.Web.Hubs
                 };
             }
         }
+
+        /// <summary>
+        /// Manually retry translation for a failed message. Re-queues with high priority.
+        /// Requires translation feature to be enabled and message to be in Failed state.
+        /// User must be in the same room as the message.
+        /// </summary>
+        public async Task RetryTranslation(int messageId)
+        {
+            using var activity = Tracing.ActivitySource.StartActivity("ChatHub.RetryTranslation");
+            activity?.SetTag("chat.messageId", messageId);
+            
+            // Check if translation is enabled
+            if (!_translationOptions.Enabled || _translationQueue == null)
+            {
+                await Clients.Caller.SendAsync("onError", "Translation feature is not enabled");
+                return;
+            }
+            
+            var currentRoom = Context.Items["CurrentRoom"] as string;
+            if (string.IsNullOrEmpty(currentRoom))
+            {
+                await Clients.Caller.SendAsync("onError", _localizer["ErrorNotInRoom"].Value);
+                return;
+            }
+            
+            var message = await _messages.GetByIdAsync(messageId);
+            if (message == null)
+            {
+                await Clients.Caller.SendAsync("onError", _localizer["ErrorMessageNotFound"].Value);
+                return;
+            }
+            
+            // Authorization: user must be in the same room
+            if (message.ToRoom?.Name != currentRoom)
+            {
+                await Clients.Caller.SendAsync("onError", _localizer["ErrorNotAuthorizedRoom"].Value);
+                return;
+            }
+            
+            if (message.TranslationStatus != TranslationStatus.Failed)
+            {
+                await Clients.Caller.SendAsync("onError", "Translation is not in failed state");
+                return;
+            }
+            
+            // Re-enqueue with high priority
+            var job = new MessageTranslationJob
+            {
+                MessageId = message.Id,
+                RoomName = message.ToRoom.Name,
+                Content = message.Content,
+                SourceLanguage = "auto",
+                TargetLanguages = new List<string> { "en", "pl", "de", "fr", "es", "it", "pt", "ja", "zh" },
+                DeploymentName = _translationOptions.DeploymentName,
+                CreatedAt = DateTime.UtcNow,
+                RetryCount = 0,
+                Priority = 10,
+                JobId = $"transjob:{message.Id}:{DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}"
+            };
+            
+            await _translationQueue.RequeueAsync(job, highPriority: true);
+            await _messages.UpdateTranslationAsync(message.Id, TranslationStatus.Pending, new Dictionary<string, string>(), job.JobId);
+            
+            // Broadcast status update to room
+            await Clients.Group(currentRoom).SendAsync("translationRetrying", new
+            {
+                messageId,
+                status = "Pending",
+                timestamp = DateTime.UtcNow
+            });
+            
+            _logger.LogInformation("Manual retry triggered for message {MessageId} by user {User}", messageId, IdentityName);
+        }
     }
 }
