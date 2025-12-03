@@ -103,8 +103,8 @@ public class TranslationServiceIntegrationTests : IDisposable
             SourceLanguage = "en",
             Targets = new[]
             {
-                new TranslationTarget { Language = "en", DeploymentName = null }, // Use NMT (no deployment name)
-                new TranslationTarget { Language = "pl", DeploymentName = null }
+                new TranslationTarget { Language = "en", DeploymentName = _options.DeploymentName }, // Use GPT-4o-mini
+                new TranslationTarget { Language = "pl", DeploymentName = _options.DeploymentName }
             }
         };
 
