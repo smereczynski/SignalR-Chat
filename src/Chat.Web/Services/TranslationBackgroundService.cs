@@ -1,3 +1,5 @@
+#nullable enable
+
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -10,6 +12,7 @@ using Chat.Web.Observability;
 using Chat.Web.Options;
 using Chat.Web.Repositories;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -27,35 +30,36 @@ namespace Chat.Web.Services;
 /// </summary>
 public class TranslationBackgroundService : BackgroundService
 {
-    private readonly ITranslationJobQueue _queue;
-    private readonly ITranslationService _translator;
-    private readonly IMessagesRepository _messages;
-    private readonly IHubContext<ChatHub> _hubContext;
-    private readonly TranslationOptions _options;
+    private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<TranslationBackgroundService> _logger;
-    private readonly SemaphoreSlim _semaphore;
-    private readonly bool _isEnabled;
+    private SemaphoreSlim? _semaphore;
+    
+    private ITranslationJobQueue? _queue;
+    private ITranslationService? _translator;
+    private IMessagesRepository? _messages;
+    private IHubContext<ChatHub>? _hubContext;
+    private TranslationOptions? _options;
+    private bool _isEnabled;
 
     public TranslationBackgroundService(
-        ITranslationJobQueue queue,
-        ITranslationService translator,
-        IMessagesRepository messages,
-        IHubContext<ChatHub> hubContext,
-        IOptions<TranslationOptions> options,
+        IServiceProvider serviceProvider,
         ILogger<TranslationBackgroundService> logger)
     {
-        _queue = queue;
-        _translator = translator;
-        _messages = messages;
-        _hubContext = hubContext;
-        _options = options.Value;
+        _serviceProvider = serviceProvider;
         _logger = logger;
-        _isEnabled = _options.Enabled;
-        _semaphore = new SemaphoreSlim(_options.MaxConcurrentJobs, _options.MaxConcurrentJobs);
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        // Resolve dependencies lazily to avoid CosmosClients initialization timing issue
+        _queue = _serviceProvider.GetRequiredService<ITranslationJobQueue>();
+        _translator = _serviceProvider.GetRequiredService<ITranslationService>();
+        _messages = _serviceProvider.GetRequiredService<IMessagesRepository>();
+        _hubContext = _serviceProvider.GetRequiredService<IHubContext<ChatHub>>();
+        _options = _serviceProvider.GetRequiredService<IOptions<TranslationOptions>>().Value;
+        _isEnabled = _options!.Enabled;
+        _semaphore = new SemaphoreSlim(_options.MaxConcurrentJobs, _options.MaxConcurrentJobs);
+
         if (!_isEnabled)
         {
             _logger.LogInformation("Translation background service is disabled (Translation:Enabled=false)");
@@ -151,10 +155,10 @@ public class TranslationBackgroundService : BackgroundService
         {
             _logger.LogInformation(
                 "Processing translation job {JobId} for message {MessageId} in room {Room} (attempt {Attempt}/{Max})",
-                job.JobId, job.MessageId, job.RoomName, job.RetryCount + 1, _options.MaxRetries + 1);
+                job.JobId, job.MessageId, job.RoomName, job.RetryCount + 1, _options!.MaxRetries + 1);
 
             // 1. Update status to InProgress
-            await _messages.UpdateTranslationAsync(
+            await _messages!.UpdateTranslationAsync(
                 job.MessageId,
                 TranslationStatus.InProgress,
                 new Dictionary<string, string>(),
@@ -174,9 +178,9 @@ public class TranslationBackgroundService : BackgroundService
 
             // Use timeout for API call
             using var apiCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            apiCts.CancelAfter(TimeSpan.FromSeconds(_options.JobTimeoutSeconds));
+            apiCts.CancelAfter(TimeSpan.FromSeconds(_options!.JobTimeoutSeconds));
 
-            var response = await _translator.TranslateAsync(request, apiCts.Token).ConfigureAwait(false);
+            var response = await _translator!.TranslateAsync(request, apiCts.Token).ConfigureAwait(false);
 
             // 3. Extract translations
             var translations = response.Translations
@@ -195,7 +199,7 @@ public class TranslationBackgroundService : BackgroundService
             activity?.SetTag("translation.durationMs", duration.TotalMilliseconds);
 
             // 5. Broadcast to room
-            await _hubContext.Clients.Group(job.RoomName)
+            await _hubContext!.Clients.Group(job.RoomName)
                 .SendAsync("translationCompleted", new
                 {
                     messageId = job.MessageId,
@@ -215,36 +219,36 @@ public class TranslationBackgroundService : BackgroundService
                 "Translation job {JobId} cancelled due to shutdown, re-enqueueing for message {MessageId}",
                 job.JobId, job.MessageId);
 
-            await _queue.RequeueAsync(job, highPriority: true, cancellationToken: CancellationToken.None).ConfigureAwait(false);
+            await _queue!.RequeueAsync(job, highPriority: true, cancellationToken: CancellationToken.None).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
             activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
             _logger.LogError(ex,
                 "Translation failed for message {MessageId} (attempt {Retry}/{Max}): {Error}",
-                job.MessageId, job.RetryCount + 1, _options.MaxRetries + 1, ex.Message);
+                job.MessageId, job.RetryCount + 1, _options!.MaxRetries + 1, ex.Message);
 
             // Retry logic
             if (job.RetryCount < _options.MaxRetries)
             {
                 job.RetryCount++;
-                var delay = TimeSpan.FromSeconds(_options.RetryDelaySeconds * job.RetryCount);
+                var delay = TimeSpan.FromSeconds(_options!.RetryDelaySeconds * job.RetryCount);
 
                 _logger.LogInformation(
                     "Retrying translation for message {MessageId} in {DelaySeconds}s (attempt {Retry}/{Max})",
                     job.MessageId, delay.TotalSeconds, job.RetryCount + 1, _options.MaxRetries + 1);
 
                 await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
-                await _queue.RequeueAsync(job, highPriority: false, cancellationToken).ConfigureAwait(false);
+                await _queue!.RequeueAsync(job, highPriority: false, cancellationToken).ConfigureAwait(false);
             }
             else
             {
                 // Max retries exceeded - mark as failed
                 _logger.LogError(
                     "Translation failed permanently for message {MessageId} after {MaxRetries} attempts",
-                    job.MessageId, _options.MaxRetries + 1);
+                    job.MessageId, _options!.MaxRetries + 1);
 
-                await _messages.UpdateTranslationAsync(
+                await _messages!.UpdateTranslationAsync(
                     job.MessageId,
                     TranslationStatus.Failed,
                     new Dictionary<string, string>(),
@@ -252,7 +256,7 @@ public class TranslationBackgroundService : BackgroundService
                     DateTime.UtcNow).ConfigureAwait(false);
 
                 // Broadcast failure
-                await _hubContext.Clients.Group(job.RoomName)
+                await _hubContext!.Clients.Group(job.RoomName)
                     .SendAsync("translationFailed", new
                     {
                         messageId = job.MessageId,

@@ -1,6 +1,9 @@
+#nullable enable
+
 using Chat.Web.Models;
 using Chat.Web.Repositories;
 using Microsoft.Azure.Cosmos;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using System;
@@ -18,25 +21,28 @@ namespace Chat.Web.Services
     /// </summary>
     public class DataSeederService : BackgroundService
     {
-        private readonly IUsersRepository _usersRepo;
-        private readonly IRoomsRepository _roomsRepo;
-        private readonly CosmosClients _cosmosClients;
+        private readonly IServiceProvider _serviceProvider;
         private readonly ILogger<DataSeederService> _logger;
+        
+        private IUsersRepository? _usersRepo;
+        private IRoomsRepository? _roomsRepo;
+        private CosmosClients? _cosmosClients;
 
         public DataSeederService(
-            IUsersRepository usersRepo,
-            IRoomsRepository roomsRepo,
-            CosmosClients cosmosClients,
+            IServiceProvider serviceProvider,
             ILogger<DataSeederService> logger)
         {
-            _usersRepo = usersRepo;
-            _roomsRepo = roomsRepo;
-            _cosmosClients = cosmosClients;
+            _serviceProvider = serviceProvider;
             _logger = logger;
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
+            // Resolve dependencies lazily to avoid CosmosClients initialization timing issue
+            _usersRepo = _serviceProvider.GetRequiredService<IUsersRepository>();
+            _roomsRepo = _serviceProvider.GetRequiredService<IRoomsRepository>();
+            _cosmosClients = _serviceProvider.GetRequiredService<CosmosClients>();
+            
             // Run seeding once at startup
             await SeedIfEmptyAsync().ConfigureAwait(false);
         }
@@ -51,18 +57,18 @@ namespace Chat.Web.Services
             try
             {
                 // Check if any rooms exist
-                var existingRooms = (await _roomsRepo.GetAllAsync().ConfigureAwait(false))?.ToList();
+                var existingRooms = (await _roomsRepo!.GetAllAsync().ConfigureAwait(false))?.ToList();
                 var hasRooms = existingRooms != null && existingRooms.Any();
 
                 // Check if any users exist
-                var existingUsers = (await _usersRepo.GetAllAsync().ConfigureAwait(false))?.ToList();
+                var existingUsers = (await _usersRepo!.GetAllAsync().ConfigureAwait(false))?.ToList();
                 var hasUsers = existingUsers != null && existingUsers.Any();
 
                 if (hasRooms && hasUsers)
                 {
                     _logger.LogInformation("Database already contains data (Rooms: {RoomCount}, Users: {UserCount}) - skipping seed",
-                        existingRooms.Count,
-                        existingUsers.Count);
+                        existingRooms!.Count,
+                        existingUsers!.Count);
                     return;
                 }
 
@@ -95,9 +101,9 @@ namespace Chat.Web.Services
 
             var rooms = new[]
             {
-                new { id = "general", name = "general", admin = (string)null, users = Array.Empty<string>() },
-                new { id = "ops", name = "ops", admin = (string)null, users = Array.Empty<string>() },
-                new { id = "random", name = "random", admin = (string)null, users = Array.Empty<string>() }
+                new { id = "general", name = "general", admin = (string?)null, users = Array.Empty<string>() },
+                new { id = "ops", name = "ops", admin = (string?)null, users = Array.Empty<string>() },
+                new { id = "random", name = "random", admin = (string?)null, users = Array.Empty<string>() }
             };
 
             foreach (var room in rooms)
@@ -105,7 +111,7 @@ namespace Chat.Web.Services
                 try
                 {
                     // Create room document directly in Cosmos using UpsertItemAsync
-                    await _cosmosClients.Rooms.UpsertItemAsync(
+                    await _cosmosClients!.Rooms.UpsertItemAsync(
                         room,
                         new PartitionKey(room.name)
                     );
@@ -181,7 +187,7 @@ namespace Chat.Web.Services
             {
                 try
                 {
-                    await _usersRepo.UpsertAsync(user).ConfigureAwait(false);
+                    await _usersRepo!.UpsertAsync(user).ConfigureAwait(false);
                     _logger.LogInformation("  ✓ Created user: {UserName} ({FullName})", user.UserName, user.FullName);
                 }
                 catch (Exception ex)

@@ -92,8 +92,7 @@ public class TranslationJobQueue : ITranslationJobQueue
             return null;
         }
 
-        using var activity = Tracing.ActivitySource.StartActivity("translation.queue.dequeue");
-
+        Activity? activity = null;
         try
         {
             var queueKey = _options.QueueName;
@@ -105,9 +104,12 @@ public class TranslationJobQueue : ITranslationJobQueue
 
             if (result.IsNullOrEmpty)
             {
-                activity?.SetTag("queue.empty", true);
+                // No tracing for empty queue polls - generates excessive telemetry with minimal value
                 return null;
             }
+
+            // Only create activity span when we actually have a job to process
+            activity = Tracing.ActivitySource.StartActivity("translation.queue.dequeue");
 
             var job = JsonSerializer.Deserialize<MessageTranslationJob>(result!, _jsonOptions);
             if (job == null)
@@ -135,6 +137,10 @@ public class TranslationJobQueue : ITranslationJobQueue
             activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
             _logger.LogError(ex, "Failed to dequeue translation job");
             throw;
+        }
+        finally
+        {
+            activity?.Dispose();
         }
     }
 

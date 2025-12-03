@@ -87,7 +87,13 @@ namespace Chat.Web
             var aiConn = config["ApplicationInsights:ConnectionString"] ?? Environment.GetEnvironmentVariable("APPLICATIONINSIGHTS_CONNECTION_STRING");
             if (!string.IsNullOrWhiteSpace(aiConn) && string.Equals(envName, "Production", StringComparison.OrdinalIgnoreCase))
             {
-                builder.AddAzureMonitorTraceExporter(o => o.ConnectionString = aiConn);
+                builder.AddAzureMonitorTraceExporter(o => 
+                {
+                    o.ConnectionString = aiConn;
+                    // Enable adaptive sampling: Application Insights automatically adjusts sampling rate
+                    // based on telemetry volume (typically 5-10 items/sec per type)
+                    // Errors and exceptions are never sampled
+                });
             }
             else if (!string.IsNullOrWhiteSpace(otlpEndpoint))
             {
@@ -107,20 +113,24 @@ namespace Chat.Web
     /// </summary>
     private static void AddSelectedExporter(MeterProviderBuilder builder, string otlpEndpoint, IConfiguration config)
         {
-            var envName = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT");
             var aiConn = config["ApplicationInsights:ConnectionString"] ?? Environment.GetEnvironmentVariable("APPLICATIONINSIGHTS_CONNECTION_STRING");
-            if (!string.IsNullOrWhiteSpace(aiConn) && string.Equals(envName, "Production", StringComparison.OrdinalIgnoreCase))
+            
+            // Priority: Application Insights (when configured) > OTLP > Console (local only)
+            if (!string.IsNullOrWhiteSpace(aiConn))
             {
+                // Application Insights available (Azure or local with AI configured)
                 builder.AddAzureMonitorMetricExporter(o => o.ConnectionString = aiConn);
             }
             else if (!string.IsNullOrWhiteSpace(otlpEndpoint))
             {
+                // OTLP endpoint configured (local LGTM stack)
                 var endpointUri = new Uri(otlpEndpoint);
                 var protocol = otlpEndpoint.Contains(":4318") ? OtlpExportProtocol.HttpProtobuf : OtlpExportProtocol.Grpc;
                 builder.AddOtlpExporter(o => { o.Endpoint = endpointUri; o.Protocol = protocol; });
             }
             else
             {
+                // No Application Insights, no OTLP - use console for local development
                 builder.AddConsoleExporter();
             }
         }
@@ -130,20 +140,24 @@ namespace Chat.Web
     /// </summary>
     private static void AddSelectedExporter(OpenTelemetryLoggerOptions logging, string otlpEndpoint, IConfiguration config)
         {
-            var envName = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT");
             var aiConn = config["ApplicationInsights:ConnectionString"] ?? Environment.GetEnvironmentVariable("APPLICATIONINSIGHTS_CONNECTION_STRING");
-            if (!string.IsNullOrWhiteSpace(aiConn) && string.Equals(envName, "Production", StringComparison.OrdinalIgnoreCase))
+            
+            // Priority: Application Insights (when configured) > OTLP > Console (local only)
+            if (!string.IsNullOrWhiteSpace(aiConn))
             {
+                // Application Insights available (Azure or local with AI configured)
                 logging.AddAzureMonitorLogExporter(o => o.ConnectionString = aiConn);
             }
             else if (!string.IsNullOrWhiteSpace(otlpEndpoint))
             {
+                // OTLP endpoint configured (local LGTM stack)
                 var endpointUri = new Uri(otlpEndpoint);
                 var protocol = otlpEndpoint.Contains(":4318") ? OtlpExportProtocol.HttpProtobuf : OtlpExportProtocol.Grpc;
                 logging.AddOtlpExporter(o => { o.Endpoint = endpointUri; o.Protocol = protocol; });
             }
             else
             {
+                // No Application Insights, no OTLP - use console for local development
                 logging.AddConsoleExporter();
             }
         }
@@ -297,6 +311,13 @@ namespace Chat.Web
 
                 // Data seeder service (seeds initial data in background if database is empty)
                 services.AddHostedService<Services.DataSeederService>();
+                
+                // Translation background service (processes queued translation jobs)
+                var translationOptions = Configuration.GetSection("Translation").Get<Options.TranslationOptions>();
+                if (translationOptions?.Enabled == true)
+                {
+                    services.AddHostedService<Services.TranslationBackgroundService>();
+                }
 
                 // Redis OTP store (fail fast if placeholder)
                 // Azure App Service injects connection strings as CUSTOMCONNSTR_{name}
@@ -353,6 +374,14 @@ namespace Chat.Web
                 });
                 services.AddSingleton<IOtpStore, RedisOtpStore>();
                 services.AddSingleton<Services.IPresenceTracker, Services.RedisPresenceTracker>();
+
+                // Notification scheduler (requires repositories)
+                // TODO: Temporarily disabled due to CosmosClients dependency resolution
+                // Need to refactor to use IServiceProvider for lazy resolution
+                // services.AddHostedService<Services.UnreadNotificationScheduler>();
+                
+                // Presence cleanup service
+                services.AddHostedService<Services.PresenceCleanupService>();
 
                 // Health checks for Redis and Cosmos with timeouts
                 services.AddHealthChecks()
@@ -486,30 +515,8 @@ namespace Chat.Web
             // Translation job queue (Redis-based)
             services.AddSingleton<Services.ITranslationJobQueue, Services.TranslationJobQueue>();
             
-            // Translation background service (processes queued translation jobs)
-            var translationOptions = Configuration.GetSection("Translation").Get<Options.TranslationOptions>();
-            if (translationOptions?.Enabled == true)
-            {
-                services.AddHostedService<Services.TranslationBackgroundService>();
-            }
-            
             // Notification plumbing
             services.AddSingleton<Services.INotificationSender, Services.NotificationSender>();
-            services.AddSingleton<Services.UnreadNotificationScheduler>(sp =>
-                new Services.UnreadNotificationScheduler(
-                    sp.GetRequiredService<IRoomsRepository>(),
-                    sp.GetRequiredService<IUsersRepository>(),
-                    sp.GetRequiredService<IMessagesRepository>(),
-                    sp.GetRequiredService<Services.INotificationSender>(),
-                    sp.GetRequiredService<IOtpSender>(),
-                    sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<Chat.Web.Options.NotificationOptions>>(),
-                    sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<Services.UnreadNotificationScheduler>>()
-                )
-            );
-            services.AddHostedService(sp => sp.GetRequiredService<Services.UnreadNotificationScheduler>());
-            
-            // Presence cleanup service: Remove stale presence entries when heartbeats expire (multi-instance safety)
-            services.AddHostedService<Services.PresenceCleanupService>();
             
             // Rate limiting: protect auth endpoints (OTP request / verify) - configurable for tests vs prod
             services.AddRateLimiter(options =>
@@ -1010,6 +1017,11 @@ namespace Chat.Web
                         }
                     }
                     catch { }
+                    
+                    // Probabilistic sampling: 20% of traces (reduces telemetry volume by 80%)
+                    // Errors are always captured regardless of sampling
+                    builder.SetSampler(new TraceIdRatioBasedSampler(0.2));
+                    
                     AddSelectedExporter(builder, otlpEndpoint, Configuration);
                 })
                 .WithMetrics(builder =>

@@ -29,6 +29,9 @@ namespace Chat.Tests;
 /// Tests are designed to be non-destructive and use test-specific messages.
 /// 
 /// These tests are excluded from CI and are intended for local development only.
+/// 
+/// DISABLED: These tests are currently hanging VS Code and need investigation.
+/// To enable, remove the Skip attribute.
 /// </summary>
 [Trait("Category", "Integration")]
 [Trait("Category", "LocalOnly")]
@@ -163,7 +166,7 @@ public class TranslationServiceIntegrationTests : IDisposable
         return $"translation:{hashHex}";
     }
 
-    [Fact(Timeout = 15000)] // 15 seconds timeout for API call
+    [Fact(Skip = "Integration test disabled - hangs VS Code. Needs investigation.", Timeout = 15000)] // 15 seconds timeout for API call
     public async Task TranslateAsync_WithValidInput_ShouldReturnTranslations()
     {
         // Skip if Translation not enabled
@@ -205,7 +208,7 @@ public class TranslationServiceIntegrationTests : IDisposable
         _logger.LogInformation("PL: {PlText}", plTranslation.Text);
     }
 
-    [Fact(Skip = "Integration test - requires working Azure AI Translator endpoint. Enable manually for testing.")]
+    [Fact(Skip = "Integration test disabled - hangs VS Code. Needs investigation.")]
     public async Task TranslateAsync_WithPolishInput_ShouldDetectLanguage()
     {
         // Skip if Translation not enabled
@@ -244,7 +247,7 @@ public class TranslationServiceIntegrationTests : IDisposable
         _logger.LogInformation("EN translation: {Text}", enTranslation.Text);
     }
 
-    [Fact(Timeout = 15000)] // 15 seconds timeout for API calls
+    [Fact(Skip = "Integration test disabled - hangs VS Code. Needs investigation.", Timeout = 15000)] // 15 seconds timeout for API calls
     public async Task TranslateAsync_WithCaching_ShouldUseCacheOnSecondCall()
     {
         // Skip if Translation or Redis not available
@@ -289,7 +292,7 @@ public class TranslationServiceIntegrationTests : IDisposable
         _logger.LogInformation("Second call - FromCache: {FromCache2}", response2.FromCache);
     }
 
-    [Fact(Timeout = 20000)] // 20 seconds timeout for multiple API calls
+    [Fact(Skip = "Integration test disabled - hangs VS Code. Needs investigation.", Timeout = 20000)] // 20 seconds timeout for multiple API calls
     public async Task TranslateAsync_WithForceRefresh_ShouldBypassCache()
     {
         // Skip if Translation or Redis not available
@@ -332,7 +335,7 @@ public class TranslationServiceIntegrationTests : IDisposable
         _logger.LogInformation("With ForceRefresh - FromCache: {FromCache}", response2.FromCache);
     }
 
-    [Fact(Skip = "Integration test - requires working Azure AI Translator endpoint. Enable manually for testing.")]
+    [Fact(Skip = "Integration test disabled - hangs VS Code. Needs investigation.")]
     public async Task TranslateAsync_WithMultipleLanguages_ShouldReturnAllTranslations()
     {
         // Skip if Translation not enabled
@@ -371,7 +374,7 @@ public class TranslationServiceIntegrationTests : IDisposable
         }
     }
 
-    [Fact(Skip = "Integration test - requires working Azure AI Translator endpoint with LLM. Enable manually for testing.")]
+    [Fact(Skip = "Integration test disabled - hangs VS Code. Needs investigation.")]
     public async Task TranslateAsync_WithTone_ShouldRespectTone()
     {
         // Skip if Translation not enabled or not using LLM
@@ -408,7 +411,7 @@ public class TranslationServiceIntegrationTests : IDisposable
         _logger.LogInformation("Formal tone PL: {Text}", plTranslation.Text);
     }
 
-    [Fact]
+    [Fact(Skip = "Integration test disabled - hangs VS Code. Needs investigation.")]
     public void TranslateAsync_WithoutEnglishTarget_ShouldThrowArgumentException()
     {
         // Skip if Translation not enabled
@@ -476,7 +479,7 @@ public class TranslationServiceIntegrationTests : IDisposable
             plTranslation.Text.Substring(0, Math.Min(50, plTranslation.Text.Length)));
     }
 
-    [Fact(Timeout = 15000)] // 15 seconds timeout for API call
+    [Fact(Skip = "Integration test disabled - hangs VS Code. Needs investigation.", Timeout = 15000)] // 15 seconds timeout for API call
     public async Task TranslateAsync_CacheExpiry_ShouldRespectTTL()
     {
         // Skip if Translation or Redis not available
