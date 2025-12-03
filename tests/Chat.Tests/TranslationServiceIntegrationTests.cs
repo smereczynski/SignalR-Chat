@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Threading.Tasks;
@@ -37,56 +39,127 @@ public class TranslationServiceIntegrationTests : IDisposable
 
     public TranslationServiceIntegrationTests()
     {
-        // Load configuration from environment variables (set by .env.local)
-        var configuration = new ConfigurationBuilder()
-            .AddEnvironmentVariables()
-            .Build();
+        // Load configuration: environment variables first (lowest priority), then .env.local (highest priority)
+        var configBuilder = new ConfigurationBuilder();
+        
+        // Add environment variables first (lowest priority)
+        configBuilder.AddEnvironmentVariables();
+        
+        // Try to load .env.local from workspace root - this will override environment variables
+        var workspaceRoot = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..");
+        var envLocalPath = Path.Combine(workspaceRoot, ".env.local");
+        
+        if (File.Exists(envLocalPath))
+        {
+            // Parse .env.local and add as in-memory collection
+            // Convert double underscore (__) to colon (:) for .NET Configuration binding
+            var envVars = new Dictionary<string, string?>();
+            foreach (var line in File.ReadAllLines(envLocalPath))
+            {
+                var trimmedLine = line.Trim();
+                if (string.IsNullOrWhiteSpace(trimmedLine) || trimmedLine.StartsWith("#"))
+                    continue;
+                    
+                var parts = trimmedLine.Split('=', 2);
+                if (parts.Length == 2)
+                {
+                    var key = parts[0].Trim().Replace("__", ":");
+                    var value = parts[1].Trim().Trim('\'', '"');
+                    envVars[key] = value;
+                }
+            }
+            configBuilder.AddInMemoryCollection(envVars);
+        }
+            
+        var configuration = configBuilder.Build();
+
+        // Setup logger early for debugging
+        var loggerFactory = LoggerFactory.Create(builder => builder.AddConsole().SetMinimumLevel(LogLevel.Debug));
+        _logger = loggerFactory.CreateLogger<AzureTranslatorService>();
+
+        // Debug: Log configuration sources
+        var translationEnabled = configuration["Translation:Enabled"];
+        var redisConnStr = configuration["Redis:ConnectionString"];
+        _logger.LogDebug("Translation:Enabled = {Value} (type: {Type})", 
+            translationEnabled, translationEnabled?.GetType().Name);
+        _logger.LogDebug("Redis:ConnectionString = {Value}", redisConnStr);
 
         // Bind Translation configuration
         _options = new TranslationOptions();
         configuration.GetSection("Translation").Bind(_options);
 
+        _logger.LogDebug("Bound Translation options - Enabled: {Enabled}, Endpoint: {Endpoint}", 
+            _options.Enabled, _options.Endpoint);
+
         _isEnabled = _options.Enabled && 
                      !string.IsNullOrWhiteSpace(_options.Endpoint) && 
                      !string.IsNullOrWhiteSpace(_options.SubscriptionKey);
 
-        // Setup logger
-        var loggerFactory = LoggerFactory.Create(builder => builder.AddConsole().SetMinimumLevel(LogLevel.Debug));
-        _logger = loggerFactory.CreateLogger<AzureTranslatorService>();
-
         // Setup Redis if connection string is available
-        var redisConnectionString = configuration["Redis__ConnectionString"];
+        var redisConnectionString = configuration["Redis:ConnectionString"] ?? configuration["Redis__ConnectionString"];
         if (!string.IsNullOrWhiteSpace(redisConnectionString))
         {
             try
             {
+                _logger.LogInformation("Attempting to connect to Redis: {ConnectionString}", redisConnectionString);
                 _redis = ConnectionMultiplexer.Connect(redisConnectionString);
                 _redisDb = _redis.GetDatabase();
+                _logger.LogInformation("Successfully connected to Redis");
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Failed to connect to Redis. Caching tests will be skipped.");
+                _logger.LogError(ex, "Failed to connect to Redis at {ConnectionString}. Caching tests will be skipped.", redisConnectionString);
             }
+        }
+        else
+        {
+            _logger.LogWarning("Redis connection string not provided. Caching tests will be skipped.");
         }
 
         // Create Translation Service
-        var httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+        // Use shorter timeout for tests (10s) to avoid VS Code "hanging" warnings
+        var httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
         var optionsWrapper = Options.Create(_options);
         _translationService = new AzureTranslatorService(httpClient, optionsWrapper, _logger, _redis);
     }
 
-    private string GenerateTestCacheKey(string text, string sourceLang, string[] targetLangs, string? tone = null)
+    private string GenerateTestCacheKey(string text, string sourceLang, TranslationTarget[] targets, string? tone = null)
     {
         // Simulate cache key generation logic from AzureTranslatorService
-        var targets = string.Join(",", targetLangs.OrderBy(t => t));
-        var input = $"{text}|{sourceLang}|{targets}|{tone ?? ""}";
-        
+        var keyComponents = new System.Text.StringBuilder();
+        keyComponents.Append(text);
+        keyComponents.Append('|');
+        keyComponents.Append(sourceLang ?? "auto");
+        keyComponents.Append('|');
+
+        // Sort targets for deterministic key (order shouldn't matter)
+        var sortedTargets = targets
+            .OrderBy(t => t.Language)
+            .ThenBy(t => t.DeploymentName ?? "");
+
+        foreach (var target in sortedTargets)
+        {
+            keyComponents.Append(target.Language);
+            keyComponents.Append(':');
+            keyComponents.Append(target.DeploymentName ?? "default");
+            keyComponents.Append(';');
+        }
+
+        if (!string.IsNullOrEmpty(tone))
+        {
+            keyComponents.Append('|');
+            keyComponents.Append(tone);
+        }
+
+        // Hash to fixed-length key (SHA256 = 64 hex chars)
         using var sha256 = System.Security.Cryptography.SHA256.Create();
-        var hash = sha256.ComputeHash(System.Text.Encoding.UTF8.GetBytes(input));
-        return $"translation:{Convert.ToBase64String(hash)}";
+        var hashBytes = sha256.ComputeHash(System.Text.Encoding.UTF8.GetBytes(keyComponents.ToString()));
+        var hashHex = Convert.ToHexString(hashBytes).ToLowerInvariant();
+
+        return $"translation:{hashHex}";
     }
 
-    [Fact]
+    [Fact(Timeout = 15000)] // 15 seconds timeout for API call
     public async Task TranslateAsync_WithValidInput_ShouldReturnTranslations()
     {
         // Skip if Translation not enabled
@@ -167,7 +240,7 @@ public class TranslationServiceIntegrationTests : IDisposable
         _logger.LogInformation("EN translation: {Text}", enTranslation.Text);
     }
 
-    [Fact(Skip = "Integration test - requires working Azure AI Translator endpoint and Redis. Enable manually for testing.")]
+    [Fact(Timeout = 15000)] // 15 seconds timeout for API calls
     public async Task TranslateAsync_WithCaching_ShouldUseCacheOnSecondCall()
     {
         // Skip if Translation or Redis not available
@@ -190,8 +263,7 @@ public class TranslationServiceIntegrationTests : IDisposable
         };
 
         // Clear any existing cache
-        var cacheKey = GenerateTestCacheKey(request.Text, request.SourceLanguage, 
-            request.Targets.Select(t => t.Language).ToArray());
+        var cacheKey = GenerateTestCacheKey(request.Text, request.SourceLanguage, request.Targets.ToArray());
         await _redisDb.KeyDeleteAsync(cacheKey);
 
         // Act - First call (should call API and cache result)
@@ -213,7 +285,7 @@ public class TranslationServiceIntegrationTests : IDisposable
         _logger.LogInformation("Second call - FromCache: {FromCache2}", response2.FromCache);
     }
 
-    [Fact(Skip = "Integration test - requires working Azure AI Translator endpoint and Redis. Enable manually for testing.")]
+    [Fact(Timeout = 20000)] // 20 seconds timeout for multiple API calls
     public async Task TranslateAsync_WithForceRefresh_ShouldBypassCache()
     {
         // Skip if Translation or Redis not available
@@ -400,7 +472,7 @@ public class TranslationServiceIntegrationTests : IDisposable
             plTranslation.Text.Substring(0, Math.Min(50, plTranslation.Text.Length)));
     }
 
-    [Fact(Skip = "Integration test - requires working Azure AI Translator endpoint and Redis. Enable manually for testing.")]
+    [Fact(Timeout = 15000)] // 15 seconds timeout for API call
     public async Task TranslateAsync_CacheExpiry_ShouldRespectTTL()
     {
         // Skip if Translation or Redis not available
@@ -426,8 +498,7 @@ public class TranslationServiceIntegrationTests : IDisposable
             }
         };
 
-        var cacheKey = GenerateTestCacheKey(request.Text, request.SourceLanguage, 
-            request.Targets.Select(t => t.Language).ToArray());
+        var cacheKey = GenerateTestCacheKey(request.Text, request.SourceLanguage, request.Targets.ToArray());
         
         // Clear any existing cache
         await _redisDb.KeyDeleteAsync(cacheKey);
