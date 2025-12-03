@@ -124,10 +124,10 @@ var redisPrivateIp = '${peSubnetBase}.${peSubnetLastOctet + 6}'
 var signalRPrivateIp = '${peSubnetBase}.${peSubnetLastOctet + 7}'
 // App Service: 1 IP
 var appServicePrivateIp = '${peSubnetBase}.${peSubnetLastOctet + 8}'
-// AI Foundry: 3 IPs (primary + 2 secondary endpoints)
-var aiFoundryPrivateIp1 = '${peSubnetBase}.${peSubnetLastOctet + 9}'
-var aiFoundryPrivateIp2 = '${peSubnetBase}.${peSubnetLastOctet + 10}'
-var aiFoundryPrivateIp3 = '${peSubnetBase}.${peSubnetLastOctet + 11}'
+// AI Foundry: 3 IPs (default, secondary, third memberNames)
+var aiFoundryPrivateIp1 = '${peSubnetBase}.${peSubnetLastOctet + 9}'  // default (cognitiveservices)
+var aiFoundryPrivateIp2 = '${peSubnetBase}.${peSubnetLastOctet + 10}' // secondary (openai)
+var aiFoundryPrivateIp3 = '${peSubnetBase}.${peSubnetLastOctet + 11}' // third (services.ai)
 
 // App Service URL (deterministic, constructed before deployment)
 var appServiceUrl = 'https://${baseName}-${environment}-${shortLocation}.azurewebsites.net'
@@ -248,9 +248,9 @@ module translation './modules/translation.bicep' = if (enableTranslation) {
     disableLocalAuth: false // Keep key-based auth for simplicity
     privateEndpointSubnetId: networking.outputs.privateEndpointsSubnetId // PE enabled for all environments
     privateEndpointStaticIps: [
-      aiFoundryPrivateIp1
-      aiFoundryPrivateIp2
-      aiFoundryPrivateIp3
+      aiFoundryPrivateIp1 // default
+      aiFoundryPrivateIp2 // secondary
+      aiFoundryPrivateIp3 // third
     ]
     logAnalyticsWorkspaceId: monitoring.outputs.logAnalyticsWorkspaceId
     vpnIpAddress: vpnIpAddress

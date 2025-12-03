@@ -7,9 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Infrastructure: AI Foundry Private Endpoint Static IP Configuration** (2025-12-03):
+  - ✅ Fixed deployment error: Azure PE requires unique memberName for each IP configuration
+  - ✅ Configured AI Foundry PE with 3 static IPs using correct memberNames from Azure:
+    - `default` - cognitiveservices.azure.com (.169)
+    - `secondary` - openai.azure.com (.170)
+    - `third` - services.ai.azure.com (.171)
+  - ✅ Analyzed staging environment NIC configuration to determine correct memberName values
+  - 🔧 **Impact**: AI Foundry PE now uses static IPs with proper memberName differentiation
+  - 📊 **Root Cause**: Initial configuration used identical `account` memberName for all 3 IPs (not allowed by Azure)
+
 ### Changed
 - **Infrastructure Configuration Updates** (2025-12-02):
-  - ✅ Updated AI Foundry private endpoint configuration to use 3 static IPs (primary + 2 secondary)
   - ✅ Added `BICEP_VPN_IP` repository variable for dev environment firewall rules
   - ✅ Configured Cosmos DB IP firewall rules (VPN IP + 4 Azure Portal IPs for dev environment)
   - ✅ Configured AI Foundry IP firewall rules (VPN IP for dev environment)

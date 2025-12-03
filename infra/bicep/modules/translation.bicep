@@ -161,30 +161,30 @@ resource privateEndpoint 'Microsoft.Network/privateEndpoints@2023-11-01' = if (p
         }
       }
     ]
-    // Use 3 static IPs if provided, otherwise dynamic allocation
+    // Use 3 static IPs with unique memberNames (default, secondary, third)
     ipConfigurations: length(privateEndpointStaticIps) == 3 ? [
       {
-        name: 'ipconfig-${aiServicesName}-primary'
+        name: 'ipconfig-${aiServicesName}-default'
         properties: {
           privateIPAddress: privateEndpointStaticIps[0]
           groupId: 'account'
-          memberName: 'account'
+          memberName: 'default' // cognitiveservices.azure.com
         }
       }
       {
-        name: 'ipconfig-${aiServicesName}-secondary1'
+        name: 'ipconfig-${aiServicesName}-secondary'
         properties: {
           privateIPAddress: privateEndpointStaticIps[1]
           groupId: 'account'
-          memberName: 'account'
+          memberName: 'secondary' // openai.azure.com
         }
       }
       {
-        name: 'ipconfig-${aiServicesName}-secondary2'
+        name: 'ipconfig-${aiServicesName}-third'
         properties: {
           privateIPAddress: privateEndpointStaticIps[2]
           groupId: 'account'
-          memberName: 'account'
+          memberName: 'third' // services.ai.azure.com
         }
       }
     ] : []
