@@ -34,12 +34,6 @@ param sku string = 'S0'
 @description('Disable local authentication (use Entra ID only)')
 param disableLocalAuth bool = false
 
-@description('Subnet ID for private endpoint (optional)')
-param privateEndpointSubnetId string = ''
-
-@description('Array of 3 static IP addresses for private endpoint (optional)')
-param privateEndpointStaticIps array = []
-
 @description('VPN IP address for firewall rules (optional, only for dev environment)')
 param vpnIpAddress string = ''
 
@@ -62,8 +56,6 @@ var customSubDomainName = 'aif-${baseName}-${environment}-${shortLocation}'
 // - Text analytics, language understanding
 
 // Build IP rules array for dev environment only
-// Dev: Allow VPN IP + Azure Portal IPs (for manual management)
-// Staging/Prod: No IP rules (private endpoint only)
 var ipRulesArray = environment == 'dev' && !empty(vpnIpAddress) ? [
   {
     value: vpnIpAddress
@@ -85,18 +77,14 @@ resource aiServices 'Microsoft.CognitiveServices/accounts@2025-06-01' = {
     customSubDomainName: customSubDomainName
     
     // Network and authentication settings
-    // All environments: Enable public access with firewall rules
-    // Private endpoint provides additional secure access path
     publicNetworkAccess: 'Enabled'
     disableLocalAuth: disableLocalAuth
-    
-    // Enable project management for Foundry
     allowProjectManagement: true
     
-    // Network ACLs - configure IP rules and trusted services
+    // Network ACLs
     // Dev with VPN IP: Deny all except VPN IP + Azure services
     // Dev without VPN IP: Allow all (for local development)
-    // Staging/Prod: Deny all except Azure services (private endpoint provides access)
+    // Staging/Prod: Deny all except Azure services
     networkAcls: {
       defaultAction: (environment == 'dev' && !empty(vpnIpAddress)) || (environment != 'dev') ? 'Deny' : 'Allow'
       ipRules: ipRulesArray
@@ -143,58 +131,6 @@ resource gpt4oDeployment 'Microsoft.CognitiveServices/accounts/deployments@2025-
       version: '2024-11-20' // Latest stable version
     }
     raiPolicyName: 'Microsoft.DefaultV2'
-  }
-}
-
-// =========================================
-// Private Endpoint (Optional)
-// =========================================
-resource privateEndpoint 'Microsoft.Network/privateEndpoints@2023-11-01' = if (privateEndpointSubnetId != '') {
-  name: 'pe-${aiServicesName}'
-  location: location
-  properties: {
-    subnet: {
-      id: privateEndpointSubnetId
-    }
-    privateLinkServiceConnections: [
-      {
-        name: 'pe-${aiServicesName}'
-        properties: {
-          privateLinkServiceId: aiServices.id
-          groupIds: [
-            'account'
-          ]
-        }
-      }
-    ]
-    // Use 3 static IPs with unique memberNames (default, secondary, third)
-    ipConfigurations: length(privateEndpointStaticIps) == 3 ? [
-      {
-        name: 'ipconfig-${aiServicesName}-default'
-        properties: {
-          privateIPAddress: privateEndpointStaticIps[0]
-          groupId: 'account'
-          memberName: 'default' // cognitiveservices.azure.com
-        }
-      }
-      {
-        name: 'ipconfig-${aiServicesName}-secondary'
-        properties: {
-          privateIPAddress: privateEndpointStaticIps[1]
-          groupId: 'account'
-          memberName: 'secondary' // openai.azure.com
-        }
-      }
-      {
-        name: 'ipconfig-${aiServicesName}-third'
-        properties: {
-          privateIPAddress: privateEndpointStaticIps[2]
-          groupId: 'account'
-          memberName: 'third' // services.ai.azure.com
-        }
-      }
-    ] : []
-    customNetworkInterfaceName: 'nic-pe-${aiServicesName}'
   }
 }
 

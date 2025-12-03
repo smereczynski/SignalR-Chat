@@ -124,10 +124,6 @@ var redisPrivateIp = '${peSubnetBase}.${peSubnetLastOctet + 6}'
 var signalRPrivateIp = '${peSubnetBase}.${peSubnetLastOctet + 7}'
 // App Service: 1 IP
 var appServicePrivateIp = '${peSubnetBase}.${peSubnetLastOctet + 8}'
-// AI Foundry: 3 IPs (default, secondary, third memberNames)
-var aiFoundryPrivateIp1 = '${peSubnetBase}.${peSubnetLastOctet + 9}'  // default (cognitiveservices)
-var aiFoundryPrivateIp2 = '${peSubnetBase}.${peSubnetLastOctet + 10}' // secondary (openai)
-var aiFoundryPrivateIp3 = '${peSubnetBase}.${peSubnetLastOctet + 11}' // third (services.ai)
 
 // App Service URL (deterministic, constructed before deployment)
 var appServiceUrl = 'https://${baseName}-${environment}-${shortLocation}.azurewebsites.net'
@@ -244,16 +240,8 @@ module translation './modules/translation.bicep' = if (enableTranslation) {
     location: location
     shortLocation: shortLocation
     translationProvider: translationProvider
-    sku: environment == 'prod' ? 'S0' : 'S0' // S0 for all environments (F0 has low quotas)
-    disableLocalAuth: false // Keep key-based auth for simplicity
-    // Private endpoint disabled in dev to support LLM translation (deploymentName parameter)
-    // See: https://learn.microsoft.com/en-us/azure/ai-services/translator/text-translation/preview/translate-api#private-endpoint
-    privateEndpointSubnetId: environment == 'dev' ? '' : networking.outputs.privateEndpointsSubnetId
-    privateEndpointStaticIps: environment == 'dev' ? [] : [
-      aiFoundryPrivateIp1 // default
-      aiFoundryPrivateIp2 // secondary
-      aiFoundryPrivateIp3 // third
-    ]
+    sku: environment == 'prod' ? 'S0' : 'S0'
+    disableLocalAuth: false
     logAnalyticsWorkspaceId: monitoring.outputs.logAnalyticsWorkspaceId
     vpnIpAddress: vpnIpAddress
   }
