@@ -4,13 +4,25 @@ This guide covers testing practices, running tests, and understanding the test s
 
 ## Test Structure
 
-SignalR Chat currently has **unit tests** to validate core business logic and utilities:
+SignalR Chat has comprehensive unit and integration tests:
 
 | Project | Count | Purpose | Speed |
 |---------|-------|---------|-------|
-| **Chat.Tests** | 135+ | Unit tests (utilities, services, business logic) | ⚡ Fast |
+| **Chat.Tests** | 86 | Unit tests (utilities, services, models, queue operations) | ⚡ Fast |
+| **Chat.IntegrationTests** | 70 | Integration tests (ChatHub, auth flows, rate limiting, translation) | ⚡⚡ Medium |
+| **Chat.Web.Tests** | 9 | Web/security tests (health endpoints, security headers) | ⚡ Fast |
+| **Total** | **165** | All tests passing (100% success rate) | ⚡ Fast-Medium |
 
-> **Note**: Integration tests and end-to-end tests can be implemented in the future as the project matures. Currently, the focus is on maintaining high-quality unit test coverage for core functionality. Integration testing would require Azure resource provisioning and is not a current priority.
+### Test Breakdown by Category
+
+- ✅ **55 localization tests** - Multi-language resource loading and validation
+- ✅ **23 translation tests** - Message translation models, queue, service integration
+  - 14 TranslationModelsTests (models, serialization, status lifecycle)
+  - 9 TranslationJobQueueTests (Redis queue operations, priority, FIFO)
+- ✅ **14 ChatHub integration tests** - Real-time messaging, room join/leave, authorization
+- ✅ **13 security tests** - OTP flows, rate limiting, room authorization
+- ✅ **9 web/health tests** - Health endpoints, security headers, CSP
+- ✅ **51 other tests** - Configuration, utilities, schedulers, URL validation
 
 ## Running Tests
 
@@ -72,8 +84,7 @@ dotnet test src/Chat.sln
 - ✅ Local SignalR connections (no Azure SignalR Service)
 
 **Test results**:
-- ✅ **168/179 tests pass** (94%)
-- ❌ **11-14 SignalR tests fail** (expected - see [Known Issues](#known-issues))
+- ✅ **165/165 tests pass** (100%)
 
 **When to use**: 
 - Local development
@@ -83,39 +94,43 @@ dotnet test src/Chat.sln
 ### 2. Azure Mode (Full Integration)
 
 ```bash
-# Load .env.local and run tests
+# Load .env.local and run tests with Azure resources
 bash -lc "set -a; source .env.local; dotnet test src/Chat.sln"
 ```
 
 **What it uses**:
-- ✅ Azure Cache for Redis (OTP storage)
+- ✅ Azure Cache for Redis (OTP storage, translation queue)
 - ✅ Azure Cosmos DB (persistent database)
 - ✅ Azure SignalR Service (load-balanced connections)
+- ✅ Azure AI Foundry (GPT-4o-mini for translation integration tests)
 
 **Test results**:
-- ✅ **179/179 tests pass** (100%)
-- ✅ All SignalR tests work with Azure
+- ✅ **165/165 tests pass** (100%)
+- ✅ Full Azure integration tested
 
 **When to use**:
 - Testing Azure integration
 - Validating production-like scenarios
-- Debugging SignalR connection issues
+- Testing translation service with real AI API
+- Debugging distributed scenarios
 
 ## Test Projects Overview
 
 ### Chat.Tests (Unit Tests)
 
 **Location**: `tests/Chat.Tests/`  
-**Count**: 9 tests  
-**Focus**: Pure logic, no dependencies
+**Count**: 86 tests  
+**Focus**: Pure logic, models, services, no Azure dependencies
 
 **Test files**:
 ```
 Chat.Tests/
 ├── ConfigurationGuardsTests.cs          # Configuration validation
-├── LocalizationTests.cs                 # i18n resource loading
+├── LocalizationTests.cs                 # i18n resource loading (55 tests)
 ├── LogSanitizerTests.cs                 # Log injection prevention
 ├── OtpHasherTests.cs                    # Argon2id hashing
+├── TranslationModelsTests.cs            # Translation models, status lifecycle (14 tests)
+├── TranslationJobQueueTests.cs          # Redis queue operations, FIFO, priority (9 tests)
 ├── UnreadNotificationSchedulerTests.cs  # Background job logic
 └── UrlIsLocalUrlTests.cs                # URL validation
 ```
@@ -139,38 +154,111 @@ public void Sanitize_WithNewlines_RemovesNewlines()
 **Run unit tests only**:
 ```bash
 dotnet test tests/Chat.Tests/
-# Output: 135/135 passed (< 3 seconds)
+# Output: 86/86 passed (< 5 seconds)
+```
+
+### Chat.IntegrationTests (Integration Tests)
+
+**Location**: `tests/Chat.IntegrationTests/`  
+**Count**: 70 tests  
+**Focus**: End-to-end flows, ChatHub, auth, translation, rate limiting
+
+**Test files**:
+```
+Chat.IntegrationTests/
+├── ChatHubLifecycleTests.cs             # Hub connection, disconnection, groups
+├── ImmediatePostAfterLoginTests.cs      # Post-login edge cases
+├── MarkReadRateLimitingTests.cs         # Read receipt rate limiting
+├── OtpAttemptLimitingTests.cs           # OTP brute-force protection
+├── OtpAuthFlowTests.cs                  # Full authentication flow
+├── RateLimitingTests.cs                 # Message send rate limiting
+├── RoomAuthorizationTests.cs            # Room access control
+├── RoomJoinPositiveTests.cs             # Room join scenarios
+├── RoomsAuthorizationTests.cs           # Rooms API authorization
+└── TranslationServiceIntegrationTests.cs # Azure AI translation (8 tests)
+```
+
+**Run integration tests only**:
+```bash
+dotnet test tests/Chat.IntegrationTests/
+# Output: 70/70 passed (< 15 seconds with Azure AI)
+```
+
+### Chat.Web.Tests (Web/Security Tests)
+
+**Location**: `tests/Chat.Web.Tests/`  
+**Count**: 9 tests  
+**Focus**: Health endpoints, security headers, CSP
+
+**Test files**:
+```
+Chat.Web.Tests/
+├── HealthEndpointsTests.cs              # /health and /healthz endpoints
+└── SecurityHeadersTests.cs              # CSP, HSTS, X-Frame-Options, etc.
+```
+
+**Run web tests only**:
+```bash
+dotnet test tests/Chat.Web.Tests/
+# Output: 9/9 passed (< 3 seconds)
 ```
 
 ## Test Coverage
 
-The current test suite focuses on:
+The test suite covers all critical functionality:
 
-### Core Business Logic
+### Core Business Logic (86 unit tests)
 - **OTP Generation & Hashing**: Secure random number generation, Argon2id hashing
 - **Log Sanitization**: PII removal, log injection prevention (CWE-117)
 - **URL Validation**: Local URL detection for secure redirects
 - **Configuration Guards**: Validation of required configuration at startup
-- **Localization**: Multi-language support validation
+- **Localization**: Multi-language support validation (55 tests across 9 languages)
+- **Translation Models**: Message translation lifecycle, status tracking (14 tests)
+- **Translation Queue**: Redis FIFO queue operations, priority handling (9 tests)
 
-### Services & Utilities
-- **OtpHasher**: Password hashing with pepper
-- **LogSanitizer**: Control character removal
-- **UnreadNotificationScheduler**: Background job scheduling
-- **URL helpers**: Security validation
+### Integration Flows (70 integration tests)
+- **ChatHub Lifecycle**: Connection, room join/leave, message broadcast (14 tests)
+- **OTP Authentication**: Full flow from code generation to verification (13 tests)
+- **Rate Limiting**: Message send, read receipts, OTP attempts (25 tests)
+- **Room Authorization**: Access control, validation (8 tests)
+- **Translation Service**: Azure AI integration, caching, multi-language (8 tests)
+- **Edge Cases**: Post-login, immediate actions (2 tests)
+
+### Web & Security (9 tests)
+- **Health Endpoints**: `/health` and `/healthz` with proper authorization
+- **Security Headers**: CSP, HSTS, X-Frame-Options, referrer policy
 
 ## Test Organization
 
-Tests are organized by functional area within `tests/Chat.Tests/`:
+Tests are organized by functional area across three projects:
 
 ```
-Chat.Tests/
-├── ConfigurationGuardsTests.cs          # Startup configuration validation
-├── LocalizationTests.cs                 # Multi-language support
-├── LogSanitizerTests.cs                 # Log security (CWE-117 prevention)
-├── OtpHasherTests.cs                    # Cryptographic hashing
-├── UnreadNotificationSchedulerTests.cs  # Background jobs
-└── UrlIsLocalUrlTests.cs                # URL security validation
+tests/
+├── Chat.Tests/ (86 unit tests)
+│   ├── ConfigurationGuardsTests.cs          # Startup configuration validation
+│   ├── LocalizationTests.cs                 # Multi-language support (55 tests)
+│   ├── LogSanitizerTests.cs                 # Log security (CWE-117 prevention)
+│   ├── OtpHasherTests.cs                    # Cryptographic hashing
+│   ├── TranslationModelsTests.cs            # Translation models (14 tests)
+│   ├── TranslationJobQueueTests.cs          # Redis queue (9 tests)
+│   ├── UnreadNotificationSchedulerTests.cs  # Background jobs
+│   └── UrlIsLocalUrlTests.cs                # URL security validation
+│
+├── Chat.IntegrationTests/ (70 integration tests)
+│   ├── ChatHubLifecycleTests.cs             # SignalR hub (14 tests)
+│   ├── ImmediatePostAfterLoginTests.cs      # Edge cases (2 tests)
+│   ├── MarkReadRateLimitingTests.cs         # Read receipt limits
+│   ├── OtpAttemptLimitingTests.cs           # OTP brute-force protection
+│   ├── OtpAuthFlowTests.cs                  # Full auth flow
+│   ├── RateLimitingTests.cs                 # Message rate limiting
+│   ├── RoomAuthorizationTests.cs            # Room access control
+│   ├── RoomJoinPositiveTests.cs             # Room join scenarios
+│   ├── RoomsAuthorizationTests.cs           # Rooms API authorization
+│   └── TranslationServiceIntegrationTests.cs # Azure AI (8 tests)
+│
+└── Chat.Web.Tests/ (9 web tests)
+    ├── HealthEndpointsTests.cs              # Health check endpoints
+    └── SecurityHeadersTests.cs              # Security header validation
 ```
 
 **Root Cause**:
