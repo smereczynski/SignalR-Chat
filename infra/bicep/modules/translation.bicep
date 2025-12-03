@@ -85,8 +85,9 @@ resource aiServices 'Microsoft.CognitiveServices/accounts@2025-06-01' = {
     customSubDomainName: customSubDomainName
     
     // Network and authentication settings
-    // Enable public access for dev (with IP restrictions), disable for staging/prod
-    publicNetworkAccess: environment == 'dev' ? 'Enabled' : 'Disabled'
+    // All environments: Enable public access with firewall rules
+    // Private endpoint provides additional secure access path
+    publicNetworkAccess: 'Enabled'
     disableLocalAuth: disableLocalAuth
     
     // Enable project management for Foundry
@@ -95,7 +96,7 @@ resource aiServices 'Microsoft.CognitiveServices/accounts@2025-06-01' = {
     // Network ACLs - configure IP rules and trusted services
     // Dev with VPN IP: Deny all except VPN IP + Azure services
     // Dev without VPN IP: Allow all (for local development)
-    // Staging/Prod: Deny all except Azure services (private endpoint only)
+    // Staging/Prod: Deny all except Azure services (private endpoint provides access)
     networkAcls: {
       defaultAction: (environment == 'dev' && !empty(vpnIpAddress)) || (environment != 'dev') ? 'Deny' : 'Allow'
       ipRules: ipRulesArray
