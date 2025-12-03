@@ -114,7 +114,19 @@ namespace Chat.Web.Repositories
         public string defaultRoom { get; set; } 
     }
     internal class RoomDoc { public string id { get; set; } public string name { get; set; } public string admin { get; set; } public string[] users { get; set; } }
-    internal class MessageDoc { public string id { get; set; } public string roomName { get; set; } public string content { get; set; } public string fromUser { get; set; } public DateTime timestamp { get; set; } public string[] readBy { get; set; } }
+    internal class MessageDoc 
+    { 
+        public string id { get; set; } 
+        public string roomName { get; set; } 
+        public string content { get; set; } 
+        public string fromUser { get; set; } 
+        public DateTime timestamp { get; set; } 
+        public string[] readBy { get; set; }
+        public string translationStatus { get; set; }  // "None", "Pending", "InProgress", "Completed", "Failed"
+        public Dictionary<string, string> translations { get; set; }  // {"en": "Hello", "pl": "Cześć"}
+        public string translationJobId { get; set; }  // "transjob:123:1638360000000"
+        public DateTime? translationFailedAt { get; set; }  // nullable timestamp
+    }
 
     /// <summary>
     /// Helper class to reduce duplication in paginated Cosmos query patterns
@@ -430,7 +442,11 @@ namespace Chat.Web.Repositories
                 ToRoom = new Room { Name = d.roomName },
                 ToRoomId = 0,
                 FromUser = new ApplicationUser { UserName = d.fromUser },
-                ReadBy = d.readBy != null ? new List<string>(d.readBy) : new List<string>()
+                ReadBy = d.readBy != null ? new List<string>(d.readBy) : new List<string>(),
+                TranslationStatus = Enum.TryParse<TranslationStatus>(d.translationStatus, out var status) ? status : TranslationStatus.None,
+                Translations = d.translations ?? new Dictionary<string, string>(),
+                TranslationJobId = d.translationJobId,
+                TranslationFailedAt = d.translationFailedAt
             };
         }
 
@@ -440,7 +456,19 @@ namespace Chat.Web.Repositories
             var room = message.ToRoom ?? await _roomsRepo.GetByIdAsync(message.ToRoomId).ConfigureAwait(false);
             var pk = room?.Name ?? "global";
             message.Id = message.Id == 0 ? new Random().Next(1, int.MaxValue) : message.Id;
-            var doc = new MessageDoc { id = message.Id.ToString(), roomName = pk, content = message.Content, fromUser = message.FromUser?.UserName, timestamp = message.Timestamp, readBy = (message.ReadBy != null ? message.ReadBy.ToArray() : Array.Empty<string>()) };
+            var doc = new MessageDoc 
+            { 
+                id = message.Id.ToString(), 
+                roomName = pk, 
+                content = message.Content, 
+                fromUser = message.FromUser?.UserName, 
+                timestamp = message.Timestamp, 
+                readBy = (message.ReadBy != null ? message.ReadBy.ToArray() : Array.Empty<string>()),
+                translationStatus = message.TranslationStatus.ToString(),
+                translations = message.Translations,
+                translationJobId = message.TranslationJobId,
+                translationFailedAt = message.TranslationFailedAt
+            };
             try
             {
                 var resp = await Resilience.RetryHelper.ExecuteAsync(
@@ -559,6 +587,53 @@ namespace Chat.Web.Repositories
                         ex);
                 }
             }
+            return MapMessage(d);
+        }
+
+        public async Task<Message> UpdateTranslationAsync(int id, TranslationStatus status, Dictionary<string, string> translations, string jobId = null, DateTime? failedAt = null)
+        {
+            using var activity = Tracing.ActivitySource.StartActivity("cosmos.messages.updatetranslation", ActivityKind.Client);
+            activity?.SetTag("app.message.id", id);
+            activity?.SetTag("app.translation.status", status.ToString());
+            
+            var q = _messages.GetItemQueryIterator<MessageDoc>(new QueryDefinition("SELECT TOP 1 * FROM c WHERE c.id = @id").WithParameter("@id", id.ToString()));
+            MessageDoc d = null;
+            while (q.HasMoreResults && d == null)
+            {
+                var page = await Resilience.RetryHelper.ExecuteAsync(
+                    _ => q.ReadNextAsync(),
+                    Transient.IsCosmosTransient,
+                    _logger,
+                    "cosmos.messages.updatetranslation.lookup").ConfigureAwait(false);
+                d = page.FirstOrDefault();
+            }
+            if (d == null) return null;
+            
+            var pk = d.roomName;
+            
+            // Update translation fields
+            d.translationStatus = status.ToString();
+            d.translations = translations ?? new Dictionary<string, string>();
+            d.translationJobId = jobId;
+            d.translationFailedAt = failedAt;
+            
+            try
+            {
+                var resp = await Resilience.RetryHelper.ExecuteAsync(
+                    _ => _messages.UpsertItemAsync(d, new PartitionKey(pk)),
+                    Transient.IsCosmosTransient,
+                    _logger,
+                    "cosmos.messages.updatetranslation.upsert").ConfigureAwait(false);
+                activity?.SetTag("db.status_code", (int)resp.StatusCode);
+            }
+            catch (CosmosException ex)
+            {
+                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+                throw new InvalidOperationException(
+                    $"Failed to update message translation (Id={id}, Room={LogSanitizer.Sanitize(pk)}).",
+                    ex);
+            }
+            
             return MapMessage(d);
         }
     }
