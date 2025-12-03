@@ -90,7 +90,7 @@ public class AzureTranslatorService : ITranslationService
             // Try cache first (unless ForceRefresh is true)
             if (!request.ForceRefresh && _redis != null && _options.CacheTtlSeconds > 0)
             {
-                var cacheResult = await TryGetFromCacheAsync(request, cancellationToken).ConfigureAwait(false);
+                var cacheResult = await TryGetFromCacheAsync(request).ConfigureAwait(false);
                 if (cacheResult != null)
                 {
                     _logger.LogDebug(
@@ -113,7 +113,7 @@ public class AzureTranslatorService : ITranslationService
             // Store in cache (best effort - don't fail if caching fails)
             if (_redis != null && _options.CacheTtlSeconds > 0)
             {
-                await TrySetCacheAsync(request, response, cancellationToken).ConfigureAwait(false);
+                await TrySetCacheAsync(request, response).ConfigureAwait(false);
             }
 
             return response;
@@ -242,8 +242,7 @@ public class AzureTranslatorService : ITranslationService
     }
 
     private async Task<TranslateResponse?> TryGetFromCacheAsync(
-        TranslateRequest request,
-        CancellationToken cancellationToken)
+        TranslateRequest request)
     {
         if (_redis == null)
         {
@@ -291,8 +290,7 @@ public class AzureTranslatorService : ITranslationService
 
     private async Task TrySetCacheAsync(
         TranslateRequest request,
-        TranslateResponse response,
-        CancellationToken cancellationToken)
+        TranslateResponse response)
     {
         if (_redis == null)
         {

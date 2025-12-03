@@ -44,21 +44,20 @@ namespace Chat.Web.Controllers
             IUsersRepository users,
             IHubContext<ChatHub> hubContext,
             ILogger<MessagesController> logger,
-            IConfiguration configuration,
-            Services.ITranslationJobQueue translationQueue = null,
-            Microsoft.Extensions.Options.IOptions<Options.TranslationOptions> translationOptions = null)
+            Services.ITranslationJobQueue translationQueue,
+            Microsoft.Extensions.Options.IOptions<Options.TranslationOptions> translationOptions)
         {
             _messages = messages;
             _rooms = rooms;
             _users = users;
             _hubContext = hubContext;
             _logger = logger;
-            _configuration = configuration;
+            _configuration = null; // Removed IConfiguration dependency
             _translationQueue = translationQueue;
             _translationOptions = translationOptions;
         }
 
-        private bool UseManualSerialization => string.Equals(_configuration["Testing:InMemory"], "true", StringComparison.OrdinalIgnoreCase);
+        private bool UseManualSerialization => false; // Always false - use normal JSON serialization
 
         private ContentResult ManualJson(object obj, int statusCode = StatusCodes.Status200OK, string location = null)
         {
@@ -150,7 +149,7 @@ namespace Chat.Web.Controllers
             [FromServices] Services.UnreadNotificationScheduler unreadScheduler)
         {
             // Feature flag: disable REST creation path unless explicitly enabled (tests / emergency fallback)
-            var enabled = string.Equals(_configuration["Features:EnableRestPostMessages"], "true", StringComparison.OrdinalIgnoreCase);
+            var enabled = _configuration != null && string.Equals(_configuration["Features:EnableRestPostMessages"], "true", StringComparison.OrdinalIgnoreCase);
             if (!enabled)
             {
                 return NotFound(); // Pretend endpoint absent in production

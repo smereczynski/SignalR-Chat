@@ -265,7 +265,6 @@ public class ManualRetryTests
             _mockUsers.Object,
             _mockHubContext.Object,
             _mockControllerLogger.Object,
-            _mockConfiguration.Object,
             _mockQueue.Object,
             Options.Create(options));
     }

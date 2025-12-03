@@ -81,7 +81,7 @@ public class TranslationJobQueue : ITranslationJobQueue
         {
             activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
             _logger.LogError(ex, "Failed to enqueue translation job {JobId} for message {MessageId}", job.JobId, job.MessageId);
-            throw;
+            throw new InvalidOperationException($"Failed to enqueue translation job {job.JobId} for message {job.MessageId}", ex);
         }
     }
 
@@ -136,7 +136,7 @@ public class TranslationJobQueue : ITranslationJobQueue
         {
             activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
             _logger.LogError(ex, "Failed to dequeue translation job");
-            throw;
+            throw new InvalidOperationException("Failed to dequeue translation job from Redis queue", ex);
         }
         finally
         {
@@ -184,7 +184,7 @@ public class TranslationJobQueue : ITranslationJobQueue
         {
             activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
             _logger.LogError(ex, "Failed to requeue translation job {JobId} for message {MessageId}", job.JobId, job.MessageId);
-            throw;
+            throw new InvalidOperationException($"Failed to requeue translation job {job.JobId} for message {job.MessageId}", ex);
         }
     }
 
