@@ -18,5 +18,9 @@ namespace Chat.Web.Repositories
         /// Marks a message as read by the specified user. Returns the updated message or null if not found.
         /// </summary>
         Task<Message> MarkReadAsync(int id, string userName);
+        /// <summary>
+        /// Updates translation status and translations for a message. Returns the updated message or null if not found.
+        /// </summary>
+        Task<Message> UpdateTranslationAsync(int id, TranslationStatus status, System.Collections.Generic.Dictionary<string, string> translations, string jobId = null, System.DateTime? failedAt = null);
     }
 }

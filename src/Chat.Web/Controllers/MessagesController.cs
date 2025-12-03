@@ -33,6 +33,8 @@ namespace Chat.Web.Controllers
         private readonly IHubContext<ChatHub> _hubContext;
         private readonly ILogger<MessagesController> _logger;
         private readonly IConfiguration _configuration;
+        private readonly Services.ITranslationJobQueue _translationQueue;
+        private readonly Microsoft.Extensions.Options.IOptions<Options.TranslationOptions> _translationOptions;
 
         /// <summary>
         /// DI constructor for messages API.
@@ -42,17 +44,20 @@ namespace Chat.Web.Controllers
             IUsersRepository users,
             IHubContext<ChatHub> hubContext,
             ILogger<MessagesController> logger,
-            IConfiguration configuration)
+            Services.ITranslationJobQueue translationQueue,
+            Microsoft.Extensions.Options.IOptions<Options.TranslationOptions> translationOptions)
         {
             _messages = messages;
             _rooms = rooms;
             _users = users;
             _hubContext = hubContext;
             _logger = logger;
-            _configuration = configuration;
+            _configuration = null; // Removed IConfiguration dependency
+            _translationQueue = translationQueue;
+            _translationOptions = translationOptions;
         }
 
-        private bool UseManualSerialization => string.Equals(_configuration["Testing:InMemory"], "true", StringComparison.OrdinalIgnoreCase);
+        private bool UseManualSerialization => false; // Always false - use normal JSON serialization
 
         private ContentResult ManualJson(object obj, int statusCode = StatusCodes.Status200OK, string location = null)
         {
@@ -144,7 +149,7 @@ namespace Chat.Web.Controllers
             [FromServices] Services.UnreadNotificationScheduler unreadScheduler)
         {
             // Feature flag: disable REST creation path unless explicitly enabled (tests / emergency fallback)
-            var enabled = string.Equals(_configuration["Features:EnableRestPostMessages"], "true", StringComparison.OrdinalIgnoreCase);
+            var enabled = _configuration != null && string.Equals(_configuration["Features:EnableRestPostMessages"], "true", StringComparison.OrdinalIgnoreCase);
             if (!enabled)
             {
                 return NotFound(); // Pretend endpoint absent in production
@@ -226,6 +231,72 @@ namespace Chat.Web.Controllers
             _ = _hubContext.Clients.Group(updated.ToRoom?.Name ?? string.Empty)
                 .SendAsync("messageRead", new { id = updated.Id, readers = updated.ReadBy?.ToArray() ?? Array.Empty<string>() });
             return NoContent();
+        }
+
+        /// <summary>
+        /// Manually retry translation for a failed message. Re-queues with high priority.
+        /// Requires translation feature to be enabled and message to be in Failed state.
+        /// </summary>
+        [HttpPost("{id}/retry-translation")]
+        public async Task<IActionResult> RetryTranslation(int id)
+        {
+            using var activity = Observability.Tracing.ActivitySource.StartActivity("api.messages.retry-translation");
+            activity?.SetTag("message.id", id);
+            
+            // Check if translation is enabled
+            if (_translationOptions?.Value?.Enabled != true || _translationQueue == null)
+            {
+                return BadRequest(new { error = "Translation feature is not enabled" });
+            }
+            
+            var message = await _messages.GetByIdAsync(id);
+            if (message == null)
+                return NotFound(new { error = "Message not found" });
+            
+            // Authorization: user must be in the same room
+            var user = await _users.GetByUserNameAsync(User?.Identity?.Name);
+            if (user?.FixedRooms != null && user.FixedRooms.Any() && !user.FixedRooms.Contains(message.ToRoom?.Name))
+            {
+                return Forbid();
+            }
+            
+            if (message.TranslationStatus != TranslationStatus.Failed)
+                return BadRequest(new { error = "Translation is not in failed state" });
+            
+            // Create new job with high priority
+            var job = new MessageTranslationJob
+            {
+                MessageId = message.Id,
+                RoomName = message.ToRoom.Name,
+                Content = message.Content,
+                SourceLanguage = "auto",
+                TargetLanguages = new List<string> { "en", "pl", "de", "fr", "es", "it", "pt", "ja", "zh" },
+                DeploymentName = _translationOptions.Value.DeploymentName,
+                CreatedAt = DateTime.UtcNow,
+                RetryCount = 0,
+                Priority = 10, // High priority for manual retries
+                JobId = $"transjob:{message.Id}:{DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}"
+            };
+            
+            await _translationQueue.RequeueAsync(job, highPriority: true);
+            await _messages.UpdateTranslationAsync(message.Id, TranslationStatus.Pending, new Dictionary<string, string>(), job.JobId);
+            
+            _logger.LogInformation("Manual retry triggered for message {MessageId} by user {User}", id, User.Identity.Name);
+            
+            // Broadcast status update to room
+            _ = _hubContext.Clients.Group(message.ToRoom.Name)
+                .SendAsync("translationRetrying", new
+                {
+                    messageId = id,
+                    status = "Pending",
+                    timestamp = DateTime.UtcNow
+                });
+            
+            if (UseManualSerialization)
+            {
+                return ManualJson(new { success = true, jobId = job.JobId });
+            }
+            return Ok(new { success = true, jobId = job.JobId });
         }
     }
 }

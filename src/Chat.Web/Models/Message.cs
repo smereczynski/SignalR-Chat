@@ -7,6 +7,7 @@ namespace Chat.Web.Models
 {
     /// <summary>
     /// Represents a chat message posted to a room (FromUser -> Room) with a server-side timestamp.
+    /// Supports asynchronous translation with status tracking.
     /// </summary>
     public class Message
     {
@@ -18,5 +19,34 @@ namespace Chat.Web.Models
         public Room ToRoom { get; set; }
         // Users who have read this message (usernames)
         public ICollection<string> ReadBy { get; set; } = new List<string>();
+        
+        /// <summary>
+        /// Current translation status (None, Pending, InProgress, Completed, Failed).
+        /// </summary>
+        public TranslationStatus TranslationStatus { get; set; } = TranslationStatus.None;
+        
+        /// <summary>
+        /// Translated versions of the message content (key: language code, value: translated text).
+        /// Always includes "en" (English) when translation is completed.
+        /// Example: { "en": "Hello", "pl": "Cześć", "de": "Hallo" }
+        /// </summary>
+        public Dictionary<string, string> Translations { get; set; } = new Dictionary<string, string>();
+        
+        /// <summary>
+        /// Redis job ID for tracking translation job (format: "transjob:{messageId}").
+        /// Null if no translation job exists.
+        /// </summary>
+        public string TranslationJobId { get; set; }
+        
+        /// <summary>
+        /// Timestamp when translation failed (null if not failed).
+        /// Used to determine if retry should be attempted.
+        /// </summary>
+        public DateTime? TranslationFailedAt { get; set; }
+        
+        /// <summary>
+        /// Computed property: returns true if translation is completed successfully.
+        /// </summary>
+        public bool IsTranslated => TranslationStatus == TranslationStatus.Completed && Translations.Count > 0;
     }
 }

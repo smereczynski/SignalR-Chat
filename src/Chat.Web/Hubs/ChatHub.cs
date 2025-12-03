@@ -36,6 +36,8 @@ namespace Chat.Web.Hubs
         private readonly Services.IPresenceTracker _presenceTracker;
         private readonly IStringLocalizer<Resources.SharedResources> _localizer;
         private readonly HealthCheckService _healthCheckService;
+        private readonly Services.ITranslationJobQueue _translationQueue;
+        private readonly Options.TranslationOptions _translationOptions;
 
         /// <summary>
         /// Creates a new Hub instance.
@@ -49,7 +51,9 @@ namespace Chat.Web.Hubs
             Services.IMarkReadRateLimiter markReadRateLimiter,
             Services.IPresenceTracker presenceTracker,
             IStringLocalizer<Resources.SharedResources> localizer,
-            HealthCheckService healthCheckService)
+            HealthCheckService healthCheckService,
+            Services.ITranslationJobQueue translationQueue,
+            Microsoft.Extensions.Options.IOptions<Options.TranslationOptions> translationOptions)
         {
             _users = users;
             _messages = messages;
@@ -61,6 +65,8 @@ namespace Chat.Web.Hubs
             _presenceTracker = presenceTracker;
             _localizer = localizer;
             _healthCheckService = healthCheckService;
+            _translationQueue = translationQueue;
+            _translationOptions = translationOptions.Value;
         }
 
         /// <summary>
@@ -405,6 +411,46 @@ namespace Chat.Web.Hubs
                 await Clients.Caller.SendAsync("onError", _localizer["ErrorOccurred"].Value);
                 return;
             }
+            
+            // Enqueue translation if enabled
+            if (_translationOptions.Enabled)
+            {
+                try
+                {
+                    var job = new Models.MessageTranslationJob
+                    {
+                        MessageId = msg.Id,
+                        RoomName = room.Name,
+                        Content = sanitized,
+                        SourceLanguage = "auto", // Auto-detect source language
+                        TargetLanguages = new System.Collections.Generic.List<string> { "en", "pl", "de", "fr", "es", "it", "pt", "ja", "zh" },
+                        DeploymentName = _translationOptions.DeploymentName,
+                        CreatedAt = System.DateTime.UtcNow,
+                        RetryCount = 0,
+                        Priority = 0,
+                        JobId = $"transjob:{msg.Id}:{System.DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}"
+                    };
+                    
+                    msg.TranslationStatus = Models.TranslationStatus.Pending;
+                    msg.TranslationJobId = job.JobId;
+                    await _messages.UpdateTranslationAsync(
+                        msg.Id, 
+                        Models.TranslationStatus.Pending, 
+                        new System.Collections.Generic.Dictionary<string, string>(), 
+                        job.JobId);
+                    
+                    await _translationQueue.EnqueueAsync(job);
+                    
+                    _logger.LogDebug("Enqueued translation job {JobId} for message {MessageId}", job.JobId, msg.Id);
+                    activity?.AddEvent(new ActivityEvent("translation_enqueued", tags: new ActivityTagsCollection { { "job.id", job.JobId } }));
+                }
+                catch (System.Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to enqueue translation job for message {MessageId}, translation will be skipped", msg.Id);
+                    // Don't fail message send if translation enqueue fails
+                }
+            }
+            
             var vm = new ViewModels.MessageViewModel
             {
                 Id = msg.Id,
@@ -415,7 +461,10 @@ namespace Chat.Web.Hubs
                 Room = room.Name,
                 Timestamp = msg.Timestamp,
                 CorrelationId = correlationId,
-                ReadBy = (msg.ReadBy != null ? msg.ReadBy.ToArray() : Array.Empty<string>())
+                ReadBy = (msg.ReadBy != null ? msg.ReadBy.ToArray() : Array.Empty<string>()),
+                TranslationStatus = msg.TranslationStatus.ToString(),
+                Translations = msg.Translations ?? new System.Collections.Generic.Dictionary<string, string>(),
+                IsTranslated = msg.IsTranslated
             };
             await Clients.Group(room.Name).SendAsync("newMessage", vm);
             try
@@ -581,6 +630,79 @@ namespace Chat.Web.Hubs
                     error = ex.Message
                 };
             }
+        }
+
+        /// <summary>
+        /// Manually retry translation for a failed message. Re-queues with high priority.
+        /// Requires translation feature to be enabled and message to be in Failed state.
+        /// User must be in the same room as the message.
+        /// </summary>
+        public async Task RetryTranslation(int messageId)
+        {
+            using var activity = Tracing.ActivitySource.StartActivity("ChatHub.RetryTranslation");
+            activity?.SetTag("chat.messageId", messageId);
+            
+            // Check if translation is enabled
+            if (!_translationOptions.Enabled || _translationQueue == null)
+            {
+                await Clients.Caller.SendAsync("onError", "Translation feature is not enabled");
+                return;
+            }
+            
+            var currentRoom = Context.Items["CurrentRoom"] as string;
+            if (string.IsNullOrEmpty(currentRoom))
+            {
+                await Clients.Caller.SendAsync("onError", _localizer["ErrorNotInRoom"].Value);
+                return;
+            }
+            
+            var message = await _messages.GetByIdAsync(messageId);
+            if (message == null)
+            {
+                await Clients.Caller.SendAsync("onError", _localizer["ErrorMessageNotFound"].Value);
+                return;
+            }
+            
+            // Authorization: user must be in the same room
+            if (message.ToRoom?.Name != currentRoom)
+            {
+                await Clients.Caller.SendAsync("onError", _localizer["ErrorNotAuthorizedRoom"].Value);
+                return;
+            }
+            
+            if (message.TranslationStatus != TranslationStatus.Failed)
+            {
+                await Clients.Caller.SendAsync("onError", "Translation is not in failed state");
+                return;
+            }
+            
+            // Re-enqueue with high priority
+            var job = new MessageTranslationJob
+            {
+                MessageId = message.Id,
+                RoomName = message.ToRoom.Name,
+                Content = message.Content,
+                SourceLanguage = "auto",
+                TargetLanguages = new List<string> { "en", "pl", "de", "fr", "es", "it", "pt", "ja", "zh" },
+                DeploymentName = _translationOptions.DeploymentName,
+                CreatedAt = DateTime.UtcNow,
+                RetryCount = 0,
+                Priority = 10,
+                JobId = $"transjob:{message.Id}:{DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}"
+            };
+            
+            await _translationQueue.RequeueAsync(job, highPriority: true);
+            await _messages.UpdateTranslationAsync(message.Id, TranslationStatus.Pending, new Dictionary<string, string>(), job.JobId);
+            
+            // Broadcast status update to room
+            await Clients.Group(currentRoom).SendAsync("translationRetrying", new
+            {
+                messageId,
+                status = "Pending",
+                timestamp = DateTime.UtcNow
+            });
+            
+            _logger.LogInformation("Manual retry triggered for message {MessageId} by user {User}", messageId, IdentityName);
         }
     }
 }

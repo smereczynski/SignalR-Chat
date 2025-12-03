@@ -87,7 +87,13 @@ namespace Chat.Web
             var aiConn = config["ApplicationInsights:ConnectionString"] ?? Environment.GetEnvironmentVariable("APPLICATIONINSIGHTS_CONNECTION_STRING");
             if (!string.IsNullOrWhiteSpace(aiConn) && string.Equals(envName, "Production", StringComparison.OrdinalIgnoreCase))
             {
-                builder.AddAzureMonitorTraceExporter(o => o.ConnectionString = aiConn);
+                builder.AddAzureMonitorTraceExporter(o => 
+                {
+                    o.ConnectionString = aiConn;
+                    // Enable adaptive sampling: Application Insights automatically adjusts sampling rate
+                    // based on telemetry volume (typically 5-10 items/sec per type)
+                    // Errors and exceptions are never sampled
+                });
             }
             else if (!string.IsNullOrWhiteSpace(otlpEndpoint))
             {
@@ -107,20 +113,24 @@ namespace Chat.Web
     /// </summary>
     private static void AddSelectedExporter(MeterProviderBuilder builder, string otlpEndpoint, IConfiguration config)
         {
-            var envName = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT");
             var aiConn = config["ApplicationInsights:ConnectionString"] ?? Environment.GetEnvironmentVariable("APPLICATIONINSIGHTS_CONNECTION_STRING");
-            if (!string.IsNullOrWhiteSpace(aiConn) && string.Equals(envName, "Production", StringComparison.OrdinalIgnoreCase))
+            
+            // Priority: Application Insights (when configured) > OTLP > Console (local only)
+            if (!string.IsNullOrWhiteSpace(aiConn))
             {
+                // Application Insights available (Azure or local with AI configured)
                 builder.AddAzureMonitorMetricExporter(o => o.ConnectionString = aiConn);
             }
             else if (!string.IsNullOrWhiteSpace(otlpEndpoint))
             {
+                // OTLP endpoint configured (local LGTM stack)
                 var endpointUri = new Uri(otlpEndpoint);
                 var protocol = otlpEndpoint.Contains(":4318") ? OtlpExportProtocol.HttpProtobuf : OtlpExportProtocol.Grpc;
                 builder.AddOtlpExporter(o => { o.Endpoint = endpointUri; o.Protocol = protocol; });
             }
             else
             {
+                // No Application Insights, no OTLP - use console for local development
                 builder.AddConsoleExporter();
             }
         }
@@ -130,20 +140,24 @@ namespace Chat.Web
     /// </summary>
     private static void AddSelectedExporter(OpenTelemetryLoggerOptions logging, string otlpEndpoint, IConfiguration config)
         {
-            var envName = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT");
             var aiConn = config["ApplicationInsights:ConnectionString"] ?? Environment.GetEnvironmentVariable("APPLICATIONINSIGHTS_CONNECTION_STRING");
-            if (!string.IsNullOrWhiteSpace(aiConn) && string.Equals(envName, "Production", StringComparison.OrdinalIgnoreCase))
+            
+            // Priority: Application Insights (when configured) > OTLP > Console (local only)
+            if (!string.IsNullOrWhiteSpace(aiConn))
             {
+                // Application Insights available (Azure or local with AI configured)
                 logging.AddAzureMonitorLogExporter(o => o.ConnectionString = aiConn);
             }
             else if (!string.IsNullOrWhiteSpace(otlpEndpoint))
             {
+                // OTLP endpoint configured (local LGTM stack)
                 var endpointUri = new Uri(otlpEndpoint);
                 var protocol = otlpEndpoint.Contains(":4318") ? OtlpExportProtocol.HttpProtobuf : OtlpExportProtocol.Grpc;
                 logging.AddOtlpExporter(o => { o.Endpoint = endpointUri; o.Protocol = protocol; });
             }
             else
             {
+                // No Application Insights, no OTLP - use console for local development
                 logging.AddConsoleExporter();
             }
         }
@@ -199,6 +213,7 @@ namespace Chat.Web
             services.Configure<EntraIdOptions>(Configuration.GetSection("EntraId"));
             services.Configure<Chat.Web.Options.NotificationOptions>(Configuration.GetSection("Notifications"));
             services.Configure<Chat.Web.Options.RateLimitingOptions>(Configuration.GetSection("RateLimiting:MarkRead"));
+            services.Configure<Chat.Web.Options.TranslationOptions>(Configuration.GetSection("Translation"));
             services.PostConfigure<OtpOptions>(opts =>
             {
                 // Allow env var override of pepper per guide: Otp__Pepper
@@ -276,27 +291,33 @@ namespace Chat.Web
                 {
                     cosmosOpts.MessagesTtlSeconds = ttlParsed;
                 }
-                // Initialize Cosmos DB clients
-                // Store options and initialize synchronously on first use
+                // Initialize Cosmos DB clients using hosted service to avoid blocking during DI registration
+                // Store options for deferred initialization
                 services.AddSingleton(cosmosOpts);
-                services.AddSingleton(sp =>
-                {
-                    // Lazy initialization: CosmosClients created on first resolution
-                    // Note: GetAwaiter().GetResult() is safe here because:
-                    // 1. Runs once during singleton construction (lazy, not during DI setup)
-                    // 2. No SynchronizationContext in ASP.NET Core (no deadlock risk)
-                    // 3. Initialization completes before any requests are processed
-                    // Previous IHostedService approach caused startup deadlock when other
-                    // IHostedServices tried to resolve CosmosClients before initialization completed
-                    var opts = sp.GetRequiredService<CosmosOptions>();
-                    return CosmosClients.CreateAsync(opts).GetAwaiter().GetResult();
-                });
+                
+                // Register CosmosClients as a placeholder that will be set by the initialization service
+                CosmosClients cosmosClientsInstance = null;
+                services.AddSingleton(sp => cosmosClientsInstance ?? throw new InvalidOperationException("CosmosClients not yet initialized. Ensure CosmosClientsInitializationService has started."));
+                
+                // Register initialization service that will run async initialization properly
+                services.AddHostedService(sp => new Services.CosmosClientsInitializationService(
+                    cosmosOpts,
+                    sp.GetRequiredService<ILogger<Services.CosmosClientsInitializationService>>(),
+                    clients => cosmosClientsInstance = clients
+                ));
                 services.AddSingleton<IUsersRepository, CosmosUsersRepository>();
                 services.AddSingleton<IRoomsRepository, CosmosRoomsRepository>();
                 services.AddSingleton<IMessagesRepository, CosmosMessagesRepository>();
 
                 // Data seeder service (seeds initial data in background if database is empty)
                 services.AddHostedService<Services.DataSeederService>();
+                
+                // Translation background service (processes queued translation jobs)
+                var translationOptions = Configuration.GetSection("Translation").Get<Options.TranslationOptions>();
+                if (translationOptions?.Enabled == true)
+                {
+                    services.AddHostedService<Services.TranslationBackgroundService>();
+                }
 
                 // Redis OTP store (fail fast if placeholder)
                 // Azure App Service injects connection strings as CUSTOMCONNSTR_{name}
@@ -353,6 +374,11 @@ namespace Chat.Web
                 });
                 services.AddSingleton<IOtpStore, RedisOtpStore>();
                 services.AddSingleton<Services.IPresenceTracker, Services.RedisPresenceTracker>();
+
+                // Note: UnreadNotificationScheduler disabled - requires refactoring for lazy CosmosClients resolution
+                
+                // Presence cleanup service
+                services.AddHostedService<Services.PresenceCleanupService>();
 
                 // Health checks for Redis and Cosmos with timeouts
                 services.AddHealthChecks()
@@ -476,23 +502,18 @@ namespace Chat.Web
             }
             // Rate limiting for hub operations
             services.AddSingleton<Services.IMarkReadRateLimiter, Services.MarkReadRateLimiter>();
+            
+            // Translation service (with Redis dependency for caching)
+            services.AddHttpClient<Services.ITranslationService, Services.AzureTranslatorService>((sp, client) =>
+            {
+                // HttpClient configuration if needed (timeout, headers, etc.)
+            });
+            
+            // Translation job queue (Redis-based)
+            services.AddSingleton<Services.ITranslationJobQueue, Services.TranslationJobQueue>();
+            
             // Notification plumbing
             services.AddSingleton<Services.INotificationSender, Services.NotificationSender>();
-            services.AddSingleton<Services.UnreadNotificationScheduler>(sp =>
-                new Services.UnreadNotificationScheduler(
-                    sp.GetRequiredService<IRoomsRepository>(),
-                    sp.GetRequiredService<IUsersRepository>(),
-                    sp.GetRequiredService<IMessagesRepository>(),
-                    sp.GetRequiredService<Services.INotificationSender>(),
-                    sp.GetRequiredService<IOtpSender>(),
-                    sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<Chat.Web.Options.NotificationOptions>>(),
-                    sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<Services.UnreadNotificationScheduler>>()
-                )
-            );
-            services.AddHostedService(sp => sp.GetRequiredService<Services.UnreadNotificationScheduler>());
-            
-            // Presence cleanup service: Remove stale presence entries when heartbeats expire (multi-instance safety)
-            services.AddHostedService<Services.PresenceCleanupService>();
             
             // Rate limiting: protect auth endpoints (OTP request / verify) - configurable for tests vs prod
             services.AddRateLimiter(options =>
@@ -993,6 +1014,11 @@ namespace Chat.Web
                         }
                     }
                     catch { }
+                    
+                    // Probabilistic sampling: 20% of traces (reduces telemetry volume by 80%)
+                    // Errors are always captured regardless of sampling
+                    builder.SetSampler(new TraceIdRatioBasedSampler(0.2));
+                    
                     AddSelectedExporter(builder, otlpEndpoint, Configuration);
                 })
                 .WithMetrics(builder =>

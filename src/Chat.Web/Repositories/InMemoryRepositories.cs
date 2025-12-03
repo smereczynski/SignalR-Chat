@@ -87,6 +87,16 @@ namespace Chat.Web.Repositories
             if (set.Add(userName)) m.ReadBy = set.ToList();
             return Task.FromResult(m);
         }
+        
+        public Task<Message> UpdateTranslationAsync(int id, TranslationStatus status, System.Collections.Generic.Dictionary<string, string> translations, string jobId = null, DateTime? failedAt = null)
+        {
+            if (!_messages.TryGetValue(id, out var m)) return Task.FromResult<Message>(null);
+            m.TranslationStatus = status;
+            m.Translations = translations ?? new System.Collections.Generic.Dictionary<string, string>();
+            m.TranslationJobId = jobId;
+            m.TranslationFailedAt = failedAt;
+            return Task.FromResult(m);
+        }
     }
 
     public class InMemoryOtpStore : IOtpStore
