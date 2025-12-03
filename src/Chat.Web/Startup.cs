@@ -375,10 +375,7 @@ namespace Chat.Web
                 services.AddSingleton<IOtpStore, RedisOtpStore>();
                 services.AddSingleton<Services.IPresenceTracker, Services.RedisPresenceTracker>();
 
-                // Notification scheduler (requires repositories)
-                // TODO: Temporarily disabled due to CosmosClients dependency resolution
-                // Need to refactor to use IServiceProvider for lazy resolution
-                // services.AddHostedService<Services.UnreadNotificationScheduler>();
+                // Note: UnreadNotificationScheduler disabled - requires refactoring for lazy CosmosClients resolution
                 
                 // Presence cleanup service
                 services.AddHostedService<Services.PresenceCleanupService>();

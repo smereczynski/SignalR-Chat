@@ -119,7 +119,7 @@ public class TranslationBackgroundService : BackgroundService
 
         // Wait for all in-flight jobs to complete (max 30 seconds)
         var shutdownTimeout = TimeSpan.FromSeconds(30);
-        var shutdownCts = new CancellationTokenSource(shutdownTimeout);
+        using var shutdownCts = new CancellationTokenSource(shutdownTimeout);
         try
         {
             _logger.LogInformation("Waiting for {Count} in-flight translation jobs to complete...", 
@@ -133,9 +133,9 @@ public class TranslationBackgroundService : BackgroundService
             
             _logger.LogInformation("All translation jobs completed");
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException ex)
         {
-            _logger.LogWarning("Shutdown timeout exceeded, some translation jobs may not have completed");
+            _logger.LogWarning(ex, "Shutdown timeout exceeded, some translation jobs may not have completed");
         }
 
         _logger.LogInformation("Translation background service stopped");
@@ -189,7 +189,7 @@ public class TranslationBackgroundService : BackgroundService
             activity?.SetTag("translation.languageCount", translations.Count);
 
             // 4. Update status to Completed
-            var message = await _messages.UpdateTranslationAsync(
+            await _messages.UpdateTranslationAsync(
                 job.MessageId,
                 TranslationStatus.Completed,
                 translations,
@@ -212,10 +212,10 @@ public class TranslationBackgroundService : BackgroundService
                 "Translation completed for message {MessageId} with {Count} languages in {DurationMs}ms",
                 job.MessageId, translations.Count, duration.TotalMilliseconds);
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException ex) when (cancellationToken.IsCancellationRequested)
         {
             // Shutdown requested - requeue job for next startup
-            _logger.LogWarning(
+            _logger.LogWarning(ex,
                 "Translation job {JobId} cancelled due to shutdown, re-enqueueing for message {MessageId}",
                 job.JobId, job.MessageId);
 
