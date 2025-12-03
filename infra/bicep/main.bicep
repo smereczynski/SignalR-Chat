@@ -254,6 +254,7 @@ module translation './modules/translation.bicep' = if (enableTranslation) {
     ]
     logAnalyticsWorkspaceId: monitoring.outputs.logAnalyticsWorkspaceId
     vpnIpAddress: vpnIpAddress
+    bypassAzureServices: true
   }
 }
 
@@ -294,10 +295,12 @@ module appService './modules/app-service.bicep' = {
     entraIdAuthorizationAdminRoleValue: entraIdAuthorizationAdminRoleValue
     // Translation parameters (conditional)
     translationEnabled: enableTranslation
-    translationResourceId: enableTranslation ? translation!.outputs.resourceId : ''
-    translationEndpoint: enableTranslation ? translation!.outputs.endpoint : ''
-    translationProvider: enableTranslation ? translation!.outputs.translationProvider : ''
-    translationModelDeploymentName: enableTranslation ? translation!.outputs.modelDeploymentName : ''
+    translationResourceId: enableTranslation ? translation.outputs.resourceId : ''
+    translationEndpoint: enableTranslation ? translation.outputs.endpoint : ''
+    translationProvider: enableTranslation ? translation.outputs.translationProvider : ''
+    translationModelDeploymentName: enableTranslation ? translation.outputs.modelDeploymentName : ''
+    translationSubscriptionKey: enableTranslation ? translation.outputs.subscriptionKey : ''
+    translationRegion: enableTranslation ? translation.outputs.region : ''
   }
 }
 
@@ -326,7 +329,7 @@ output privateEndpointsSubnetId string = networking.outputs.privateEndpointsSubn
 output translationEnabled bool = enableTranslation
 
 @description('Translation endpoint (if enabled)')
-output translationEndpoint string = enableTranslation ? translation!.outputs.endpoint : ''
+output translationEndpoint string = enableTranslation ? translation.outputs.endpoint : ''
 
 @description('Translation provider (NMT, LLM-GPT4oMini, or LLM-GPT4o)')
-output translationProvider string = enableTranslation ? translation!.outputs.translationProvider : ''
+output translationProvider string = enableTranslation ? translation.outputs.translationProvider : ''
