@@ -42,6 +42,7 @@ jobs:
       BICEP_PRIVATE_ENDPOINTS_SUBNET_PREFIX: ${{ vars.BICEP_PRIVATE_ENDPOINTS_SUBNET_PREFIX }}
       BICEP_ACS_DATA_LOCATION: ${{ vars.BICEP_ACS_DATA_LOCATION }}
       BICEP_VNET_DNS_SERVERS: ${{ vars.BICEP_VNET_DNS_SERVERS }}
+      BICEP_VPN_IP: ${{ vars.BICEP_VPN_IP }}
       ENVIRONMENT: ${{ github.event.inputs.environment }}
     
     steps:
@@ -194,6 +195,7 @@ jobs:
             --parameters entraIdConnectionString="${{ secrets.ENTRA_ID_CONNECTION_STRING }}" \
             --parameters entraIdAuthorizationHomeTenantId="${{ vars.ENTRA_ID_HOME_TENANT_ID }}" \
             --parameters entraIdAuthorizationAdminRoleValue="${{ vars.ENTRA_ID_ADMIN_ROLE_VALUE }}" \
+            --parameters vpnIpAddress="${{ env.BICEP_VPN_IP }}" \
             --parameters enableTranslation=${{ vars.ENABLE_TRANSLATION || 'true' }} \
             --parameters translationProvider="${{ vars.TRANSLATION_PROVIDER || 'LLM-GPT4oMini' }}"
           echo "::endgroup::"
@@ -220,6 +222,7 @@ jobs:
             --parameters entraIdConnectionString="${{ secrets.ENTRA_ID_CONNECTION_STRING }}" \
             --parameters entraIdAuthorizationHomeTenantId="${{ vars.ENTRA_ID_HOME_TENANT_ID }}" \
             --parameters entraIdAuthorizationAdminRoleValue="${{ vars.ENTRA_ID_ADMIN_ROLE_VALUE }}" \
+            --parameters vpnIpAddress="${{ env.BICEP_VPN_IP }}" \
             --parameters enableTranslation=${{ vars.ENABLE_TRANSLATION || 'true' }} \
             --parameters translationProvider="${{ vars.TRANSLATION_PROVIDER || 'LLM-GPT4oMini' }}" \
             --result-format FullResourcePayloads
@@ -250,6 +253,7 @@ jobs:
             --parameters entraIdConnectionString="${{ secrets.ENTRA_ID_CONNECTION_STRING }}" \
             --parameters entraIdAuthorizationHomeTenantId="${{ vars.ENTRA_ID_HOME_TENANT_ID }}" \
             --parameters entraIdAuthorizationAdminRoleValue="${{ vars.ENTRA_ID_ADMIN_ROLE_VALUE }}" \
+            --parameters vpnIpAddress="${{ env.BICEP_VPN_IP }}" \
             --parameters enableTranslation=${{ vars.ENABLE_TRANSLATION || 'true' }} \
             --parameters translationProvider="${{ vars.TRANSLATION_PROVIDER || 'LLM-GPT4oMini' }}" \
             --name "$DEPLOYMENT_NAME" \
