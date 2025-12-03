@@ -239,3 +239,7 @@ output translationProvider string = translationProvider
 
 @description('Model deployment name (if LLM-based translation)')
 output modelDeploymentName string = translationProvider == 'LLM-GPT4oMini' ? 'gpt-4o-mini' : (translationProvider == 'LLM-GPT4o' ? 'gpt-4o' : '')
+
+@description('Primary subscription key (for authentication)')
+@secure()
+output subscriptionKey string = aiServices.listKeys().key1

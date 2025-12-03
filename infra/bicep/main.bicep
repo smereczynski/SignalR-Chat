@@ -294,10 +294,12 @@ module appService './modules/app-service.bicep' = {
     entraIdAuthorizationAdminRoleValue: entraIdAuthorizationAdminRoleValue
     // Translation parameters (conditional)
     translationEnabled: enableTranslation
-    translationResourceId: enableTranslation ? translation!.outputs.resourceId : ''
-    translationEndpoint: enableTranslation ? translation!.outputs.endpoint : ''
-    translationProvider: enableTranslation ? translation!.outputs.translationProvider : ''
-    translationModelDeploymentName: enableTranslation ? translation!.outputs.modelDeploymentName : ''
+    translationResourceId: enableTranslation ? translation.outputs.resourceId : ''
+    translationEndpoint: enableTranslation ? translation.outputs.endpoint : ''
+    translationRegion: enableTranslation ? translation.outputs.region : ''
+    translationProvider: enableTranslation ? translation.outputs.translationProvider : ''
+    translationModelDeploymentName: enableTranslation ? translation.outputs.modelDeploymentName : ''
+    translationSubscriptionKey: enableTranslation ? translation.outputs.subscriptionKey : ''
   }
 }
 
