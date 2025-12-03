@@ -34,5 +34,18 @@ namespace Chat.Web.Resilience
             if (ex is SocketException) return true;
             return false;
         }
+
+        public static bool IsHttpTransient(Exception ex)
+        {
+            if (ex is System.Net.Http.HttpRequestException httpEx)
+            {
+                // Retry on network errors, timeouts, 429 (rate limit), 503 (service unavailable)
+                if (httpEx.StatusCode == System.Net.HttpStatusCode.TooManyRequests) return true;
+                if (httpEx.StatusCode == System.Net.HttpStatusCode.ServiceUnavailable) return true;
+                if (httpEx.StatusCode == System.Net.HttpStatusCode.RequestTimeout) return true;
+                if (httpEx.StatusCode == System.Net.HttpStatusCode.GatewayTimeout) return true;
+            }
+            return IsNetworkTransient(ex);
+        }
     }
 }

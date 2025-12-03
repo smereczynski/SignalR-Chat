@@ -199,6 +199,7 @@ namespace Chat.Web
             services.Configure<EntraIdOptions>(Configuration.GetSection("EntraId"));
             services.Configure<Chat.Web.Options.NotificationOptions>(Configuration.GetSection("Notifications"));
             services.Configure<Chat.Web.Options.RateLimitingOptions>(Configuration.GetSection("RateLimiting:MarkRead"));
+            services.Configure<Chat.Web.Options.TranslationOptions>(Configuration.GetSection("Translation"));
             services.PostConfigure<OtpOptions>(opts =>
             {
                 // Allow env var override of pepper per guide: Otp__Pepper
@@ -276,21 +277,20 @@ namespace Chat.Web
                 {
                     cosmosOpts.MessagesTtlSeconds = ttlParsed;
                 }
-                // Initialize Cosmos DB clients
-                // Store options and initialize synchronously on first use
+                // Initialize Cosmos DB clients using hosted service to avoid blocking during DI registration
+                // Store options for deferred initialization
                 services.AddSingleton(cosmosOpts);
-                services.AddSingleton(sp =>
-                {
-                    // Lazy initialization: CosmosClients created on first resolution
-                    // Note: GetAwaiter().GetResult() is safe here because:
-                    // 1. Runs once during singleton construction (lazy, not during DI setup)
-                    // 2. No SynchronizationContext in ASP.NET Core (no deadlock risk)
-                    // 3. Initialization completes before any requests are processed
-                    // Previous IHostedService approach caused startup deadlock when other
-                    // IHostedServices tried to resolve CosmosClients before initialization completed
-                    var opts = sp.GetRequiredService<CosmosOptions>();
-                    return CosmosClients.CreateAsync(opts).GetAwaiter().GetResult();
-                });
+                
+                // Register CosmosClients as a placeholder that will be set by the initialization service
+                CosmosClients cosmosClientsInstance = null;
+                services.AddSingleton(sp => cosmosClientsInstance ?? throw new InvalidOperationException("CosmosClients not yet initialized. Ensure CosmosClientsInitializationService has started."));
+                
+                // Register initialization service that will run async initialization properly
+                services.AddHostedService(sp => new Services.CosmosClientsInitializationService(
+                    cosmosOpts,
+                    sp.GetRequiredService<ILogger<Services.CosmosClientsInitializationService>>(),
+                    clients => cosmosClientsInstance = clients
+                ));
                 services.AddSingleton<IUsersRepository, CosmosUsersRepository>();
                 services.AddSingleton<IRoomsRepository, CosmosRoomsRepository>();
                 services.AddSingleton<IMessagesRepository, CosmosMessagesRepository>();
@@ -476,6 +476,13 @@ namespace Chat.Web
             }
             // Rate limiting for hub operations
             services.AddSingleton<Services.IMarkReadRateLimiter, Services.MarkReadRateLimiter>();
+            
+            // Translation service (with Redis dependency for caching)
+            services.AddHttpClient<Services.ITranslationService, Services.AzureTranslatorService>((sp, client) =>
+            {
+                // HttpClient configuration if needed (timeout, headers, etc.)
+            });
+            
             // Notification plumbing
             services.AddSingleton<Services.INotificationSender, Services.NotificationSender>();
             services.AddSingleton<Services.UnreadNotificationScheduler>(sp =>
