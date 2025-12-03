@@ -64,6 +64,7 @@ jobs:
           --verbosity normal \
           --logger "trx;LogFileName=test-results.trx" \
           --results-directory ./TestResults \
+          --filter "Category!=LocalOnly" \
           -- NUnit.NumberOfTestWorkers=1
       env:
         Testing__InMemory: "true"

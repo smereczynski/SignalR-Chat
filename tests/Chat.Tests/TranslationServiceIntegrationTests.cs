@@ -27,7 +27,11 @@ namespace Chat.Tests;
 /// Note: These tests make real API calls to Azure AI Translator and will consume quota.
 /// Some tests may fail if the API format differs from implementation expectations.
 /// Tests are designed to be non-destructive and use test-specific messages.
+/// 
+/// These tests are excluded from CI and are intended for local development only.
 /// </summary>
+[Trait("Category", "Integration")]
+[Trait("Category", "LocalOnly")]
 public class TranslationServiceIntegrationTests : IDisposable
 {
     private readonly ITranslationService _translationService;
