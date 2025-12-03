@@ -46,9 +46,6 @@ param vpnIpAddress string = ''
 @description('Log Analytics Workspace ID for diagnostic logs')
 param logAnalyticsWorkspaceId string = ''
 
-@description('Enable bypass for Azure services')
-param bypassAzureServices bool = true
-
 // =========================================
 // Resource Naming
 // =========================================
@@ -103,7 +100,7 @@ resource aiServices 'Microsoft.CognitiveServices/accounts@2025-06-01' = {
     networkAcls: {
       defaultAction: (environment == 'dev' && !empty(vpnIpAddress)) || (environment != 'dev') ? 'Deny' : 'Allow'
       ipRules: ipRulesArray
-      bypass: bypassAzureServices ? 'AzureServices' : 'None'
+      bypass: 'AzureServices' // Allow Azure services bypass
     }
   }
 }
@@ -242,7 +239,3 @@ output translationProvider string = translationProvider
 
 @description('Model deployment name (if LLM-based translation)')
 output modelDeploymentName string = translationProvider == 'LLM-GPT4oMini' ? 'gpt-4o-mini' : (translationProvider == 'LLM-GPT4o' ? 'gpt-4o' : '')
-
-@description('Primary subscription key (for API authentication)')
-@secure()
-output subscriptionKey string = aiServices.listKeys().key1

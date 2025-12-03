@@ -109,13 +109,6 @@ param translationProvider string = ''
 @description('Translation model deployment name (for LLM providers)')
 param translationModelDeploymentName string = ''
 
-@description('Translation subscription key (API key for authentication)')
-@secure()
-param translationSubscriptionKey string = ''
-
-@description('Translation region (e.g., polandcentral)')
-param translationRegion string = ''
-
 @description('Log Analytics Workspace ID for diagnostic logs')
 param logAnalyticsWorkspaceId string = ''
 
@@ -279,18 +272,6 @@ var baseAppSettings = [
     name: 'Translation__ModelDeploymentName'
     value: translationModelDeploymentName
   }
-  {
-    name: 'Translation__Region'
-    value: translationRegion
-  }
-  {
-    name: 'Translation__ApiVersion'
-    value: '2025-10-01-preview'
-  }
-  {
-    name: 'Translation__CacheTtlSeconds'
-    value: '3600'
-  }
 ]
 
 // Allowed tenants expansion
@@ -339,15 +320,7 @@ var entraConnectionStringArray = entraIdConnectionString != '' ? [
   }
 ] : []
 
-var translationConnectionStringArray = translationEnabled && translationSubscriptionKey != '' ? [
-  {
-    name: 'Translation__SubscriptionKey'
-    connectionString: translationSubscriptionKey
-    type: 'Custom'
-  }
-] : []
-
-var allConnectionStrings = concat(baseConnectionStrings, entraConnectionStringArray, translationConnectionStringArray)
+var allConnectionStrings = concat(baseConnectionStrings, entraConnectionStringArray)
 
 // ==========================================
 // App Service Plan
