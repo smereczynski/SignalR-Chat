@@ -291,27 +291,6 @@ public class TranslationJobQueueTests
     public async Task EnqueueAsync_WithNullJob_ShouldThrowNullReferenceException()
     {
         // Act & Assert
-        // Implementation doesn't explicitly check for null, throws NullReferenceException
-        // when accessing job.MessageId in logger
         await Assert.ThrowsAsync<NullReferenceException>(() => _queue.EnqueueAsync(null!));
-    }
-
-    [Fact(Skip = "Implementation uses RPOP (non-blocking) and doesn't check cancellation token - limitation documented")]
-    public async Task DequeueAsync_WithCancellation_DoesNotSupportCancellation()
-    {
-        // NOTE: The current implementation uses RPOP (non-blocking) which doesn't support
-        // cancellation tokens. This is a known limitation. If cancellation support is needed,
-        // the implementation should be changed to use BRPOP with a timeout and poll the token.
-        
-        // Arrange
-        var cts = new CancellationTokenSource();
-        cts.Cancel();
-
-        // Act
-        var result = await _queue.DequeueAsync(cts.Token);
-        
-        // Assert
-        // Will return null (no job) rather than throwing OperationCanceledException
-        Assert.Null(result);
     }
 }
