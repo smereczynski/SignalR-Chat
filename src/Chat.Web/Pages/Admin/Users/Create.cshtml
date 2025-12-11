@@ -25,6 +25,12 @@
                 <input asp-for="Input.MobileNumber" type="tel" class="form-control" />
                 <span asp-validation-for="Input.MobileNumber" class="text-danger"></span>
             </div>
+            <div class="mb-3">
+                <label for="Input_Upn" class="form-label">UPN (Entra ID)</label>
+                <input asp-for="Input.Upn" type="email" class="form-control" placeholder="user@domain.com (optional)" />
+                <span asp-validation-for="Input.Upn" class="text-danger"></span>
+                <small class="form-text text-muted">User Principal Name for Microsoft Entra ID authentication (e.g., msmereczynski@bluesoft.com). Leave empty for OTP-only users.</small>
+            </div>
             <div class="mb-3 form-check">
                 <input type="checkbox" asp-for="Input.Enabled" class="form-check-input" id="enabledCheck" checked />
                 <label class="form-check-label" for="enabledCheck">@Localizer["EnabledQuestion"]</label>

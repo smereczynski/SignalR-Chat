@@ -16,13 +16,13 @@ The Translation Service uses different configuration approaches based on the dep
 
 ### `.env.local` Environment Variables
 
-For local development, create a `.env.local` file (from `.env.local.example`) with the following Translation section:
+For local development, create a `.env.local` file (from `.env.local.example`) with the following Translation section. Translation is **enabled by default**; set `Translation__Enabled=false` if you want to opt out locally.
 
 ```bash
 # Azure AI Translator Service
 # Configuration for real-time message translation (NMT or LLM-based)
-# Leave Enabled=false or empty to disable translation functionality
-Translation__Enabled=false
+# Leave Enabled=true to keep translation on; set to false to disable locally
+Translation__Enabled=true
 Translation__Endpoint=
 Translation__SubscriptionKey=
 Translation__Region=
@@ -35,7 +35,7 @@ Translation__CacheTtlSeconds=3600
 
 | Environment Variable | Type | Description | Default | Required |
 |---------------------|------|-------------|---------|----------|
-| `Translation__Enabled` | bool | Enable/disable translation service | `false` | No |
+| `Translation__Enabled` | bool | Enable/disable translation service | `true` | No |
 | `Translation__Endpoint` | string | Azure Translator endpoint URL | - | Yes (if enabled) |
 | `Translation__SubscriptionKey` | string | API subscription key (for local dev only) | - | Yes (if enabled) |
 | `Translation__Region` | string | Azure region (e.g., `westeurope`) | - | Yes (if enabled) |
@@ -107,20 +107,31 @@ Azure App Service is granted **Cognitive Services User** role on the AI Services
 
 ### appsettings.Production.json
 
-The production configuration file uses placeholders for environment-specific values:
+The production configuration file keeps translation enabled by default. Values are blank so they must be populated via App Settings/Bicep:
 
 ```json
 "Translation": {
-  "Enabled": true,
-  "Endpoint": "${TRANSLATION_ENDPOINT}",
-  "SubscriptionKey": "${TRANSLATION_SUBSCRIPTION_KEY}",
-  "Region": "${TRANSLATION_REGION}",
-  "ApiVersion": "2025-10-01-preview",
-  "DeploymentName": "${TRANSLATION_DEPLOYMENT_NAME}"
+    "Enabled": true,
+    "ResourceId": "",
+    "Endpoint": "",
+    "SubscriptionKey": "",
+    "Region": "",
+    "ApiVersion": "2025-10-01-preview",
+    "Provider": "",
+    "DeploymentName": "",
+    "CacheTtlSeconds": 3600,
+    "QueueName": "translation:jobs",
+    "MaxConcurrentJobs": 5,
+    "JobTimeoutSeconds": 30,
+    "MaxRetries": 3,
+    "RetryDelaySeconds": 5,
+    "DequeueTimeoutSeconds": 5
 }
 ```
 
-**Note**: In Azure App Service with Managed Identity, `SubscriptionKey` is **not set** and the SDK automatically uses managed identity credentials.
+**Notes**:
+- In Azure App Service with Managed Identity, `SubscriptionKey` remains empty; authentication flows through Managed Identity.
+- Set `Translation__Enabled=false` in App Settings if you need to temporarily disable translation in prod/staging without code changes.
 
 ---
 
@@ -152,7 +163,7 @@ The Bicep deployment creates App Settings with `__` notation, which ASP.NET Core
 | `translation.outputs.modelDeploymentName` | `Translation__ModelDeploymentName` | `Translation:ModelDeploymentName` |
 | (parameter) | `Translation__Enabled` | `Translation:Enabled` |
 
-**Missing from appsettings.json** (needs to be added):
+**Already present in appsettings.json**:
 - `Translation:ResourceId` - Required for Managed Identity
 - `Translation:Provider` - Required to distinguish NMT vs LLM
 
