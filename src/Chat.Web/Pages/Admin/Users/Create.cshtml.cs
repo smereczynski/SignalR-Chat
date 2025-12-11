@@ -23,6 +23,10 @@ public class UsersCreateModel : PageModel
         public string Email { get; set; } = string.Empty;
         [Required]
         public string MobileNumber { get; set; } = string.Empty;
+        
+        [EmailAddress]
+        public string Upn { get; set; } = string.Empty;
+        
         public bool Enabled { get; set; } = true;
     }
 
@@ -43,6 +47,7 @@ public class UsersCreateModel : PageModel
             UserName = Input.UserName,
             Email = Input.Email,
             MobileNumber = Input.MobileNumber,
+            Upn = !string.IsNullOrWhiteSpace(Input.Upn) ? Input.Upn : null,
             Enabled = Input.Enabled,
             FixedRooms = new List<string>()
         };
