@@ -252,16 +252,29 @@
   <data name="Email" xml:space="preserve">
     <value>E-mail</value>
   </data>
+
   <data name="EnterYourEmail" xml:space="preserve">
-    <value>Zadejte svůj e-mail</value>
+    <value>Zadejte svůj email</value>
+  </data>
+  <data name="UserNameFormat" xml:space="preserve">
+    <value>uzivatel@domena.cz</value>
   </data>
   <data name="EnterEmailForOtp" xml:space="preserve">
-    <value>Zadejte svůj e-mail pro přijetí ověřovacího kódu.</value>
+    <value>Zadejte svůj email pro získání ověřovacího kódu.</value>
+  </data>
+  <data name="EnterUserNameForOtp" xml:space="preserve">
+    <value>Zadejte své uživatelské jméno pro získání ověřovacího kódu.</value>
   </data>
   <data name="EmailRequired" xml:space="preserve">
-    <value>E-mail je povinný</value>
+    <value>Email je povinný</value>
+  </data>
+  <data name="UserNameRequired" xml:space="preserve">
+    <value>Uživatelské jméno je povinné</value>
   </data>
   <data name="EmailAndCodeRequired" xml:space="preserve">
-    <value>E-mail a kód jsou povinné</value>
+    <value>Email a kód jsou povinné</value>
+  </data>
+  <data name="UserNameAndCodeRequired" xml:space="preserve">
+    <value>Uživatelské jméno a kód jsou povinné</value>
   </data>
 </root>

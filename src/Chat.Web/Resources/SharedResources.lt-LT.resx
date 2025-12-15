@@ -255,13 +255,25 @@
   <data name="EnterYourEmail" xml:space="preserve">
     <value>Įveskite savo el. paštą</value>
   </data>
+  <data name="UserNameFormat" xml:space="preserve">
+    <value>vartotojas@domenas.lt</value>
+  </data>
   <data name="EnterEmailForOtp" xml:space="preserve">
     <value>Įveskite savo el. paštą, kad gautumėte patvirtinimo kodą.</value>
   </data>
+  <data name="EnterUserNameForOtp" xml:space="preserve">
+    <value>Įveskite savo vartotojo vardą, kad gautumėte patvirtinimo kodą.</value>
+  </data>
   <data name="EmailRequired" xml:space="preserve">
-    <value>El. paštas yra privalomas</value>
+    <value>El. paštas privalomas</value>
+  </data>
+  <data name="UserNameRequired" xml:space="preserve">
+    <value>Vartotojo vardas privalomas</value>
   </data>
   <data name="EmailAndCodeRequired" xml:space="preserve">
-    <value>El. paštas ir kodas yra privalomi</value>
+    <value>El. paštas ir kodas privalomi</value>
+  </data>
+  <data name="UserNameAndCodeRequired" xml:space="preserve">
+    <value>Vartotojo vardas ir kodas privalomi</value>
   </data>
 </root>
