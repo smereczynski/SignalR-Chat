@@ -158,7 +158,7 @@ var baseAppSettings = [
   }
   {
     name: 'ASPNETCORE_ENVIRONMENT'
-    value: environment == 'prod' ? 'Production' : (environment == 'staging' ? 'Production' : 'Development')
+    value: environment == 'prod' ? 'Production' : (environment == 'staging' ? 'Staging' : 'Development')
   }
   {
     name: 'Cosmos__Database'
