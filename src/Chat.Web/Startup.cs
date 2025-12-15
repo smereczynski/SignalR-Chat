@@ -828,7 +828,7 @@ namespace Chat.Web
                                         // Without this, SignalR will still see the original UPN in Context.User.Identity.Name
                                         context.Principal = new ClaimsPrincipal(claimsIdentity);
                                         
-                                        logger.LogDebug(
+                                        logger.LogInformation(
                                             "OnTokenValidated: Set ClaimTypes.Name to {UserName} (was UPN: {Upn})",
                                             Chat.Web.Utilities.LogSanitizer.Sanitize(user.UserName),
                                             Chat.Web.Utilities.LogSanitizer.Sanitize(upn));
