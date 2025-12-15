@@ -808,6 +808,28 @@ namespace Chat.Web
                                     
                                     await usersRepo.UpsertAsync(user);
                                     
+                                    // CRITICAL FIX: Set ClaimTypes.Name to userName (not UPN)
+                                    // The app uses Context.User.Identity.Name throughout (ChatHub, controllers, etc.)
+                                    // and expects it to match the database userName field, not the UPN
+                                    var claimsIdentity = context.Principal?.Identity as ClaimsIdentity;
+                                    if (claimsIdentity != null)
+                                    {
+                                        // Remove existing name claim (which contains UPN)
+                                        var existingNameClaim = claimsIdentity.FindFirst(ClaimTypes.Name);
+                                        if (existingNameClaim != null)
+                                        {
+                                            claimsIdentity.RemoveClaim(existingNameClaim);
+                                        }
+                                        
+                                        // Add new name claim with userName from database
+                                        claimsIdentity.AddClaim(new Claim(ClaimTypes.Name, user.UserName));
+                                        
+                                        logger.LogDebug(
+                                            "OnTokenValidated: Set ClaimTypes.Name to {UserName} (was UPN: {Upn})",
+                                            Chat.Web.Utilities.LogSanitizer.Sanitize(user.UserName),
+                                            Chat.Web.Utilities.LogSanitizer.Sanitize(upn));
+                                    }
+                                    
                                     logger.LogInformation(
                                         "OnTokenValidated: User {UserName} authenticated via Entra ID (UPN: {Upn}, Tenant: {TenantId})",
                                         Chat.Web.Utilities.LogSanitizer.Sanitize(user.UserName),
