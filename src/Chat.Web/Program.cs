@@ -47,6 +47,7 @@ namespace Chat.Web
                 .MinimumLevel.Override("StackExchange.Redis", LogEventLevel.Information) // Always log Redis operations
                 .MinimumLevel.Override("Azure.Core", isDevelopment ? LogEventLevel.Information : LogEventLevel.Warning)
                 .MinimumLevel.Override("Azure.Messaging", isDevelopment ? LogEventLevel.Information : LogEventLevel.Warning)
+                .MinimumLevel.Override("Azure", LogEventLevel.Warning) // Suppress Azure SDK verbose traces (Enqueued, Sent, ResponseReceived)
                 .MinimumLevel.Is(isDevelopment ? LogEventLevel.Debug : LogEventLevel.Information)
                 .Enrich.WithEnvironmentName()
                 .Enrich.WithMachineName()
