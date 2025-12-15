@@ -194,6 +194,8 @@ namespace Chat.Web
             var assemblyVersion = typeof(Startup).Assembly.GetName().Version?.ToString() ?? "unknown";
 
             // OpenTelemetry logging provider (simple; Serilog remains primary)
+            // Logs (AppTraces table) are NOT sampled - all application logs are captured
+            // Traces (traces table) are sampled at 20% for cost optimization (configured below in WithTracing)
             services.AddLogging(lb =>
             {
                 lb.AddOpenTelemetry(o =>
