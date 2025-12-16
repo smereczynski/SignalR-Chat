@@ -469,18 +469,29 @@ document.addEventListener('DOMContentLoaded', () => {
     // Language switching functionality
     const languageModal = document.getElementById('languageModal');
     if (languageModal) {
-        // Map of culture codes to flag emojis
+        // Map of culture codes to flag-icons country codes (OS-independent, avoids emoji font support issues).
         const cultureFlags = {
-            'en': '🇬🇧',
-            'pl-PL': '🇵🇱',
-            'de-DE': '🇩🇪',
-            'cs-CZ': '🇨🇿',
-            'sk-SK': '🇸🇰',
-            'uk-UA': '🇺🇦',
-            'be-BY': '🇧🇾',
-            'lt-LT': '🇱🇹',
-            'ru-RU': '🇷🇺'
+            'en': 'gb',
+            'pl-PL': 'pl',
+            'de-DE': 'de',
+            'cs-CZ': 'cz',
+            'sk-SK': 'sk',
+            'uk-UA': 'ua',
+            'be-BY': 'by',
+            'lt-LT': 'lt',
+            'ru-RU': 'ru'
         };
+
+        function setFlagIcon(el, flagCode) {
+            if (!el || !flagCode) return;
+
+            // Keep base classes but swap any existing fi-* code.
+            Array.from(el.classList)
+                .filter(c => c.startsWith('fi-'))
+                .forEach(c => el.classList.remove(c));
+
+            el.classList.add('fi', 'fis', `fi-${flagCode}`);
+        }
 
         // Get current language from HTML lang attribute
         const currentLang = document.documentElement.lang || 'en';
@@ -497,9 +508,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Set current language flag
         const currentFlagEl = document.getElementById('currentLanguageFlag');
-        if (currentFlagEl && cultureFlags[currentCulture]) {
-            currentFlagEl.textContent = cultureFlags[currentCulture];
-        }
+        setFlagIcon(currentFlagEl, cultureFlags[currentCulture]);
 
         // Mark current language as active in modal
         on(languageModal, 'show.bs.modal', () => {

@@ -22,4 +22,32 @@ for(const f of ['signalr.js','signalr.min.js']){
   fs.copyFileSync(path.join(signalrBase,f), path.join(webrootLib,'microsoft-signalr',f));
 }
 
+// Flag icons (CSS + a small subset of SVGs used by the app)
+const flagIconsBase = path.join(root, 'node_modules', 'flag-icons');
+const flagIconsCssDir = path.join(webrootLib, 'flag-icons', 'css');
+const flagIconsFlags4x3Dir = path.join(webrootLib, 'flag-icons', 'flags', '4x3');
+const flagIconsFlags1x1Dir = path.join(webrootLib, 'flag-icons', 'flags', '1x1');
+ensureDir(flagIconsCssDir);
+ensureDir(flagIconsFlags4x3Dir);
+ensureDir(flagIconsFlags1x1Dir);
+
+fs.copyFileSync(
+  path.join(flagIconsBase, 'css', 'flag-icons.min.css'),
+  path.join(flagIconsCssDir, 'flag-icons.min.css')
+);
+
+// Only copy flags we actually use.
+// Include 'xx' as the placeholder used before JS sets the current culture.
+const usedFlags = ['xx', 'gb', 'pl', 'de', 'cz', 'sk', 'ua', 'by', 'lt', 'ru'];
+for (const code of usedFlags) {
+  fs.copyFileSync(
+    path.join(flagIconsBase, 'flags', '4x3', `${code}.svg`),
+    path.join(flagIconsFlags4x3Dir, `${code}.svg`)
+  );
+  fs.copyFileSync(
+    path.join(flagIconsBase, 'flags', '1x1', `${code}.svg`),
+    path.join(flagIconsFlags1x1Dir, `${code}.svg`)
+  );
+}
+
 console.log('Libraries copied to wwwroot/lib');

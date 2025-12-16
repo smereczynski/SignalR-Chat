@@ -10,7 +10,7 @@
           <div class="d-flex justify-content-between align-items-center mb-3">
             <h5 class="card-title mb-0">@Localizer["SignIn"]</h5>
             <button type="button" id="btn-language-login" class="btn btn-sm btn-outline-secondary" title="@Localizer["ChangeLanguage"]" data-bs-toggle="modal" data-bs-target="#languageModal">
-              <span id="currentLanguageFlag" class="flag-icon">🌐</span>
+              <span id="currentLanguageFlag" class="flag-icon fi fi-xx fis" aria-hidden="true"></span>
             </button>
           </div>
 
@@ -129,32 +129,32 @@
             </div>
             <div class="modal-body">
                 <div class="list-group language-list">
-                    <button type="button" class="list-group-item list-group-item-action" data-culture="en" data-flag="🇬🇧">
-                        <span class="flag-icon me-2">🇬🇧</span> English
+                  <button type="button" class="list-group-item list-group-item-action" data-culture="en" data-flag="gb">
+                    <span class="flag-icon fi fi-gb fis me-2" aria-hidden="true"></span> English
                     </button>
-                    <button type="button" class="list-group-item list-group-item-action" data-culture="pl-PL" data-flag="🇵🇱">
-                        <span class="flag-icon me-2">🇵🇱</span> Polski
+                  <button type="button" class="list-group-item list-group-item-action" data-culture="pl-PL" data-flag="pl">
+                    <span class="flag-icon fi fi-pl fis me-2" aria-hidden="true"></span> Polski
                     </button>
-                    <button type="button" class="list-group-item list-group-item-action" data-culture="de-DE" data-flag="🇩🇪">
-                        <span class="flag-icon me-2">🇩🇪</span> Deutsch
+                  <button type="button" class="list-group-item list-group-item-action" data-culture="de-DE" data-flag="de">
+                    <span class="flag-icon fi fi-de fis me-2" aria-hidden="true"></span> Deutsch
                     </button>
-                    <button type="button" class="list-group-item list-group-item-action" data-culture="cs-CZ" data-flag="🇨🇿">
-                        <span class="flag-icon me-2">🇨🇿</span> Čeština
+                  <button type="button" class="list-group-item list-group-item-action" data-culture="cs-CZ" data-flag="cz">
+                    <span class="flag-icon fi fi-cz fis me-2" aria-hidden="true"></span> Čeština
                     </button>
-                    <button type="button" class="list-group-item list-group-item-action" data-culture="sk-SK" data-flag="🇸🇰">
-                        <span class="flag-icon me-2">🇸🇰</span> Slovenčina
+                  <button type="button" class="list-group-item list-group-item-action" data-culture="sk-SK" data-flag="sk">
+                    <span class="flag-icon fi fi-sk fis me-2" aria-hidden="true"></span> Slovenčina
                     </button>
-                    <button type="button" class="list-group-item list-group-item-action" data-culture="uk-UA" data-flag="🇺🇦">
-                        <span class="flag-icon me-2">🇺🇦</span> Українська
+                  <button type="button" class="list-group-item list-group-item-action" data-culture="uk-UA" data-flag="ua">
+                    <span class="flag-icon fi fi-ua fis me-2" aria-hidden="true"></span> Українська
                     </button>
-                    <button type="button" class="list-group-item list-group-item-action" data-culture="be-BY" data-flag="🇧🇾">
-                        <span class="flag-icon me-2">🇧🇾</span> Беларуская
+                  <button type="button" class="list-group-item list-group-item-action" data-culture="be-BY" data-flag="by">
+                    <span class="flag-icon fi fi-by fis me-2" aria-hidden="true"></span> Беларуская
                     </button>
-                    <button type="button" class="list-group-item list-group-item-action" data-culture="lt-LT" data-flag="🇱🇹">
-                        <span class="flag-icon me-2">🇱🇹</span> Lietuvių
+                  <button type="button" class="list-group-item list-group-item-action" data-culture="lt-LT" data-flag="lt">
+                    <span class="flag-icon fi fi-lt fis me-2" aria-hidden="true"></span> Lietuvių
                     </button>
-                    <button type="button" class="list-group-item list-group-item-action" data-culture="ru-RU" data-flag="🇷🇺">
-                        <span class="flag-icon me-2">🇷🇺</span> Русский
+                  <button type="button" class="list-group-item list-group-item-action" data-culture="ru-RU" data-flag="ru">
+                    <span class="flag-icon fi fi-ru fis me-2" aria-hidden="true"></span> Русский
                     </button>
                 </div>
             </div>
@@ -206,18 +206,29 @@
       const languageModal = document.getElementById('languageModal');
       if (!languageModal) return;
       
-      // Map of culture codes to flag emojis
+      // Map of culture codes to flag-icons country codes (OS-independent, avoids emoji font support issues).
       const cultureFlags = {
-        'en': '🇬🇧',
-        'pl-PL': '🇵🇱',
-        'de-DE': '🇩🇪',
-        'cs-CZ': '🇨🇿',
-        'sk-SK': '🇸🇰',
-        'uk-UA': '🇺🇦',
-        'be-BY': '🇧🇾',
-        'lt-LT': '🇱🇹',
-        'ru-RU': '🇷🇺'
+        'en': 'gb',
+        'pl-PL': 'pl',
+        'de-DE': 'de',
+        'cs-CZ': 'cz',
+        'sk-SK': 'sk',
+        'uk-UA': 'ua',
+        'be-BY': 'by',
+        'lt-LT': 'lt',
+        'ru-RU': 'ru'
       };
+
+      function setFlagIcon(el, flagCode) {
+        if (!el || !flagCode) return;
+
+        // Keep base classes but swap any existing fi-* code.
+        Array.from(el.classList)
+          .filter(c => c.startsWith('fi-'))
+          .forEach(c => el.classList.remove(c));
+
+        el.classList.add('fi', 'fis', `fi-${flagCode}`);
+      }
 
       // Get current language from HTML lang attribute
       const currentLang = document.documentElement.lang || 'en';
@@ -233,9 +244,7 @@
 
       // Set current language flag
       const currentFlagEl = document.getElementById('currentLanguageFlag');
-      if (currentFlagEl && cultureFlags[currentCulture]) {
-        currentFlagEl.textContent = cultureFlags[currentCulture];
-      }
+      setFlagIcon(currentFlagEl, cultureFlags[currentCulture]);
 
       // Mark current language as active in modal
       languageModal.addEventListener('show.bs.modal', function() {
