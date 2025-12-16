@@ -82,11 +82,9 @@ resource aiServices 'Microsoft.CognitiveServices/accounts@2025-06-01' = {
     allowProjectManagement: true
     
     // Network ACLs
-    // Dev with VPN IP: Deny all except VPN IP + Azure services
-    // Dev without VPN IP: Allow all (for local development)
-    // Staging/Prod: Deny all except Azure services
+    // Public for all environments (no network restrictions).
     networkAcls: {
-      defaultAction: (environment == 'dev' && !empty(vpnIpAddress)) || (environment != 'dev') ? 'Deny' : 'Allow'
+      defaultAction: 'Allow'
       ipRules: ipRulesArray
       bypass: 'AzureServices' // Allow Azure services bypass
     }

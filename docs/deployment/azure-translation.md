@@ -59,6 +59,8 @@ Provides unified access to:
 
 The translation module is located at `infra/bicep/modules/translation.bicep`.
 
+The module deploys the AI Services account with a public endpoint (network ACL `defaultAction: Allow`).
+
 **Parameters**:
 
 ```bicep
@@ -70,7 +72,6 @@ module translation './modules/translation.bicep' = if (enableTranslation) {
     location: 'polandcentral'
     translationProvider: 'LLM-GPT4oMini'         // Default: LLM-GPT4oMini, also: NMT, LLM-GPT4o
     sku: 'S0'                                    // F0 (free, limited), S0 (standard)
-    publicNetworkAccess: true                    // false for private endpoints
     disableLocalAuth: false                      // true for Entra ID only
   }
 }
