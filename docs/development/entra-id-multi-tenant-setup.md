@@ -33,6 +33,12 @@ User (External Tenant)
   → Access granted ✅
 ```
 
+For the end-to-end application login UX (cookie session, optional silent SSO, OTP fallback, redirects like `/login?reason=...`), see:
+
+- [Authentication](../features/authentication.md)
+
+Note: automatic silent SSO is **optional** and disabled by default via `EntraId:AutomaticSso:Enable`.
+
 ### Key Concept: UPN-Based Authorization
 
 ⚠️ **CRITICAL**: Authorization is managed **entirely in-application** using the User Principal Name (UPN) claim from the token. The application does NOT use:
