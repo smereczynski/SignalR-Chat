@@ -85,6 +85,20 @@ public class AzureTranslatorService : ITranslationService
             throw new ArgumentException("English (en) must always be included in translation targets", nameof(request));
         }
 
+        // Validate target languages are explicit (never "auto")
+        foreach (var target in request.Targets)
+        {
+            if (string.IsNullOrWhiteSpace(target.Language))
+            {
+                throw new ArgumentException("Target language cannot be empty", nameof(request));
+            }
+
+            if (target.Language.Equals("auto", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new ArgumentException("Target language 'auto' is not supported", nameof(request));
+            }
+        }
+
         try
         {
             // Try cache first (unless ForceRefresh is true)
@@ -167,7 +181,11 @@ public class AzureTranslatorService : ITranslationService
         var requestJson = JsonSerializer.Serialize(apiRequest, _jsonOptions);
         
         _logger.LogDebug("Translation API request: {Url}", url);
-        _logger.LogDebug("Translation API request body: {RequestJson}", requestJson);
+        _logger.LogDebug(
+            "Translation API request details: source={SourceLanguage}, targets={TargetsCount}, textLength={TextLength}",
+            request.SourceLanguage ?? "auto",
+            request.Targets.Count,
+            request.Text?.Length ?? 0);
         
         using var content = new StringContent(requestJson, Encoding.UTF8, "application/json");
 

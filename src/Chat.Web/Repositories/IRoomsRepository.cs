@@ -15,6 +15,8 @@ namespace Chat.Web.Repositories
         // Maintain denormalized user membership in room document
         Task AddUserToRoomAsync(string roomName, string userName);
         Task RemoveUserFromRoomAsync(string roomName, string userName);
+        // Maintain denormalized languages list in room document
+        Task AddLanguageToRoomAsync(string roomName, string language);
     // Static rooms: names/ids are fixed; membership is maintained
     }
 }

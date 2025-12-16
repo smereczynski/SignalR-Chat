@@ -104,6 +104,21 @@ namespace Chat.Web.Hubs
                     activity?.SetStatus(ActivityStatusCode.Error, "room unauthorized");
                     return;
                 }
+
+                // Best-effort: ensure the room's language list includes this user's preferred language.
+                // Old messages are not translated to newly added languages.
+                try
+                {
+                    var preferredLanguage = Chat.Web.Utilities.LanguageCode.NormalizeToLanguageCode(profile.PreferredLanguage);
+                    if (!string.IsNullOrWhiteSpace(preferredLanguage))
+                    {
+                        await _rooms.AddLanguageToRoomAsync(roomName, preferredLanguage);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to add preferred language to room languages list for room {Room}", roomName);
+                }
                 
                 // Get user from Context.Items (per-connection state)
                 var user = Context.Items["UserProfile"] as UserViewModel;
@@ -417,13 +432,16 @@ namespace Chat.Web.Hubs
             {
                 try
                 {
+                    var sourceLanguage = Chat.Web.Utilities.LanguageCode.NormalizeToLanguageCode(domainUser?.PreferredLanguage) ?? "auto";
+                    var targets = Chat.Web.Utilities.LanguageCode.BuildTargetLanguages(room.Languages, sourceLanguage);
+
                     var job = new Models.MessageTranslationJob
                     {
                         MessageId = msg.Id,
                         RoomName = room.Name,
                         Content = sanitized,
-                        SourceLanguage = "auto", // Auto-detect source language
-                        TargetLanguages = new System.Collections.Generic.List<string> { "en", "pl", "de", "fr", "es", "it", "pt", "ja", "zh" },
+                        SourceLanguage = sourceLanguage,
+                        TargetLanguages = targets,
                         DeploymentName = _translationOptions.DeploymentName,
                         CreatedAt = System.DateTime.UtcNow,
                         RetryCount = 0,
@@ -677,13 +695,19 @@ namespace Chat.Web.Hubs
             }
             
             // Re-enqueue with high priority
+            var senderProfile = await _users.GetByUserNameAsync(message.FromUser?.UserName);
+            var sourceLanguage = Chat.Web.Utilities.LanguageCode.NormalizeToLanguageCode(senderProfile?.PreferredLanguage) ?? "auto";
+
+            var room = await _rooms.GetByNameAsync(message.ToRoom?.Name);
+            var targets = Chat.Web.Utilities.LanguageCode.BuildTargetLanguages(room?.Languages, sourceLanguage);
+
             var job = new MessageTranslationJob
             {
                 MessageId = message.Id,
                 RoomName = message.ToRoom.Name,
                 Content = message.Content,
-                SourceLanguage = "auto",
-                TargetLanguages = new List<string> { "en", "pl", "de", "fr", "es", "it", "pt", "ja", "zh" },
+                SourceLanguage = sourceLanguage,
+                TargetLanguages = targets,
                 DeploymentName = _translationOptions.DeploymentName,
                 CreatedAt = DateTime.UtcNow,
                 RetryCount = 0,

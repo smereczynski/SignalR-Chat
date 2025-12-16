@@ -37,7 +37,7 @@ namespace Chat.Web.Repositories
         {
             // Pre-initialize static rooms for testing (deterministic IDs 1..n)
             var rooms = new[]{"general","ops","random"};
-            int id=1; foreach(var r in rooms){ var room=new Room{Id=id++, Name=r, Users = new List<string>()}; _roomsById[room.Id]=room; _roomsByName[room.Name]=room; }
+            int id=1; foreach(var r in rooms){ var room=new Room{Id=id++, Name=r, Users = new List<string>(), Languages = new List<string>()}; _roomsById[room.Id]=room; _roomsByName[room.Name]=room; }
         }
         public Task<IEnumerable<Room>> GetAllAsync() => Task.FromResult<IEnumerable<Room>>(_roomsById.Values);
         public Task<Room> GetByIdAsync(int id) => Task.FromResult(_roomsById.TryGetValue(id, out var r) ? r : null);
@@ -57,6 +57,18 @@ namespace Chat.Web.Repositories
             {
                 var set = new HashSet<string>(room.Users, StringComparer.OrdinalIgnoreCase);
                 if (set.Remove(userName)) room.Users = set.ToList();
+            }
+            return Task.CompletedTask;
+        }
+
+        public Task AddLanguageToRoomAsync(string roomName, string language)
+        {
+            if (string.IsNullOrWhiteSpace(language)) return Task.CompletedTask;
+
+            if (_roomsByName.TryGetValue(roomName, out var room))
+            {
+                var set = new HashSet<string>(room.Languages ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
+                if (set.Add(language)) room.Languages = set.ToList();
             }
             return Task.CompletedTask;
         }

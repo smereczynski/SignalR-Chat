@@ -102,6 +102,7 @@ namespace Chat.Web.Repositories
         public string userName { get; set; } 
         public string fullName { get; set; } 
         public string avatar { get; set; } 
+        public string preferredLanguage { get; set; }
         public string email { get; set; } 
         public string mobile { get; set; } 
         public bool? enabled { get; set; } 
@@ -113,7 +114,7 @@ namespace Chat.Web.Repositories
         public string[] fixedRooms { get; set; } 
         public string defaultRoom { get; set; } 
     }
-    internal class RoomDoc { public string id { get; set; } public string name { get; set; } public string admin { get; set; } public string[] users { get; set; } }
+    internal class RoomDoc { public string id { get; set; } public string name { get; set; } public string admin { get; set; } public string[] users { get; set; } public string[] languages { get; set; } }
     internal class MessageDoc 
     { 
         public string id { get; set; } 
@@ -223,6 +224,7 @@ namespace Chat.Web.Repositories
                 UserName = d.userName,
                 FullName = d.fullName,
                 Avatar = d.avatar,
+                PreferredLanguage = d.preferredLanguage,
                 Email = d.email,
                 MobileNumber = d.mobile,
                 Enabled = d.enabled ?? true,
@@ -291,6 +293,7 @@ namespace Chat.Web.Repositories
                 userName = user.UserName, 
                 fullName = user.FullName, 
                 avatar = user.Avatar, 
+                preferredLanguage = user.PreferredLanguage,
                 email = user.Email, 
                 mobile = user.MobileNumber, 
                 enabled = user.Enabled, 
@@ -337,7 +340,7 @@ namespace Chat.Web.Repositories
             var q = _rooms.GetItemQueryIterator<RoomDoc>(new QueryDefinition("SELECT * FROM c ORDER BY c.name"));
             var list = await CosmosQueryHelper.ExecutePaginatedQueryAsync(
                 q,
-                d => new Room { Id = DocIdUtil.TryParseRoomId(d.id), Name = d.name, Users = d.users != null ? new List<string>(d.users) : new List<string>() },
+                d => new Room { Id = DocIdUtil.TryParseRoomId(d.id), Name = d.name, Users = d.users != null ? new List<string>(d.users) : new List<string>(), Languages = d.languages != null ? new List<string>(d.languages) : new List<string>() },
                 activity,
                 _logger,
                 "cosmos.rooms.getall");
@@ -351,7 +354,7 @@ namespace Chat.Web.Repositories
             var q = _rooms.GetItemQueryIterator<RoomDoc>(new QueryDefinition("SELECT * FROM c WHERE c.id = @id").WithParameter("@id", id.ToString()));
             return await CosmosQueryHelper.ExecuteSingleResultQueryAsync(
                 q,
-                d => new Room { Id = DocIdUtil.TryParseRoomId(d.id), Name = d.name, Users = d.users != null ? new List<string>(d.users) : new List<string>() },
+                d => new Room { Id = DocIdUtil.TryParseRoomId(d.id), Name = d.name, Users = d.users != null ? new List<string>(d.users) : new List<string>(), Languages = d.languages != null ? new List<string>(d.languages) : new List<string>() },
                 activity,
                 _logger,
                 "cosmos.rooms.getbyid");
@@ -364,7 +367,7 @@ namespace Chat.Web.Repositories
             var q = _rooms.GetItemQueryIterator<RoomDoc>(new QueryDefinition("SELECT * FROM c WHERE c.name = @n").WithParameter("@n", name));
             return await CosmosQueryHelper.ExecuteSingleResultQueryAsync(
                 q,
-                d => new Room { Id = DocIdUtil.TryParseRoomId(d.id), Name = d.name, Users = d.users != null ? new List<string>(d.users) : new List<string>() },
+                d => new Room { Id = DocIdUtil.TryParseRoomId(d.id), Name = d.name, Users = d.users != null ? new List<string>(d.users) : new List<string>(), Languages = d.languages != null ? new List<string>(d.languages) : new List<string>() },
                 activity,
                 _logger,
                 "cosmos.rooms.getbyname");
@@ -378,6 +381,11 @@ namespace Chat.Web.Repositories
         public async Task RemoveUserFromRoomAsync(string roomName, string userName)
         {
             await UpsertRoomUserAsync(roomName, userName, add: false).ConfigureAwait(false);
+        }
+
+        public async Task AddLanguageToRoomAsync(string roomName, string language)
+        {
+            await UpsertRoomLanguageAsync(roomName, language).ConfigureAwait(false);
         }
 
         private async Task UpsertRoomUserAsync(string roomName, string userName, bool add)
@@ -398,6 +406,32 @@ namespace Chat.Web.Repositories
             if (add ? users.Add(userName) : users.Remove(userName))
             {
                 room.users = users.ToArray();
+                await _rooms.UpsertItemAsync(room, new PartitionKey(roomName)).ConfigureAwait(false);
+            }
+        }
+
+        private async Task UpsertRoomLanguageAsync(string roomName, string language)
+        {
+            if (string.IsNullOrWhiteSpace(language)) return;
+
+            var q = _rooms.GetItemQueryIterator<RoomDoc>(
+                new QueryDefinition("SELECT * FROM c WHERE c.name = @n").WithParameter("@n", roomName));
+            RoomDoc room = null;
+            while (q.HasMoreResults && room == null)
+            {
+                var page = await Resilience.RetryHelper.ExecuteAsync(
+                    _ => q.ReadNextAsync(),
+                    Transient.IsCosmosTransient,
+                    _logger,
+                    "cosmos.rooms.byname.forRoomRepo").ConfigureAwait(false);
+                room = page.FirstOrDefault();
+            }
+            if (room == null) return;
+
+            var langs = new HashSet<string>(room.languages ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
+            if (langs.Add(language))
+            {
+                room.languages = langs.ToArray();
                 await _rooms.UpsertItemAsync(room, new PartitionKey(roomName)).ConfigureAwait(false);
             }
         }
