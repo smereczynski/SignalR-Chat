@@ -436,13 +436,31 @@ namespace Chat.Web
                 var supportedCultures = new[]
                 {
                     new System.Globalization.CultureInfo("en"), // English (default)
+
+                    // Include neutral cultures (e.g. "pl") so browsers sending only a language tag
+                    // (without region, like "pl" instead of "pl-PL") still match.
+                    new System.Globalization.CultureInfo("pl"),
                     new System.Globalization.CultureInfo("pl-PL"), // Poland
+
+                    new System.Globalization.CultureInfo("de"),
                     new System.Globalization.CultureInfo("de-DE"), // Germany
+
+                    new System.Globalization.CultureInfo("cs"),
                     new System.Globalization.CultureInfo("cs-CZ"), // Czech Republic
+
+                    new System.Globalization.CultureInfo("sk"),
                     new System.Globalization.CultureInfo("sk-SK"), // Slovakia
+
+                    new System.Globalization.CultureInfo("uk"),
                     new System.Globalization.CultureInfo("uk-UA"), // Ukraine
+
+                    new System.Globalization.CultureInfo("be"),
                     new System.Globalization.CultureInfo("be-BY"), // Belarus
+
+                    new System.Globalization.CultureInfo("lt"),
                     new System.Globalization.CultureInfo("lt-LT"), // Lithuania
+
+                    new System.Globalization.CultureInfo("ru"),
                     new System.Globalization.CultureInfo("ru-RU")  // Russia
                 };
                 
