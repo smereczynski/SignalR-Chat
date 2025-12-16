@@ -185,7 +185,7 @@ namespace Chat.Web
     public void ConfigureServices(IServiceCollection services)
         {
             // Create early logger for startup diagnostics
-            _loggerFactory = LoggerFactory.Create(builder => builder.AddConsole());
+            _loggerFactory = LoggerFactory.Create(builder => builder.AddSerilog(Log.Logger, dispose: false));
             _logger = _loggerFactory.CreateLogger<Startup>();
 
             var inMemoryTest = string.Equals(Configuration["Testing:InMemory"], "true", StringComparison.OrdinalIgnoreCase);
@@ -194,6 +194,8 @@ namespace Chat.Web
             var assemblyVersion = typeof(Startup).Assembly.GetName().Version?.ToString() ?? "unknown";
 
             // OpenTelemetry logging provider (simple; Serilog remains primary)
+            // Logs (AppTraces table) are NOT sampled - all application logs are captured
+            // Traces (traces table) are sampled at 20% for cost optimization (configured below in WithTracing)
             services.AddLogging(lb =>
             {
                 lb.AddOpenTelemetry(o =>
@@ -434,13 +436,31 @@ namespace Chat.Web
                 var supportedCultures = new[]
                 {
                     new System.Globalization.CultureInfo("en"), // English (default)
+
+                    // Include neutral cultures (e.g. "pl") so browsers sending only a language tag
+                    // (without region, like "pl" instead of "pl-PL") still match.
+                    new System.Globalization.CultureInfo("pl"),
                     new System.Globalization.CultureInfo("pl-PL"), // Poland
+
+                    new System.Globalization.CultureInfo("de"),
                     new System.Globalization.CultureInfo("de-DE"), // Germany
+
+                    new System.Globalization.CultureInfo("cs"),
                     new System.Globalization.CultureInfo("cs-CZ"), // Czech Republic
+
+                    new System.Globalization.CultureInfo("sk"),
                     new System.Globalization.CultureInfo("sk-SK"), // Slovakia
+
+                    new System.Globalization.CultureInfo("uk"),
                     new System.Globalization.CultureInfo("uk-UA"), // Ukraine
+
+                    new System.Globalization.CultureInfo("be"),
                     new System.Globalization.CultureInfo("be-BY"), // Belarus
+
+                    new System.Globalization.CultureInfo("lt"),
                     new System.Globalization.CultureInfo("lt-LT"), // Lithuania
+
+                    new System.Globalization.CultureInfo("ru"),
                     new System.Globalization.CultureInfo("ru-RU")  // Russia
                 };
                 
@@ -807,6 +827,32 @@ namespace Chat.Web
                                     if (!string.IsNullOrWhiteSpace(region)) user.Region = region;
                                     
                                     await usersRepo.UpsertAsync(user);
+                                    
+                                    // CRITICAL FIX: Set ClaimTypes.Name to userName (not UPN)
+                                    // The app uses Context.User.Identity.Name throughout (ChatHub, controllers, etc.)
+                                    // and expects it to match the database userName field, not the UPN
+                                    var claimsIdentity = context.Principal?.Identity as ClaimsIdentity;
+                                    if (claimsIdentity != null)
+                                    {
+                                        // Remove existing name claim (which contains UPN)
+                                        var existingNameClaim = claimsIdentity.FindFirst(ClaimTypes.Name);
+                                        if (existingNameClaim != null)
+                                        {
+                                            claimsIdentity.RemoveClaim(existingNameClaim);
+                                        }
+                                        
+                                        // Add new name claim with userName from database
+                                        claimsIdentity.AddClaim(new Claim(ClaimTypes.Name, user.UserName));
+                                        
+                                        // CRITICAL: Reassign the principal to ensure modified claims are persisted to the authentication cookie
+                                        // Without this, SignalR will still see the original UPN in Context.User.Identity.Name
+                                        context.Principal = new ClaimsPrincipal(claimsIdentity);
+                                        
+                                        logger.LogInformation(
+                                            "OnTokenValidated: Set ClaimTypes.Name to {UserName} (was UPN: {Upn})",
+                                            Chat.Web.Utilities.LogSanitizer.Sanitize(user.UserName),
+                                            Chat.Web.Utilities.LogSanitizer.Sanitize(upn));
+                                    }
                                     
                                     logger.LogInformation(
                                         "OnTokenValidated: User {UserName} authenticated via Entra ID (UPN: {Upn}, Tenant: {TenantId})",

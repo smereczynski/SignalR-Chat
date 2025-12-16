@@ -206,7 +206,7 @@ dotnet build ./src/Chat.sln
 A: In in-memory mode, only the 5 fixed users work. With Cosmos DB, you can add users to the database.
 
 **Q: How long do OTP codes last?**  
-A: 5 minutes (configurable via `Otp__OtpTtlSeconds` in appsettings.json)
+A: 5 minutes (configurable via `Otp__OtpTtlSeconds`; see [Configuration Guide](configuration.md))
 
 **Q: Can I use this in production?**  
 A: In-memory mode is for development only. Use Azure resources for production.

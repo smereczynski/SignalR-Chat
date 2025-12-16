@@ -141,14 +141,26 @@
   <data name="EnterYourEmail" xml:space="preserve">
     <value>Enter your email</value>
   </data>
+  <data name="UserNameFormat" xml:space="preserve">
+    <value>user@domain.com</value>
+  </data>
   <data name="EnterEmailForOtp" xml:space="preserve">
     <value>Enter your email to receive the verification code.</value>
+  </data>
+  <data name="EnterUserNameForOtp" xml:space="preserve">
+    <value>Enter your user name to receive the verification code.</value>
   </data>
   <data name="EmailRequired" xml:space="preserve">
     <value>Email is required</value>
   </data>
+  <data name="UserNameRequired" xml:space="preserve">
+    <value>User name is required</value>
+  </data>
   <data name="EmailAndCodeRequired" xml:space="preserve">
     <value>Email and code are required</value>
+  </data>
+  <data name="UserNameAndCodeRequired" xml:space="preserve">
+    <value>User name and code are required</value>
   </data>
   <data name="SendCode" xml:space="preserve">
     <value>Send code</value>

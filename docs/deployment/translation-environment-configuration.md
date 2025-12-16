@@ -163,7 +163,7 @@ The Bicep deployment creates App Settings with `__` notation, which ASP.NET Core
 | `translation.outputs.modelDeploymentName` | `Translation__ModelDeploymentName` | `Translation:ModelDeploymentName` |
 | (parameter) | `Translation__Enabled` | `Translation:Enabled` |
 
-**Already present in appsettings.json**:
+**Already present in `appsettings.{Environment}.json`**:
 - `Translation:ResourceId` - Required for Managed Identity
 - `Translation:Provider` - Required to distinguish NMT vs LLM
 

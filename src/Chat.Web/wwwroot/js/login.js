@@ -28,7 +28,7 @@
     function startOtpSend(isResend){
       setOtpError(null);
       const email = (document.getElementById('otpEmail')?.value || '').trim();
-      if (!email) { setOtpError(window.i18n?.emailRequired || 'Email is required'); return; }
+      if (!email) { setOtpError(window.i18n?.userNameRequired || 'User name is required'); return; }
       window.__otpFlow = window.__otpFlow || {};
       const flow = window.__otpFlow;
       const container = document.getElementById('otpContainer');
@@ -117,7 +117,7 @@
       window.__otpFlow = window.__otpFlow || {}; const flow = window.__otpFlow; if (flow.verifyInFlight) return;
       const email = (document.getElementById('otpEmail')?.value || '').trim();
       const code = (document.getElementById('otpCode')?.value || '').trim();
-      if (!email || !code) { setOtpError(window.i18n?.emailAndCodeRequired || 'Email and code are required'); return; }
+      if (!email || !code) { setOtpError(window.i18n?.userNameAndCodeRequired || 'User name and code are required'); return; }
       const btn = document.getElementById('btn-verify-otp'); if (btn) btn.disabled = true; flow.verifyInFlight = true;
       const returnUrl = (typeof window.__returnUrl === 'string' ? window.__returnUrl : '/chat');
       postJson('/api/auth/verify', { userName: email, code, returnUrl })

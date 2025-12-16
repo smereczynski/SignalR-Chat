@@ -252,16 +252,29 @@
   <data name="Email" xml:space="preserve">
     <value>E-mail</value>
   </data>
+
   <data name="EnterYourEmail" xml:space="preserve">
-    <value>Zadajte svoj e-mail</value>
+    <value>Zadajte svoj email</value>
+  </data>
+  <data name="UserNameFormat" xml:space="preserve">
+    <value>pouzivatel@domena.sk</value>
   </data>
   <data name="EnterEmailForOtp" xml:space="preserve">
-    <value>Zadajte svoj e-mail pre prijatie overovacieho kódu.</value>
+    <value>Zadajte svoj email pre získanie overovacieho kódu.</value>
+  </data>
+  <data name="EnterUserNameForOtp" xml:space="preserve">
+    <value>Zadajte svoje používateľské meno pre získanie overovacieho kódu.</value>
   </data>
   <data name="EmailRequired" xml:space="preserve">
-    <value>E-mail je povinný</value>
+    <value>Email je povinný</value>
+  </data>
+  <data name="UserNameRequired" xml:space="preserve">
+    <value>Používateľské meno je povinné</value>
   </data>
   <data name="EmailAndCodeRequired" xml:space="preserve">
-    <value>E-mail a kód sú povinné</value>
+    <value>Email a kód sú povinné</value>
+  </data>
+  <data name="UserNameAndCodeRequired" xml:space="preserve">
+    <value>Používateľské meno a kód sú povinné</value>
   </data>
 </root>

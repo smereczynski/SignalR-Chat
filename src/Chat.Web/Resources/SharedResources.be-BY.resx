@@ -255,13 +255,25 @@
   <data name="EnterYourEmail" xml:space="preserve">
     <value>Увядзіце ваш email</value>
   </data>
+  <data name="UserNameFormat" xml:space="preserve">
+    <value>карыстальнік@дамен.by</value>
+  </data>
   <data name="EnterEmailForOtp" xml:space="preserve">
-    <value>Увядзіце ваш email, каб атрымаць правяраючы код.</value>
+    <value>Увядзіце ваш email, каб атрымаць код праверкі.</value>
+  </data>
+  <data name="EnterUserNameForOtp" xml:space="preserve">
+    <value>Увядзіце ваша імя карыстальніка, каб атрымаць код праверкі.</value>
   </data>
   <data name="EmailRequired" xml:space="preserve">
     <value>Email абавязковы</value>
   </data>
+  <data name="UserNameRequired" xml:space="preserve">
+    <value>Імя карыстальніка абавязкова</value>
+  </data>
   <data name="EmailAndCodeRequired" xml:space="preserve">
     <value>Email і код абавязковыя</value>
+  </data>
+  <data name="UserNameAndCodeRequired" xml:space="preserve">
+    <value>Імя карыстальніка і код абавязковыя</value>
   </data>
 </root>

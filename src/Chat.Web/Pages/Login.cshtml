@@ -10,7 +10,7 @@
           <div class="d-flex justify-content-between align-items-center mb-3">
             <h5 class="card-title mb-0">@Localizer["SignIn"]</h5>
             <button type="button" id="btn-language-login" class="btn btn-sm btn-outline-secondary" title="@Localizer["ChangeLanguage"]" data-bs-toggle="modal" data-bs-target="#languageModal">
-              <span id="currentLanguageFlag" class="flag-icon">🌐</span>
+              <span id="currentLanguageFlag" class="flag-icon fi fi-xx fis" aria-hidden="true"></span>
             </button>
           </div>
 
@@ -76,9 +76,9 @@
           <div id="otpContainer" data-otp-timeout-ms="8000" data-otp-retry-cooldown-ms="5000" data-otp-resend-delay-ms="60000">
             <div id="otp-step1">
               <div class="mb-2">
-                <label for="otpEmail" class="form-label">@Localizer["Email"]</label>
-                <input type="email" class="form-control" id="otpEmail" placeholder="@Localizer["EnterYourEmail"]" autocomplete="email" />
-                <div class="form-text">@Localizer["EnterEmailForOtp"]</div>
+                <label for="otpEmail" class="form-label">@Localizer["UserName"]</label>
+                <input type="email" class="form-control" id="otpEmail" placeholder="@Localizer["UserNameFormat"]" autocomplete="email" />
+                <div class="form-text">@Localizer["EnterUserNameForOtp"]</div>
               </div>
               <button type="button" class="btn btn-primary" id="btn-send-otp">@Localizer["SendCode"]</button>
             </div>
@@ -119,48 +119,7 @@
   </div>
 </div>
 
-<!-- Language Selection Modal -->
-<div class="modal fade" id="languageModal" tabindex="-1" aria-labelledby="languageModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="languageModalLabel">@Localizer["SelectLanguage"]</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <div class="list-group language-list">
-                    <button type="button" class="list-group-item list-group-item-action" data-culture="en" data-flag="🇬🇧">
-                        <span class="flag-icon me-2">🇬🇧</span> English
-                    </button>
-                    <button type="button" class="list-group-item list-group-item-action" data-culture="pl-PL" data-flag="🇵🇱">
-                        <span class="flag-icon me-2">🇵🇱</span> Polski
-                    </button>
-                    <button type="button" class="list-group-item list-group-item-action" data-culture="de-DE" data-flag="🇩🇪">
-                        <span class="flag-icon me-2">🇩🇪</span> Deutsch
-                    </button>
-                    <button type="button" class="list-group-item list-group-item-action" data-culture="cs-CZ" data-flag="🇨🇿">
-                        <span class="flag-icon me-2">🇨🇿</span> Čeština
-                    </button>
-                    <button type="button" class="list-group-item list-group-item-action" data-culture="sk-SK" data-flag="🇸🇰">
-                        <span class="flag-icon me-2">🇸🇰</span> Slovenčina
-                    </button>
-                    <button type="button" class="list-group-item list-group-item-action" data-culture="uk-UA" data-flag="🇺🇦">
-                        <span class="flag-icon me-2">🇺🇦</span> Українська
-                    </button>
-                    <button type="button" class="list-group-item list-group-item-action" data-culture="be-BY" data-flag="🇧🇾">
-                        <span class="flag-icon me-2">🇧🇾</span> Беларуская
-                    </button>
-                    <button type="button" class="list-group-item list-group-item-action" data-culture="lt-LT" data-flag="🇱🇹">
-                        <span class="flag-icon me-2">🇱🇹</span> Lietuvių
-                    </button>
-                    <button type="button" class="list-group-item list-group-item-action" data-culture="ru-RU" data-flag="🇷🇺">
-                        <span class="flag-icon me-2">🇷🇺</span> Русский
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
+<partial name="_LanguageSelectionModal" />
 
 @section Scripts {
   <script src="~/lib/bootstrap/js/bootstrap.bundle.min.js"></script>
@@ -186,6 +145,8 @@
         .catch(() => { 
           // Fallback to English defaults if localization API fails
           window.i18n = {
+            userNameRequired: 'User name is required',
+            userNameAndCodeRequired: 'User name and code are required',
             emailRequired: 'Email is required',
             emailAndCodeRequired: 'Email and code are required',
             failedToSendCode: 'Failed to send code',
@@ -204,18 +165,29 @@
       const languageModal = document.getElementById('languageModal');
       if (!languageModal) return;
       
-      // Map of culture codes to flag emojis
+      // Map of culture codes to flag-icons country codes (OS-independent, avoids emoji font support issues).
       const cultureFlags = {
-        'en': '🇬🇧',
-        'pl-PL': '🇵🇱',
-        'de-DE': '🇩🇪',
-        'cs-CZ': '🇨🇿',
-        'sk-SK': '🇸🇰',
-        'uk-UA': '🇺🇦',
-        'be-BY': '🇧🇾',
-        'lt-LT': '🇱🇹',
-        'ru-RU': '🇷🇺'
+        'en': 'gb',
+        'pl-PL': 'pl',
+        'de-DE': 'de',
+        'cs-CZ': 'cz',
+        'sk-SK': 'sk',
+        'uk-UA': 'ua',
+        'be-BY': 'by',
+        'lt-LT': 'lt',
+        'ru-RU': 'ru'
       };
+
+      function setFlagIcon(el, flagCode) {
+        if (!el || !flagCode) return;
+
+        // Keep base classes but swap any existing fi-* code.
+        Array.from(el.classList)
+          .filter(c => c.startsWith('fi-'))
+          .forEach(c => el.classList.remove(c));
+
+        el.classList.add('fi', 'fis', `fi-${flagCode}`);
+      }
 
       // Get current language from HTML lang attribute
       const currentLang = document.documentElement.lang || 'en';
@@ -231,9 +203,7 @@
 
       // Set current language flag
       const currentFlagEl = document.getElementById('currentLanguageFlag');
-      if (currentFlagEl && cultureFlags[currentCulture]) {
-        currentFlagEl.textContent = cultureFlags[currentCulture];
-      }
+      setFlagIcon(currentFlagEl, cultureFlags[currentCulture]);
 
       // Mark current language as active in modal
       languageModal.addEventListener('show.bs.modal', function() {

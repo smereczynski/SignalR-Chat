@@ -253,15 +253,27 @@
     <value>E-Mail</value>
   </data>
   <data name="EnterYourEmail" xml:space="preserve">
-    <value>Geben Sie Ihre E-Mail ein</value>
+    <value>Geben Sie Ihre E-Mail-Adresse ein</value>
+  </data>
+  <data name="UserNameFormat" xml:space="preserve">
+    <value>benutzer@domain.de</value>
   </data>
   <data name="EnterEmailForOtp" xml:space="preserve">
     <value>Geben Sie Ihre E-Mail-Adresse ein, um den Bestätigungscode zu erhalten.</value>
   </data>
+  <data name="EnterUserNameForOtp" xml:space="preserve">
+    <value>Geben Sie Ihren Benutzernamen ein, um den Bestätigungscode zu erhalten.</value>
+  </data>
   <data name="EmailRequired" xml:space="preserve">
     <value>E-Mail ist erforderlich</value>
   </data>
+  <data name="UserNameRequired" xml:space="preserve">
+    <value>Benutzername ist erforderlich</value>
+  </data>
   <data name="EmailAndCodeRequired" xml:space="preserve">
     <value>E-Mail und Code sind erforderlich</value>
+  </data>
+  <data name="UserNameAndCodeRequired" xml:space="preserve">
+    <value>Benutzername und Code sind erforderlich</value>
   </data>
 </root>

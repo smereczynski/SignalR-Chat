@@ -318,14 +318,26 @@
   <data name="EnterYourEmail" xml:space="preserve">
     <value>Wprowadź swój email</value>
   </data>
+  <data name="UserNameFormat" xml:space="preserve">
+    <value>użytkownik@domena.pl</value>
+  </data>
   <data name="EnterEmailForOtp" xml:space="preserve">
     <value>Wprowadź swój email, aby otrzymać kod weryfikacyjny.</value>
+  </data>
+  <data name="EnterUserNameForOtp" xml:space="preserve">
+    <value>Wprowadź swoją nazwę użytkownika, aby otrzymać kod weryfikacyjny.</value>
   </data>
   <data name="EmailRequired" xml:space="preserve">
     <value>Email jest wymagany</value>
   </data>
+  <data name="UserNameRequired" xml:space="preserve">
+    <value>Nazwa użytkownika jest wymagana</value>
+  </data>
   <data name="EmailAndCodeRequired" xml:space="preserve">
     <value>Email i kod są wymagane</value>
+  </data>
+  <data name="UserNameAndCodeRequired" xml:space="preserve">
+    <value>Nazwa użytkownika i kod są wymagane</value>
   </data>
   
   <!-- Admin Panel -->

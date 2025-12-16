@@ -106,7 +106,9 @@ Testing__InMemory=true dotnet run --project ./src/Chat.Web --urls=http://localho
 **⚠️ Important**: Without `Testing__InMemory=true`, the application will connect to Azure resources if:
 - `.env.local` file exists with connection strings
 - Environment variables are set for Azure services
-- `appsettings.json` contains non-empty connection strings
+- Connection strings are configured for Cosmos/Redis (via `.env.local` or Azure App Service)
+
+See the canonical configuration reference: **[Configuration Guide](../getting-started/configuration.md)**.
 
 See [Quickstart Guide](../getting-started/quickstart.md) for 5-minute setup.
 
@@ -130,15 +132,7 @@ Or use VS Code task: **"Run Chat (Azure local env)"**
 
 ### What's in `.env.local`?
 
-Connection strings for Azure resources (never commit to Git):
-
-```bash
-# Azure Cosmos DB
-COSMOS_CONNECTION_STRING="AccountEndpoint=https://...;AccountKey=..."
-
-# Azure Cache for Redis
-REDIS_CONNECTION_STRING="your-redis.redis.cache.windows.net:6380,password=...,ssl=True"
-
+See **[Configuration Guide](../getting-started/configuration.md)** for the up-to-date `.env.local` template and supported keys.
 # Azure SignalR Service
 SIGNALR_CONNECTION_STRING="Endpoint=https://...;AccessKey=...;Version=1.0;"
 
@@ -388,7 +382,7 @@ ASP.NET Core automatically translates `__` → `:` when reading configuration.
 - ✅ HTTPS enabled (`https://localhost:5099`)
 - ✅ Valid Entra ID app registration in Azure Portal
 - ✅ Redirect URI configured: `https://localhost:5099/signin-oidc`
-- ✅ `EntraId:ClientId` configured in `appsettings.json` or environment variables
+- ✅ `EntraId:ClientId` configured via environment variables / appsettings overrides
 - ✅ `EntraId:ClientSecret` (for web app flow)
 - ✅ Dev certificate trusted (`dotnet dev-certs https --trust`)
 
@@ -403,6 +397,8 @@ ASP.NET Core automatically translates `__` → `:` when reading configuration.
 - ✅ Test Entra ID in Azure-deployed environments (dev, staging, prod)
 
 See [Entra ID Multi-Tenant Setup Guide](../development/entra-id-multi-tenant-setup.md) for full configuration.
+
+For the canonical list of keys and examples, see **[Configuration Guide](../getting-started/configuration.md)**.
 
 ### How do I add password authentication?
 
@@ -656,7 +652,7 @@ for i in {1..10}; do dotnet test src/Chat.sln; done
 **Possible causes**:
 1. **Application Insights not configured** - Check connection string
 2. **Logging level too high** - Set to `Information` or `Debug`
-3. **Telemetry disabled** - Check `appsettings.json`
+3. **Telemetry disabled** - Check your environment configuration (see configuration guide)
 
 **Solution**: Verify Application Insights:
 ```bash

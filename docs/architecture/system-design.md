@@ -503,7 +503,10 @@ sequenceDiagram
 
 ## Observability
 - Domain counters (Meter `Chat.Web`): `chat.otp.requests`, `chat.otp.verifications`, `chat.otp.verifications.ratelimited`, plus chat-centric metrics.
-- OpenTelemetry exporters are chosen in priority order: Azure Monitor (Production) → OTLP → Console. Serilog OTLP sink is enabled only when `OTel__OtlpEndpoint` is present; otherwise logs remain on console.
+- OpenTelemetry exporters are chosen in priority order: Azure Monitor (Production) → OTLP → Console.
+- Serilog OTLP sink is enabled only when `OTel__OtlpEndpoint` is present.
+- Serilog console output (stdout; errors to stderr) is controlled by `Serilog__WriteToConsole`.
+  - See **[Configuration Guide](../getting-started/configuration.md#logging-configuration)** for defaults and overrides.
 
 ## Cosmos messages retention (TTL)
 When Cosmos DB repositories are used, the messages container's `DefaultTimeToLive` is managed at startup to match configuration:

@@ -31,27 +31,37 @@ Both methods use cookie-based authentication for session management.
 ### Login Flow
 
 ```mermaid
-graph TD
-    A[User visits /Login] --> B{Choose Auth Method}
-    B -->|Entra ID| C[Redirect to Microsoft]
-    B -->|OTP| D[Enter Username]
-    
-    C --> E[Microsoft authenticates]
-    E --> F[Token with UPN, tenant, claims]
-    F --> G{UPN in database?}
-    G -->|Yes| H[Update profile: FullName, Country, Region]
-    G -->|No| I{OtpForUnauthorizedUsers?}
-    I -->|true| D
-    I -->|false| J[Access Denied]
-    
-    D --> K[Request OTP code]
-    K --> L[Code sent via SMS/email/console]
-    L --> M[Enter 6-digit code]
-    M --> N[Verify code]
-    
-    H --> O[Create cookie session]
-    N --> O
-    O --> P[Redirect to /Chat]
+flowchart TD
+  A[User visits / or /chat] --> B{"Already authenticated<br/>app cookie?"}
+  B -->|Yes| C[Allow request / redirect to /chat]
+  B -->|No| D{"Automatic silent SSO enabled<br/>and eligible path?"}
+
+  D -->|Yes| E[Silent OIDC challenge<br/>prompt=none]
+  E -->|Success| F[Validate token claims<br/>UPN + tenant]
+  E -->|Fail: interaction required| G[/Redirect to /login?reason=sso_failed/]
+
+  D -->|No| H[/Show /login/]
+  G --> H
+
+  H --> I{Choose sign-in method}
+  I -->|Entra ID| J[GET /api/auth/signin/entra<br/>Challenge]
+  J --> K[Interactive Entra sign-in]
+  K --> L[/Callback /signin-oidc/]
+  L --> M{"UPN authorized<br/>in DB?"}
+  M -->|Yes| N[Create app cookie session]
+  M -->|No| O[/Redirect to /login?reason=not_authorized/]
+
+  O --> P{"Fallback<br/>OtpForUnauthorizedUsers?"}
+  P -->|true| Q[OTP sign-in available]
+  P -->|false| R[Access denied]
+
+  I -->|OTP| S[POST /api/auth/start<br/>Issue OTP]
+  S --> T[User enters code]
+  T --> U[POST /api/auth/verify<br/>Verify OTP]
+  U --> N
+
+  Q --> S
+  N --> V[Redirect to /chat]
 ```
 
 ---
@@ -61,6 +71,8 @@ graph TD
 ### Overview
 
 Enterprise users authenticate via **OpenID Connect** (OIDC) with Microsoft Entra ID (formerly Azure Active Directory).
+
+**Important**: A user is considered "logged in" when they have an **application cookie session**. The app cannot know whether the browser has an existing Entra session without performing an OIDC redirect, which is why Entra SSO is triggered either explicitly (from `/login`) or via the optional silent SSO middleware.
 
 **Key Features:**
 - **Multi-Tenant Support**: Users from any Entra ID tenant can authenticate
@@ -125,33 +137,10 @@ If enabled, the application performs a **single silent SSO attempt** (OIDC `prom
 
 See **[Entra ID Multi-Tenant Setup Guide](../development/entra-id-multi-tenant-setup.md)** for complete configuration steps.
 
-**Quick Setup** (`appsettings.json`):
-```json
-{
-  "EntraId": {
-    "Instance": "https://login.microsoftonline.com/",
-    "TenantId": "organizations",
-    "ClientId": "<your-client-id>",
-    "ClientSecret": "<your-client-secret>",
-    "CallbackPath": "/signin-oidc",
-    "Authorization": {
-      "AllowedTenants": [
-        "12345678-1234-1234-1234-123456789012"
-      ],
-      "RequireTenantValidation": true
-    },
-    "Fallback": {
-      "EnableOtp": true,
-      "OtpForUnauthorizedUsers": true
-    }
-    "AutomaticSso": {
-      "Enable": true,
-      "AttemptOncePerSession": true,
-      "AttemptCookieName": "sso_attempted"
-    }
-  }
-}
-```
+For the canonical list of keys and examples (including `.env.local` and Azure App Service settings), see:
+
+- **[Configuration Guide](../getting-started/configuration.md)**
+
 
 ### Token Claims Used
 
@@ -338,64 +327,15 @@ int code = RandomNumberGenerator.GetInt32(100000, 1000000);
 
 ## 5. Configuration
 
+All configuration keys and environment variable examples are documented in one place:
+
+- **[Configuration Guide](../getting-started/configuration.md)**
+
 ### Entra ID Settings
-
-**Environment Variables** (`.env.local`):
-```bash
-EntraId__ClientId=<your-client-id>
-EntraId__ClientSecret=<your-client-secret>
-EntraId__Authorization__AllowedTenants__0=<tenant-id-1>
-EntraId__Authorization__AllowedTenants__1=<tenant-id-2>
-```
-
-**appsettings.json**:
-```json
-{
-  "EntraId": {
-    "Instance": "https://login.microsoftonline.com/",
-    "TenantId": "organizations",
-    "ClientId": "",
-    "ClientSecret": "",
-    "CallbackPath": "/signin-oidc",
-    "SignedOutCallbackPath": "/signout-callback-oidc",
-    "Authorization": {
-      "AllowedTenants": [],
-      "RequireTenantValidation": true
-    },
-    "Fallback": {
-      "EnableOtp": true,
-      "OtpForUnauthorizedUsers": true
-    }
-  }
-}
-```
+See the `EntraId` section in the configuration guide.
 
 ### OTP Settings
-
-**Environment Variables** (`.env.local`):
-```bash
-Otp__Pepper=<Base64-encoded-32-byte-secret>
-Otp__MaxAttempts=5
-Otp__CodeLifetimeSeconds=300
-Acs__ConnectionString=endpoint=https://...
-Acs__EmailFrom=noreply@example.com
-Redis__ConnectionString=redis-signalrchat.redis.cache.windows.net:6380,password=...
-```
-
-**appsettings.json**:
-```json
-{
-  "Otp": {
-    "MaxAttempts": 5,
-    "LockoutMinutes": 15,
-    "CodeLifetimeSeconds": 300,
-    "AllowPlaintext": false
-  },
-  "Acs": {
-    "EmailFrom": "noreply@example.com"
-  }
-}
-```
+See the `Otp`, `Acs`, and `Redis` sections in the configuration guide.
 
 ### Security Checklist
 

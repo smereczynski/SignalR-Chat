@@ -158,7 +158,7 @@ var baseAppSettings = [
   }
   {
     name: 'ASPNETCORE_ENVIRONMENT'
-    value: environment == 'prod' ? 'Production' : (environment == 'staging' ? 'Production' : 'Development')
+    value: environment == 'prod' ? 'Production' : (environment == 'staging' ? 'Staging' : 'Development')
   }
   {
     name: 'Cosmos__Database'
@@ -183,6 +183,10 @@ var baseAppSettings = [
   {
     name: 'Acs__SmsFrom'
     value: 'TRANSLATOR'
+  }
+  {
+    name: 'Serilog__WriteToConsole'
+    value: 'false'
   }
   // Otp__Pepper moved to connection strings
   {
