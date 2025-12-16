@@ -205,33 +205,11 @@ The application now automatically seeds initial data (rooms and users) during st
 
 ### Local Development Configuration
 
-When running locally, create a `.env.local` file in the project root (already in `.gitignore`):
+When running locally, create a `.env.local` file in the project root (already in `.gitignore`).
 
-```bash
-# Azure MCP Authentication (for tooling)
-export AZURE_SUBSCRIPTION_ID="your-subscription-id"
-export AZURE_TENANT_ID="your-tenant-id"
+To keep configuration consistent and avoid drift, the canonical reference is:
 
-# Microsoft Entra ID (OpenID Connect)
-AzureAd__Instance=https://login.microsoftonline.com/
-AzureAd__Domain=your-domain.onmicrosoft.com
-AzureAd__TenantId=your-tenant-id
-AzureAd__ClientId=your-client-id
-AzureAd__CallbackPath=/signin-oidc
-
-# Cosmos DB
-Cosmos__ConnectionString='AccountEndpoint=https://...'
-Cosmos__Database=chat
-Cosmos__UsersContainer=users
-Cosmos__RoomsContainer=rooms
-Cosmos__MessagesContainer=messages
-
-# Redis (StackExchange.Redis)
-Redis__ConnectionString='your-redis-connection-string'
-
-# Azure SignalR (optional for local dev)
-# Azure__SignalR__ConnectionString='Endpoint=https://...'
-```
+- **[Configuration Guide](../getting-started/configuration.md)**
 
 The `.env.local` file is automatically loaded by VS Code tasks when running the application. You can also manually load it:
 

@@ -84,25 +84,11 @@ Follow the [Installation Guide](../getting-started/installation.md) to create:
 
 ### 2. Configure Connection Strings
 
-Create `.env.local` in the repository root:
+Create `.env.local` in the repository root.
 
-```bash
-# Azure Cosmos DB
-COSMOS_CONNECTION_STRING="AccountEndpoint=https://YOUR_ACCOUNT.documents.azure.com:443/;AccountKey=YOUR_KEY=="
+Use the canonical reference for the exact keys and examples:
 
-# Azure Cache for Redis
-REDIS_CONNECTION_STRING="YOUR_REDIS.redis.cache.windows.net:6380,password=YOUR_PASSWORD,ssl=True,abortConnect=False"
-
-# Azure SignalR Service
-SIGNALR_CONNECTION_STRING="Endpoint=https://YOUR_SIGNALR.service.signalr.net;AccessKey=YOUR_KEY;Version=1.0;"
-
-# Azure Communication Services (optional)
-ACS_CONNECTION_STRING="endpoint=https://YOUR_ACS.communication.azure.com/;accesskey=YOUR_KEY"
-ACS_EMAIL_FROM="DoNotReply@YOUR_DOMAIN.azurecomm.net"
-
-# Application Insights (optional)
-APPLICATIONINSIGHTS_CONNECTION_STRING="InstrumentationKey=YOUR_KEY;IngestionEndpoint=https://westeurope-5.in.applicationinsights.azure.com/"
-```
+- **[Configuration Guide](../getting-started/configuration.md)**
 
 **⚠️ Security**: Never commit `.env.local` to Git (already in `.gitignore`)
 
@@ -325,33 +311,24 @@ dotnet test tests/Chat.Tests/
 
 ## Configuration
 
-### appsettings.json Hierarchy
+### Configuration Hierarchy
 
 ASP.NET Core loads configuration in this order (later overrides earlier):
 
-1. `appsettings.json` (base settings)
-2. `appsettings.{Environment}.json` (e.g., `Development`, `Production`)
-3. User secrets (`dotnet user-secrets`)
-4. Environment variables (`.env.local` via `bash -lc`)
-5. Command-line arguments
+1. `appsettings.{Environment}.json` (e.g., `Development`, `Staging`, `Production`)
+2. User secrets (`dotnet user-secrets`)
+3. Environment variables (`.env.local` via `bash -lc`)
+4. Command-line arguments
+
+See the canonical reference for supported keys and examples:
+
+- **[Configuration Guide](../getting-started/configuration.md)**
 
 ### Key Configuration Sections
 
-```json
-{
-  "Cosmos": {
-    "Database": "chat",
-    "Containers": {
-      "Messages": "messages",
-      "Rooms": "rooms",
-      "Users": "users"
-    }
-  },
-  "Redis": {
-    "Database": 0
-  },
-  "Otp": {
-    "OtpTtlSeconds": 300,
+The full list of sections and environment variables lives in:
+
+- **[Configuration Guide](../getting-started/configuration.md)**
     "OtpLength": 6,
     "MaxAttempts": 5,
     "AttemptWindowMinutes": 15

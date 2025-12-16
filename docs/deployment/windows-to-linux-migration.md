@@ -83,7 +83,7 @@ Format remains identical.
 
 | Configuration Path | Windows | Linux | Azure App Service (Both) |
 |-------------------|---------|-------|--------------------------|
-| **appsettings.json** | `Cosmos:Database` | `Cosmos:Database` | `Cosmos:Database` |
+| **appsettings.{Environment}.json** | `Cosmos:Database` | `Cosmos:Database` | `Cosmos:Database` |
 | **Environment Variables** | `Cosmos:Database` ✅ | `Cosmos__Database` ⚠️ | `Cosmos:Database` ✅ |
 | **App Settings UI** | `Cosmos:Database` | `Cosmos:Database` | `Cosmos:Database` |
 

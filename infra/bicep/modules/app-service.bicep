@@ -184,6 +184,10 @@ var baseAppSettings = [
     name: 'Acs__SmsFrom'
     value: 'TRANSLATOR'
   }
+  {
+    name: 'Serilog__WriteToConsole'
+    value: 'false'
+  }
   // Otp__Pepper moved to connection strings
   {
     name: 'WEBSITE_HEALTHCHECK_MAXPINGFAILURES'

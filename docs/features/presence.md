@@ -1,7 +1,7 @@
 ## 1. Server Logging
 
 ### How logs are emitted
-- Primary logger: Serilog is configured early in Program.cs with a bootstrap pipeline (`Log.Logger = new LoggerConfiguration()...WriteTo.Console(...)`).
+- Primary logger: Serilog is configured early in Program.cs with a bootstrap pipeline. Console output (stdout only; errors to stderr) is controlled by `Serilog__WriteToConsole`.
 - Minimum levels:
   - Global: Information
   - Microsoft.* overridden to Warning (reduces framework noise).
@@ -17,9 +17,12 @@
   3. Else: Console exporter (JSON-ish or human-friendly depending on provider defaults).
 
 ### Where they physically end up
-- Development (no AI / no OTLP): only stdout (container / hosting platform log aggregation).
+- When no exporters are configured, logs can go to console (stdout/stderr) if enabled.
 - Production with AI connection string: logs flow to Application Insights (query via Kusto / Log Analytics).
 - There is no file rotation / disk persistence currently—ephemeral console only.
+
+Canonical reference:
+- See **[Configuration Guide](../getting-started/configuration.md#logging-configuration)** for default console behavior in Azure and how to temporarily enable stdout.
 
 ### Best‑practice consumption
 - Local: run app and use `grep`, or better, pipe container logs into `jq` if you later add a JSON sink.
@@ -115,14 +118,14 @@
 | Presence | `/api/health/chat/presence` (auth) | In-memory hub state | Yes (JSON) | No | Authenticated GET |
 | Client reconnect attempts | Activity + counter | In-memory → exporter | Indirect (POST ingest) | Yes (traces + metric) | Query traces / metrics |
 | General client events (queue, offline) | Currently posted to same reconnect endpoint but mostly ignored server-side | Not persisted (except reconnect metric) | Same ingest | Only reconnect metric/span | Enhance controller |
-| Server logs | Serilog + OTel logs | Console (stdout) | No | Possibly AI/OTLP | Tail container logs |
+| Server logs | Serilog + OTel logs | Console (stdout; errors to stderr) if enabled | No | Possibly AI/OTLP | Tail container logs |
 | Server traces | System.Diagnostics.Activity + instrumentation | Memory buffer → exporter | No | Yes (AI/OTLP/Console) | Trace backend query |
 | Server metrics | OTel Meters + runtime | Memory → exporter | No (except snapshot endpoint) | Yes | Metrics backend graph |
 
 ## 5. Easiest Aligned Consumption Paths
 
 ### Local development
-- Logs: Terminal (stdout).
+- Logs: Terminal (stdout/stderr) if enabled; or export via OTLP / Application Insights if configured.
 - Traces & Metrics: Set `OTel:OtlpEndpoint=http://localhost:4317`, run an OpenTelemetry Collector + Jaeger/Prometheus.
 - Quick state: `curl http://localhost:5099/healthz/metrics | jq`.
 

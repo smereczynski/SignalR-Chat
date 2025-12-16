@@ -28,13 +28,9 @@ Exporter selection helpers (three overloads of `AddSelectedExporter`) choose **A
 
 ---
 ## 3. Environment Variables & Configuration
-| Purpose | Key | Example |
-|---------|-----|---------|
-| App Insights Connection | `APPLICATIONINSIGHTS_CONNECTION_STRING` | `InstrumentationKey=...;IngestionEndpoint=...` |
-| OTLP Endpoint | `OTel__OtlpEndpoint` | `http://localhost:4317` or `http://collector:4318` |
-| File Logging Enable | `Serilog__WriteToFile` | `true` |
-| ASP.NET Environment | `ASPNETCORE_ENVIRONMENT` | `Development` / `Production` |
-| In-Memory Test Mode | `Testing__InMemory` | `true` (skips Redis/Cosmos instrumentation) |
+All configuration keys (including environment variable names and examples) are documented in one place:
+
+- **[Configuration Guide](../getting-started/configuration.md)**
 
 Notes:
 - Port `4318` implies HTTP/Protobuf; any other port defaults to gRPC for OTLP.
@@ -102,10 +98,13 @@ Import JSON into Grafana → add data source (Azure Monitor or OTLP Prometheus) 
 ## 6. Logging
 ### 6.1 Serilog Configuration
 Bootstrap in `Program.cs`:
-- Console sink (always)
+- Console sink (stdout; errors to stderr) is controlled by `Serilog__WriteToConsole`.
 - Optional file sink (`logs/chat-<date>.log`) – enable with `Serilog__WriteToFile=true`
 - Application Insights sink (when connection string present)
 - OpenTelemetry sink (when OTLP endpoint configured) – forwards logs as OTLP spans/events
+
+Canonical reference:
+- See **[Configuration Guide](../getting-started/configuration.md#logging-configuration)** for the authoritative defaults and how to override console output in Azure App Service.
 
 Log enrichment:
 - `EnvironmentName`, `MachineName`, `ThreadId`

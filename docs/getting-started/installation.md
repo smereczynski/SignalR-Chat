@@ -330,33 +330,9 @@ APPINSIGHTS_CONN=$(az monitor app-insights component show \
 
 ### Step 6: Configure `.env.local`
 
-Create `.env.local` in repository root:
+Create `.env.local` in the repository root and set the required connection strings and settings.
 
-```bash
-# Navigate to repository root
-cd ../../
-
-# Create .env.local
-cat > .env.local << EOF
-# Azure Cosmos DB
-COSMOS_CONNECTION_STRING="$COSMOS_CONN"
-
-# Azure Cache for Redis
-REDIS_CONNECTION_STRING="$REDIS_CONN"
-
-# Azure SignalR Service
-SIGNALR_CONNECTION_STRING="$SIGNALR_CONN"
-
-# Azure Communication Services
-ACS_CONNECTION_STRING="$ACS_CONN"
-ACS_EMAIL_FROM="DoNotReply@yourdomain.azurecomm.net"  # Update this!
-
-# Application Insights
-APPLICATIONINSIGHTS_CONNECTION_STRING="$APPINSIGHTS_CONN"
-EOF
-
-echo "✅ .env.local created successfully"
-```
+See the canonical reference: **[Configuration Guide](configuration.md)**.
 
 **⚠️ Important**: 
 - `.env.local` is in `.gitignore` - never commit it
@@ -424,66 +400,15 @@ info: Chat.Web.Services.DataSeederService[0]
 
 ### Application Settings
 
-Key configuration settings in `appsettings.json` (or environment variables):
+Configuration is documented in one place to avoid drift:
 
-```json
-{
-  "Cosmos": {
-    "Database": "chat",
-    "Containers": {
-      "Messages": "messages",
-      "Rooms": "rooms",
-      "Users": "users"
-    }
-  },
-  "Redis": {
-    "Database": 0
-  },
-  "Otp": {
-    "OtpTtlSeconds": 300,
-    "OtpLength": 6,
-    "MaxAttempts": 5,
-    "AttemptWindowMinutes": 15
-  },
-  "RateLimiting": {
-    "MessageSend": {
-      "PermitLimit": 10,
-      "WindowSeconds": 60
-    }
-  },
-  "Acs": {
-    "EmailFrom": "DoNotReply@yourdomain.azurecomm.net"
-  }
-}
-```
+- **[Configuration Guide](configuration.md)**
 
 ### Environment Variables
 
-Connection strings are configured via environment variables (`.env.local` or App Service settings):
+For the full, up-to-date list of environment variables and how they map to configuration, see:
 
-```bash
-# Cosmos DB
-COSMOS_CONNECTION_STRING="AccountEndpoint=https://...;AccountKey=..."
-
-# Redis
-REDIS_CONNECTION_STRING="your-redis:6380,password=...,ssl=True"
-
-# SignalR
-SIGNALR_CONNECTION_STRING="Endpoint=https://...;AccessKey=...;Version=1.0;"
-
-# Communication Services
-ACS_CONNECTION_STRING="endpoint=https://...;accesskey=..."
-ACS_EMAIL_FROM="DoNotReply@yourdomain.azurecomm.net"
-
-# Application Insights
-APPLICATIONINSIGHTS_CONNECTION_STRING="InstrumentationKey=...;IngestionEndpoint=..."
-```
-
-**⚠️ Linux App Service**: Use `__` (double underscore) instead of `:` (colon):
-```
-Cosmos__Database=chat
-Acs__EmailFrom=DoNotReply@yourdomain.azurecomm.net
-```
+- **[Configuration Guide](configuration.md)**
 
 ---
 

@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Serilog;
 using Serilog.Events;
 using Serilog.Sinks.OpenTelemetry;
@@ -7,6 +9,7 @@ using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using Chat.Web.Observability;
 using System;
+using System.IO;
 using Microsoft.ApplicationInsights.Extensibility;
 
 namespace Chat.Web
@@ -34,6 +37,20 @@ namespace Chat.Web
             // Development: verbose logging (Debug level) for easier troubleshooting
             // Production: standard logging (Information level) to reduce noise
             var isDevelopment = string.Equals(envName, "Development", StringComparison.OrdinalIgnoreCase);
+
+            // Allow toggling console output (stdout/stderr) via configuration.
+            // This is useful for Azure App Service where stdout/stderr is forwarded to Log Analytics
+            // as AppServiceConsoleLogs (to avoid duplicating logs already sent to Application Insights).
+            //
+            // Env var override: Serilog__WriteToConsole=true|false
+            var bootstrapConfig = new ConfigurationBuilder()
+                .SetBasePath(Directory.GetCurrentDirectory())
+                .AddJsonFile("appsettings.json", optional: true, reloadOnChange: false)
+                .AddJsonFile($"appsettings.{envName}.json", optional: true, reloadOnChange: false)
+                .AddEnvironmentVariables()
+                .Build();
+
+            var writeToConsole = bootstrapConfig.GetValue<bool?>("Serilog:WriteToConsole") ?? isDevelopment;
             
             // File logging: opt-in via configuration (disabled by default to avoid unnecessary disk I/O)
             // Set Serilog__WriteToFile=true in environment variables to enable
@@ -52,7 +69,14 @@ namespace Chat.Web
                 .Enrich.WithEnvironmentName()
                 .Enrich.WithMachineName()
                 .Enrich.WithThreadId()
-                .WriteTo.Console(outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {SourceContext} {Message:lj} {Properties:j}{NewLine}{Exception}");
+                ;
+
+            // Always keep Error+ on stderr. When WriteToConsole=false we suppress stdout completely
+            // (but still write errors to stderr) to reduce Log Analytics AppServiceConsoleLogs volume.
+            loggerConfig = loggerConfig.WriteTo.Console(
+                outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {SourceContext} {Message:lj} {Properties:j}{NewLine}{Exception}",
+                restrictedToMinimumLevel: writeToConsole ? LogEventLevel.Verbose : LogEventLevel.Error,
+                standardErrorFromLevel: LogEventLevel.Error);
             
             // Conditionally enable file logging if configured
             if (writeToFile)
@@ -123,6 +147,9 @@ namespace Chat.Web
         /// </summary>
         public static IHostBuilder CreateHostBuilder(string[] args) =>
             Host.CreateDefaultBuilder(args)
+                // Avoid default Console/Debug providers emitting to stdout/stderr. Serilog and OpenTelemetry
+                // logging exporters are configured separately (Startup + bootstrap logger).
+                .ConfigureLogging(logging => logging.ClearProviders())
                 .UseSerilog()
                 // Placeholder for early service configuration extension points if needed later.
                 .ConfigureServices(_ => { })

@@ -8,9 +8,8 @@ SignalR Chat uses multiple configuration sources in this priority order (highest
 
 1. **Environment Variables** (Azure App Service, local .env)
 2. **Connection Strings** (Azure App Service Configuration → Connection strings)
-3. **appsettings.{Environment}.json** (Development, Production)
-4. **appsettings.json** (defaults)
-5. **User Secrets** (local development only)
+3. **appsettings.{Environment}.json** (Development, Staging, Production)
+4. **User Secrets** (local development only)
 
 
 ## GitHub Actions Variables & Secrets
@@ -55,7 +54,7 @@ Communication__SmsSender=+1234567890
 Notifications__UnreadDelaySeconds=60
 
 # === Cosmos DB Configuration ===
-Cosmos__DatabaseName=chat
+Cosmos__Database=chat
 Cosmos__MessagesTtlSeconds=2592000
 
 # === CORS Configuration (Production) ===
@@ -75,8 +74,11 @@ AllowedHosts=signalrchat-prod-plc.azurewebsites.net
 
 # === Logging ===
 Serilog__WriteToFile=false
-Logging__ApplicationInsights__LogLevel__Default=Information
+Serilog__WriteToConsole=false
+Logging__LogLevel__Default=Warning
 ```
+
+Note: In Azure deployments, `Serilog__WriteToConsole` is set to `false` by the infrastructure template to reduce `AppServiceConsoleLogs` volume. Set it to `true` temporarily when you explicitly want more console output.
 
 ## Detailed Configuration
 
@@ -235,7 +237,7 @@ Otp__HashingEnabled=false
 #### Allowed Origins
 
 **Environment Variable**: `Cors__AllowedOrigins__0`, `Cors__AllowedOrigins__1`, etc.  
-**appsettings.json**: `Cors:AllowedOrigins` array
+**appsettings.{Environment}.json**: `Cors:AllowedOrigins` array
 
 ```json
 {
@@ -296,7 +298,7 @@ RateLimiting__MarkRead__MarkReadPermitLimit=50
 RateLimiting__MarkRead__MarkReadWindowSeconds=5
 ```
 
-**appsettings.json**:
+**appsettings.{Environment}.json**:
 ```json
 {
   "RateLimiting": {
@@ -339,7 +341,7 @@ EntraId__AutomaticSso__AttemptOncePerSession=true
 EntraId__AutomaticSso__AttemptCookieName=sso_attempted_v2
 ```
 
-**appsettings.json**:
+**appsettings.{Environment}.json**:
 ```json
 {
   "EntraId": {
@@ -381,7 +383,7 @@ AllowedHosts=signalrchat-prod-plc.azurewebsites.net;app.contoso.com
 AllowedHosts=*
 ```
 
-**appsettings.json**:
+**appsettings.{Environment}.json**:
 ```json
 {
   "AllowedHosts": "signalrchat-prod-plc.azurewebsites.net;app.contoso.com"
@@ -404,12 +406,12 @@ AllowedHosts=*
 
 #### Database Name
 
-**Environment Variable**: `Cosmos__DatabaseName`  
+**Environment Variable**: `Cosmos__Database`  
 **Default**: `chat`
 
 ```bash
 # Use different database name
-Cosmos__DatabaseName=signalrchat
+Cosmos__Database=signalrchat
 ```
 
 #### Message TTL (Time-to-Live)
@@ -475,6 +477,23 @@ Notifications__UnreadDelaySeconds=120
 
 ### Logging Configuration
 
+#### Console (stdout/stderr)
+
+**Environment Variable**: `Serilog__WriteToConsole`  
+**Default**: `false` for Azure deployments (set by Bicep)
+
+Controls whether Serilog writes non-error logs to console (stdout). Error-level logs are always written to stderr by default.
+
+In Azure App Service on Linux, stdout/stderr is typically forwarded to Log Analytics as **AppServiceConsoleLogs**, so leaving this `false` reduces duplication (especially if you already export logs to Application Insights / Azure Monitor).
+
+```bash
+# Disable console output (recommended for Staging/Production)
+Serilog__WriteToConsole=false
+
+# Enable console output temporarily for troubleshooting
+Serilog__WriteToConsole=true
+```
+
 #### File Logging (Optional)
 
 **Environment Variable**: `Serilog__WriteToFile`  
@@ -514,12 +533,15 @@ APPLICATIONINSIGHTS_CONNECTION_STRING=InstrumentationKey=...;IngestionEndpoint=h
 
 #### Logging Level
 
-**Environment Variable**: `Logging__ApplicationInsights__LogLevel__Default`  
-**Default**: `Warning` (Production), `Debug` (Development)
+**Environment Variable**: `Logging__LogLevel__Default`  
+**Defaults**: Driven by `appsettings.{Environment}.json` (see below)
 
 ```bash
-# Enable Information-level logs in Production
-Logging__ApplicationInsights__LogLevel__Default=Information
+# Example: temporarily enable Information-level logs
+Logging__LogLevel__Default=Information
+
+# Example: keep noisy dependencies at Warning
+Logging__LogLevel__Microsoft=Warning
 ```
 
 ## Configuration by Environment
@@ -558,41 +580,19 @@ Cosmos__MessagesTtlSeconds=2592000
 
 Same as staging + additional monitoring:
 ```bash
-Logging__ApplicationInsights__LogLevel__Default=Information
+# Production defaults to Warning-level logging via appsettings.Production.json.
+# You can temporarily override it via env vars if needed:
+Logging__LogLevel__Default=Information
 Notifications__UnreadDelaySeconds=60
 Otp__MaxAttempts=5
 ```
 
 ## Configuration Files
 
-### appsettings.json
-
-Default configuration (committed to source control):
-
-```json
-{
-  "Logging": {
-    "LogLevel": {
-      "Default": "Information",
-      "Microsoft.AspNetCore": "Warning"
-    }
-  },
-  "AllowedHosts": "*",
-  "Otp": {
-    "OtpTtlSeconds": 300,
-    "MaxAttempts": 5,
-    "MemCost": 65536,
-    "TimeCost": 4,
-    "Parallelism": 4
-  },
-  "Cosmos": {
-    "DatabaseName": "chat"
-  },
-  "Notifications": {
-    "UnreadDelaySeconds": 60
-  }
-}
-```
+This repo uses environment-specific files under `src/Chat.Web/`:
+- `appsettings.Development.json`
+- `appsettings.Staging.json`
+- `appsettings.Production.json`
 
 ### appsettings.Development.json
 
@@ -603,11 +603,47 @@ Development overrides:
   "Logging": {
     "LogLevel": {
       "Default": "Debug",
-      "Microsoft.AspNetCore": "Information"
+      "Microsoft": "Information",
+      "Chat.Web": "Debug"
+    }
+  },
+  "ApplicationInsights": {
+    "SamplingSettings": {
+      "IsEnabled": true,
+      "MaxTelemetryItemsPerSecond": 10,
+      "EnableAdaptiveSampling": true
     }
   }
 }
 ```
+
+Notes:
+- Development is intentionally verbose.
+- Application Insights sampling is enabled in Development.
+
+### appsettings.Staging.json
+
+Staging overrides:
+
+```json
+{
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft": "Warning",
+      "Chat.Web": "Information"
+    }
+  },
+  "ApplicationInsights": {
+    "SamplingSettings": {
+      "IsEnabled": false
+    }
+  }
+}
+```
+
+Notes:
+- Sampling is disabled in Staging to avoid dropping security/audit logs.
 
 ### appsettings.Production.json
 
@@ -617,12 +653,21 @@ Production overrides:
 {
   "Logging": {
     "LogLevel": {
-      "Default": "Information",
-      "Chat.Web": "Information"
+      "Default": "Warning",
+      "Chat.Web": "Warning"
+    }
+  },
+  "ApplicationInsights": {
+    "SamplingSettings": {
+      "IsEnabled": false
     }
   }
 }
 ```
+
+Notes:
+- Production defaults to `Warning`+ to reduce noise and cost.
+- Sampling is disabled in Production to avoid dropping security/audit logs.
 
 ## Azure App Service Configuration
 

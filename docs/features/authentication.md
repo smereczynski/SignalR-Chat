@@ -125,29 +125,9 @@ If enabled, the application performs a **single silent SSO attempt** (OIDC `prom
 
 See **[Entra ID Multi-Tenant Setup Guide](../development/entra-id-multi-tenant-setup.md)** for complete configuration steps.
 
-**Quick Setup** (`appsettings.json`):
-```json
-{
-  "EntraId": {
-    "Instance": "https://login.microsoftonline.com/",
-    "TenantId": "organizations",
-    "ClientId": "<your-client-id>",
-    "ClientSecret": "<your-client-secret>",
-    "CallbackPath": "/signin-oidc",
-    "Authorization": {
-      "AllowedTenants": [
-        "12345678-1234-1234-1234-123456789012"
-      ],
-      "RequireTenantValidation": true
-    },
-    "Fallback": {
-      "EnableOtp": true,
-      "OtpForUnauthorizedUsers": true
-    }
-    "AutomaticSso": {
-      "Enable": true,
-      "AttemptOncePerSession": true,
-      "AttemptCookieName": "sso_attempted"
+For the canonical list of keys and examples (including `.env.local` and Azure App Service settings), see:
+
+- **[Configuration Guide](../getting-started/configuration.md)**
     }
   }
 }
@@ -338,64 +318,15 @@ int code = RandomNumberGenerator.GetInt32(100000, 1000000);
 
 ## 5. Configuration
 
+All configuration keys and environment variable examples are documented in one place:
+
+- **[Configuration Guide](../getting-started/configuration.md)**
+
 ### Entra ID Settings
-
-**Environment Variables** (`.env.local`):
-```bash
-EntraId__ClientId=<your-client-id>
-EntraId__ClientSecret=<your-client-secret>
-EntraId__Authorization__AllowedTenants__0=<tenant-id-1>
-EntraId__Authorization__AllowedTenants__1=<tenant-id-2>
-```
-
-**appsettings.json**:
-```json
-{
-  "EntraId": {
-    "Instance": "https://login.microsoftonline.com/",
-    "TenantId": "organizations",
-    "ClientId": "",
-    "ClientSecret": "",
-    "CallbackPath": "/signin-oidc",
-    "SignedOutCallbackPath": "/signout-callback-oidc",
-    "Authorization": {
-      "AllowedTenants": [],
-      "RequireTenantValidation": true
-    },
-    "Fallback": {
-      "EnableOtp": true,
-      "OtpForUnauthorizedUsers": true
-    }
-  }
-}
-```
+See the `EntraId` section in the configuration guide.
 
 ### OTP Settings
-
-**Environment Variables** (`.env.local`):
-```bash
-Otp__Pepper=<Base64-encoded-32-byte-secret>
-Otp__MaxAttempts=5
-Otp__CodeLifetimeSeconds=300
-Acs__ConnectionString=endpoint=https://...
-Acs__EmailFrom=noreply@example.com
-Redis__ConnectionString=redis-signalrchat.redis.cache.windows.net:6380,password=...
-```
-
-**appsettings.json**:
-```json
-{
-  "Otp": {
-    "MaxAttempts": 5,
-    "LockoutMinutes": 15,
-    "CodeLifetimeSeconds": 300,
-    "AllowPlaintext": false
-  },
-  "Acs": {
-    "EmailFrom": "noreply@example.com"
-  }
-}
-```
+See the `Otp`, `Acs`, and `Redis` sections in the configuration guide.
 
 ### Security Checklist
 

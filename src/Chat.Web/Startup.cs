@@ -185,7 +185,7 @@ namespace Chat.Web
     public void ConfigureServices(IServiceCollection services)
         {
             // Create early logger for startup diagnostics
-            _loggerFactory = LoggerFactory.Create(builder => builder.AddConsole());
+            _loggerFactory = LoggerFactory.Create(builder => builder.AddSerilog(Log.Logger, dispose: false));
             _logger = _loggerFactory.CreateLogger<Startup>();
 
             var inMemoryTest = string.Equals(Configuration["Testing:InMemory"], "true", StringComparison.OrdinalIgnoreCase);

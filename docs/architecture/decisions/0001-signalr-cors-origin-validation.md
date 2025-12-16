@@ -75,7 +75,7 @@ app.UseCors("SignalRPolicy");
 endpoints.MapHub<ChatHub>("/chatHub").RequireCors("SignalRPolicy");
 ```
 
-**Configuration** (`appsettings.json`):
+**Configuration** (see the canonical guide: [Configuration Guide](../../getting-started/configuration.md)):
 
 ```json
 {
@@ -212,7 +212,7 @@ app.Use(async (context, next) =>
 ### Negative
 
 ⚠️ **Configuration Complexity**:
-- Requires accurate CORS configuration in appsettings.json
+- Requires accurate CORS configuration in `appsettings.{Environment}.json`
 - Custom domains must be manually added to allowed origins
 - Risk of misconfiguration if not validated
 
