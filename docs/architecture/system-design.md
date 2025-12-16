@@ -434,7 +434,7 @@ sequenceDiagram
 - Persistence: Azure Cosmos DB with custom repository pattern; in-memory repositories when Testing:InMemory mode enabled
 - OTP store: Redis in normal mode, in-memory in Testing:InMemory
 - Auth: Cookie authentication after OTP verification (dedicated `/login` page)
-- Localization: ASP.NET Core Localization with 9 supported markets (en, pl-PL, de-DE, cs-CZ, sk-SK, uk-UA, be-BY, lt-LT, ru-RU); culture resolution via Cookie > Accept-Language header; API endpoint (`/api/localization/strings`) provides client-side translations
+- Localization: ASP.NET Core Localization with 8 supported markets (en, pl-PL, de-DE, cs-CZ, sk-SK, uk-UA, lt-LT, ru-RU); culture resolution via Cookie > Accept-Language header; API endpoint (`/api/localization/strings`) provides client-side translations
 - Observability: OpenTelemetry (traces, metrics, logs) with exporter auto-selection
 - SignalR transport: In-process by default; Azure SignalR is automatically added when not in Testing:InMemory mode
 - Read receipts: Client marks messages as read in two ways: (1) on reaching timeline bottom (existing), and (2) after join/reconnect by scanning the viewport for visible, non-self messages and invoking `markRead` per id (debounced, idempotent). This ensures historical messages seen on reconnect are recorded as read.
@@ -536,7 +536,6 @@ The application supports the following cultures with complete translations:
 | `cs-CZ` | Czech | Czech Republic | Informal friendly |
 | `sk-SK` | Slovak | Slovakia | |
 | `uk-UA` | Ukrainian | Ukraine | Modern Ukrainian, Cyrillic |
-| `be-BY` | Belarusian | Belarus | Proper Belarusian, Cyrillic |
 | `lt-LT` | Lithuanian | Lithuania | Baltic language, Latin script |
 | `ru-RU` | Russian | Russia | Standard contemporary Russian, Cyrillic |
 
@@ -615,7 +614,6 @@ All translations focus on natural, idiomatic language rather than literal machin
 - **German**: Formal business style ("Sie" form throughout)
 - **Czech/Slovak**: Informal friendly tone appropriate for chat
 - **Ukrainian**: Modern Ukrainian avoiding Russianisms
-- **Belarusian**: Proper Belarusian, distinct from Russian
 - **Lithuanian**: Natural Baltic phrasing with proper diacritics
 
 Examples:

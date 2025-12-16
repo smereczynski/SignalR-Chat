@@ -38,7 +38,7 @@ fs.copyFileSync(
 
 // Only copy flags we actually use.
 // Include 'xx' as the placeholder used before JS sets the current culture.
-const usedFlags = ['xx', 'gb', 'pl', 'de', 'cz', 'sk', 'ua', 'by', 'lt', 'ru'];
+const usedFlags = ['xx', 'gb', 'pl', 'de', 'cz', 'sk', 'ua', 'lt', 'ru'];
 for (const code of usedFlags) {
   fs.copyFileSync(
     path.join(flagIconsBase, 'flags', '4x3', `${code}.svg`),
