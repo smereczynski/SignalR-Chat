@@ -85,6 +85,7 @@ graph TB
 | **Database** | Azure Cosmos DB (NoSQL) | Messages, rooms, users, read receipts |
 | **Cache** | Azure Redis | OTP storage, rate limiting, presence tracking |
 | **Authentication** | Cookie-based + OTP | Secure login with Argon2id hashing |
+| **Translation** | Background workers + Redis queue + Azure AI Foundry | Asynchronous message translation with real-time updates |
 | **Observability** | OpenTelemetry + App Insights | Metrics, traces, logs |
 | **Notifications** | Azure Communication Services | Email/SMS delivery |
 
@@ -117,6 +118,30 @@ sequenceDiagram
     
     Hub->>Room: MessageRead(messageId, userName)
     Note over Room: Notify all members<br/>of read status
+```
+
+### Asynchronous Translation Flow
+
+```mermaid
+sequenceDiagram
+    participant User as User (Browser)
+    participant Hub as SignalR Hub
+    participant Room as Room Members
+    participant Queue as Redis Queue
+    participant Worker as Translation Worker
+    participant AI as Azure AI Foundry
+    participant DB as Cosmos DB
+
+    User->>Hub: SendMessage(roomName, content)
+    Hub->>Room: ReceiveMessage(message)
+    Hub->>Queue: Enqueue translation job
+    Note over Hub: source = sender preference (or auto)<br/>targets = room languages + always en
+
+    Worker->>Queue: Dequeue job
+    Worker->>AI: Translate(content, source, targets)
+    AI-->>Worker: Translations
+    Worker->>DB: Update message translations + status
+    Worker->>Room: TranslationUpdated(messageId)
 ```
 
 ### OTP Authentication Flow

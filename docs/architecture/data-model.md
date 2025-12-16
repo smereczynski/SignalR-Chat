@@ -86,6 +86,9 @@ Database name: `chat` (configurable via `Cosmos:Database`).
   "enabled": true,                               // Account status flag
   "fixedRooms": ["general", "ops"],              // Array of room names
   "defaultRoom": "general",                      // Preferred starting room
+
+  // Translation / localization preference
+  "preferredLanguage": "pl",                     // Optional, normalized language code (e.g. "pl", "de"); may be missing for existing users
   
   // Entra ID fields (null for OTP-only users)
   "upn": "alice@contoso.com",                    // User Principal Name
@@ -100,7 +103,10 @@ Database name: `chat` (configurable via `Cosmos:Database`).
   "id": "general",           // Same as name
   "name": "general",         // Partition key, unique identifier
   "admin": null,             // Reserved for future admin assignment
-  "users": []                // Array of usernames (denormalized for quick lookup)
+  "users": [],               // Array of usernames (denormalized for quick lookup)
+
+  // Room language set used to derive translation targets
+  "languages": ["en", "pl"] // Optional, normalized language codes; may be missing for existing rooms
 }
 ```
 

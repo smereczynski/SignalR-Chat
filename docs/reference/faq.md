@@ -23,7 +23,7 @@ SignalR Chat is a production-ready, real-time chat application built with ASP.NE
 - OTP-based authentication (no passwords)
 - Azure cloud infrastructure (Cosmos DB, Redis, SignalR Service)
 - OpenTelemetry observability
-- Multi-language support (9 languages)
+- Multi-language support (8 languages)
 
 ### Can I use this in production?
 
@@ -42,7 +42,7 @@ SignalR Chat is a production-ready, real-time chat application built with ASP.NE
 - Typing indicators (3-second timeout)
 - Presence tracking (online/offline status)
 - OTP authentication (email or console)
-- Multi-language support (9 languages)
+- Multi-language support (8 languages)
 - Automatic reconnection (exponential backoff)
 
 **What's NOT included** (by design):
@@ -202,12 +202,13 @@ See [Local Setup Guide](../development/local-setup.md#full-setup-azure-mode) for
 
 ### What tests are included?
 
-SignalR Chat includes **135+ unit tests** covering core business logic:
+SignalR Chat includes automated tests (unit, integration, and web/security) covering core business logic:
 
 ```bash
 # Run all tests
 dotnet test src/Chat.sln
-# Output: 135/135 passed ✅
+# Output includes a summary like:
+# Test summary: total: 179, failed: 0, succeeded: 179, skipped: 0
 ```
 
 **Test coverage**:
@@ -215,7 +216,7 @@ dotnet test src/Chat.sln
 - ✅ Log sanitization (CWE-117 prevention)
 - ✅ URL validation (security)
 - ✅ Configuration guards (startup validation)
-- ✅ Localization (9 languages)
+- ✅ Localization (8 languages)
 - ✅ Service utilities (presence, notifications)
 
 **Future work**: Integration tests and end-to-end tests can be implemented when they become a priority. Currently, the focus is on maintaining comprehensive unit test coverage.

@@ -200,9 +200,22 @@ Response:
 
 ## Supported Languages
 
-All 9 languages in the application:
-- English (en), Polish (pl), German (de), French (fr), Spanish (es)
-- Italian (it), Portuguese (pt), Japanese (ja), Chinese (zh)
+All languages currently enabled in the application localization layer:
+- English (en)
+- Polish (pl)
+- German (de)
+- Czech (cs)
+- Slovak (sk)
+- Ukrainian (uk)
+- Lithuanian (lt)
+- Russian (ru)
+
+## How the App Chooses Languages
+
+- **Source language**: sender's user preference (`preferredLanguage`) when set; otherwise `auto`.
+- **Target languages**: the room's language set (`languages`) plus **always** English (`en`).
+- **No invalid targets**: `auto` is never sent as a target language.
+- **No retroactive translation**: room language changes apply only to new messages.
 
 ## Migration Path
 

@@ -6,7 +6,7 @@ This document describes the asynchronous AI-powered message translation system i
 
 **Phase 2 Implementation** (December 2025)
 
-The translation system enables real-time multilingual communication by automatically translating messages in the background using Azure AI Foundry (GPT-4o-mini). When a message is sent, it's immediately broadcast to room members, then asynchronously translated into all supported languages and delivered via SignalR as updates arrive.
+The translation system enables real-time multilingual communication by automatically translating messages in the background using Azure AI Foundry (GPT-4o-mini). When a message is sent, it's immediately broadcast to room members, then asynchronously translated into the room's language set (plus always English) and delivered via SignalR as updates arrive.
 
 **Key Characteristics:**
 - ✅ **Asynchronous**: Non-blocking message send, translations delivered as they complete
@@ -200,6 +200,24 @@ stateDiagram-v2
 - **Completed**: All translations successful
 - **Failed**: Max retries exceeded or unrecoverable error
 
+### 5. User and Room Language Model
+
+The translation pipeline derives source/targets from domain state:
+
+- **User**: `ApplicationUser.PreferredLanguage`
+    - Stored in Cosmos DB user documents as `preferredLanguage`.
+    - Normalized to a language code (e.g. `pl-PL` → `pl`).
+    - Used as the translation **source** language when present; otherwise `auto`.
+
+- **Room**: `Room.Languages`
+    - Stored in Cosmos DB room documents as `languages`.
+    - Represents the room's evolving language set.
+    - Used to build translation **targets**, plus **always** `en`.
+
+Notes:
+- The room language set is updated when users join (best-effort; normalized + deduplicated).
+- Old messages are not translated to newly added room languages.
+
 ## Integration Flow
 
 ### 1. Message Send Flow
@@ -207,7 +225,7 @@ stateDiagram-v2
 ```mermaid
 flowchart TD
     A[User sends message via SignalR] --> B[ChatHub.SendMessage]
-    B --> C[Save message to Cosmos<br/>status: None]
+    B --> C[Save message to Cosmos<br/>status: Pending]
     B --> D[Broadcast original message to room]
     B --> E[Enqueue translation job]
     C --> F[Return success to sender]
@@ -238,14 +256,23 @@ public async Task SendMessage(string roomName, string content)
     await Clients.Group(roomName).ReceiveMessage(message);
     
     // Enqueue translation job (fire-and-forget)
+    // - source language: sender preference (or "auto")
+    // - targets: room languages + always "en" (never include "auto")
+    var userName = Context.User?.Identity?.Name;
+    var domainUser = userName == null ? null : await _users.GetByUserNameAsync(userName);
+    var room = await _rooms.GetByNameAsync(roomName);
+
+    var sourceLanguage = Chat.Web.Utilities.LanguageCode.NormalizeToLanguageCode(domainUser?.PreferredLanguage) ?? "auto";
+    var targets = Chat.Web.Utilities.LanguageCode.BuildTargetLanguages(room?.Languages, sourceLanguage);
+
     var job = new MessageTranslationJob
     {
         JobId = Guid.NewGuid().ToString(),
         MessageId = message.Id,
         RoomName = roomName,
         Content = content,
-        SourceLanguage = "auto", // Detect automatically
-        TargetLanguages = new[] { "en", "pl", "de", "fr", "es", "it", "pt", "ja", "zh" },
+        SourceLanguage = sourceLanguage,
+        TargetLanguages = targets,
         DeploymentName = "gpt-4o-mini"
     };
     
@@ -409,7 +436,7 @@ Metrics.TranslationJobsEnqueued.Add(1,
 
 **Example Logs**:
 ```
-[Information] Translation job job-123 completed in 1.2s: 9 languages translated
+[Information] Translation job job-123 completed in 1.2s: 3 languages translated
 [Warning] Translation job job-456 failed (attempt 2/3), requeuing with high priority
 [Error] Translation job job-789 failed after 3 attempts, marking message as Failed
 ```
@@ -458,7 +485,7 @@ public class TranslationQueueHealthCheck : IHealthCheck
 
 **TranslationServiceIntegrationTests**:
 - End-to-end translation flow with Azure AI Foundry
-- Multi-language translation (9 languages)
+- Multi-language translation (room language set)
 - Cache behavior (hit, miss, TTL expiry)
 - Tone preservation (casual, professional, friendly)
 - Long text handling
@@ -483,7 +510,7 @@ public class TranslationQueueHealthCheck : IHealthCheck
 ### Throughput
 
 - **Message Send Latency**: <50ms (non-blocking, job enqueued immediately)
-- **Translation Latency**: 1-3 seconds per message (9 languages)
+- **Translation Latency**: 1-3 seconds per message (depends on room language set)
 - **Queue Throughput**: 5-10 jobs/second (5 workers × 2 sec avg per job)
 - **Cache Hit Rate**: 40-60% for common phrases
 
@@ -507,7 +534,7 @@ public class TranslationQueueHealthCheck : IHealthCheck
 **API Costs** (GPT-4o-mini pricing):
 - Input: $0.15 per 1M tokens
 - Output: $0.60 per 1M tokens
-- Average message: 50 tokens input, 50 tokens output × 9 languages = 500 tokens total
+- Average message: 50 tokens input, 50 tokens output × 3 languages = 150 tokens total (example)
 - Cost per message: ~$0.0004 (0.04 cents)
 
 **With Caching** (40% hit rate):
@@ -528,9 +555,9 @@ public class TranslationQueueHealthCheck : IHealthCheck
    - **Impact**: User waits 1-3 seconds for all translations
    - **Future**: Incremental translation updates as each language completes
 
-2. **Fixed Target Languages**: All 9 languages translated for every message
-   - **Impact**: Higher API costs, some translations unused
-   - **Future**: User preference for target languages
+2. **No retroactive translations**: When the room language set changes, old messages are not backfilled
+    - **Impact**: Newly joined languages only apply to new messages
+    - **Future**: Optional backfill job (trade-off: cost + load)
 
 3. **No Cancellation Support**: Dequeue operation doesn't check cancellation token
    - **Impact**: Graceful shutdown may take up to polling delay (500ms)
@@ -563,13 +590,12 @@ public class TranslationQueueHealthCheck : IHealthCheck
 
 1. **Incremental Translation Updates**:
    - Broadcast each language as it completes
-   - Client shows "Translating... (3/9 languages ready)"
+    - Client shows "Translating... (3/8 languages ready)"
    - Improves perceived performance
 
-2. **User Language Preferences**:
-   - Store preferred languages per user
-   - Only translate to preferred languages
-   - Reduces API costs by 50-70%
+2. **Room Language Management**:
+    - Explicitly manage the room language set (instead of learning it from joins)
+    - Keeps translation targets predictable
 
 3. **Priority Queues**:
    - VIP users get higher priority
@@ -596,5 +622,5 @@ public class TranslationQueueHealthCheck : IHealthCheck
 
 ---
 
-**Last Updated**: December 3, 2025  
+**Last Updated**: December 16, 2025  
 **Version**: 1.0.0 (Phase 2 implementation complete)

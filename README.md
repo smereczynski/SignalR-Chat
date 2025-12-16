@@ -2,7 +2,7 @@
 
 A production-ready real-time chat application with **asynchronous AI-powered translation** built using ASP.NET Core 9, SignalR, Azure Cosmos DB, Redis, and Azure AI Foundry. Features multi-language chat rooms, dual authentication (Entra ID + OTP), read receipts, presence tracking, and comprehensive observability.
 
-> **Status**: Production-ready | **License**: [MIT](LICENSE) | **Tests**: 165 passing ✅
+> **Status**: Production-ready | **License**: [MIT](LICENSE) | **Tests**: 179 passing ✅
 
 ![Chat Application](docs/images/hero.gif)
 <!-- TODO: Add screenshot showing login, rooms, read receipts, reconnection -->
@@ -13,11 +13,11 @@ SignalR Chat demonstrates modern real-time web application patterns with product
 
 **What it does**:
 - 🚀 Real-time messaging with SignalR (WebSocket + Server-Sent Events fallback)
-- 🌐 **Asynchronous AI-powered translation** (Azure AI Foundry GPT-4o-mini, 9 languages, background workers)
+- 🌐 **Asynchronous AI-powered translation** (Azure AI Foundry GPT-4o-mini, background workers; targets derived from room languages)
 - 🔐 Dual authentication: Microsoft Entra ID (enterprise) + OTP fallback (Argon2id hashing, rate limiting)
 - 👥 Fixed chat rooms: General, Tech, Random, Sports (no DMs)
 - ✓ Read receipts, typing indicators, presence tracking
-- 🌍 9 languages supported (i18n with server-side + client-side resources)
+- 🌍 8 languages supported (i18n with server-side + client-side resources)
 - 📊 Full observability (OpenTelemetry, Azure App Insights, health checks)
 - 🔒 Security headers (CSP with nonces, HSTS, frame protection)
 
@@ -40,7 +40,7 @@ cd SignalR-Chat
 dotnet build ./src/Chat.sln
 
 # Run with in-memory mode
-dotnet run --project ./src/Chat.Web --urls=http://localhost:5099
+Testing__InMemory=true dotnet run --project ./src/Chat.Web --urls=http://localhost:5099
 
 # Open browser: http://localhost:5099
 # Users: alice, bob, charlie, dave, eve
@@ -70,6 +70,8 @@ dotnet run --project ./src/Chat.Web --urls=http://localhost:5099
 | **Reference** | API, configuration, telemetry | [docs/reference/](docs/reference/) |
 
 ---
+
+Translation deep-dive: [docs/architecture/translation-architecture.md](docs/architecture/translation-architecture.md)
 
 ## 🏗️ Architecture Overview
 
@@ -123,7 +125,7 @@ graph TD
 | **Backend** | ASP.NET Core 9, SignalR | Web server, WebSocket hub |
 | **Database** | Azure Cosmos DB (NoSQL) | Messages, rooms, read receipts, translations |
 | **Cache** | Redis | OTP storage, rate limiting, translation job queue |
-| **AI Translation** | Azure AI Foundry (GPT-4o-mini) | Real-time message translation (9 languages) |
+| **AI Translation** | Azure AI Foundry (GPT-4o-mini) | Asynchronous message translation |
 | **Auth** | Cookie authentication + Entra ID/OTP | Dual authentication: enterprise SSO + guest OTP |
 | **Observability** | OpenTelemetry, App Insights | Metrics, traces, logs |
 | **Deployment** | Azure App Service (Linux), Bicep IaC | Infrastructure as Code |
@@ -159,21 +161,21 @@ SignalR-Chat/
 
 ## 🧪 Testing
 
-**165 tests** (100% passing) covering unit, integration, and web security:
+**179 tests** (100% passing) covering unit, integration, and web security:
 
 ```bash
 # Run all tests
 dotnet test src/Chat.sln
 
 # Run specific test project
-dotnet test tests/Chat.Tests/           # 142 tests (unit + integration)
-dotnet test tests/Chat.IntegrationTests/ # 14 tests (ChatHub, OTP, auth)
-dotnet test tests/Chat.Web.Tests/       # 9 tests (security headers, health)
+dotnet test tests/Chat.Tests/
+dotnet test tests/Chat.IntegrationTests/
+dotnet test tests/Chat.Web.Tests/
 ```
 
 **Test coverage**:
-- ✅ 55 localization tests (9 languages × 6 categories)
-- ✅ 23 translation tests (models, queue, service integration)
+- ✅ Localization tests (culture coverage)
+- ✅ Translation tests (models, queue, service integration)
 - ✅ 14 integration tests (ChatHub lifecycle, OTP flow, rate limiting)
 - ✅ 13 security tests (log sanitization, CORS, CSP)
 - ✅ 9 web tests (security headers, health endpoints)
@@ -265,9 +267,9 @@ Cors__AllowAllOrigins=false
 
 ## 🌍 Localization
 
-Supports 9 languages with both server-side (.resx) and client-side (API) translations:
+Supports 8 languages with both server-side (.resx) and client-side (API) translations:
 
-**Languages**: English, Polish, Spanish, French, German, Italian, Portuguese, Japanese, Chinese
+**Languages**: English, Polish, German, Czech, Slovak, Ukrainian, Lithuanian, Russian
 
 ```bash
 # Add new language key

@@ -117,16 +117,15 @@ With `Testing__InMemory=true`, the application uses:
 
 ### Language Switching
 - Click the flag icon in the profile section
-- Choose from 9 languages:
-  - 🇺🇸 English
-  - 🇵🇱 Polish
-  - 🇪🇸 Spanish
-  - 🇫🇷 French
-  - 🇩🇪 German
-  - 🇮🇹 Italian
-  - 🇵🇹 Portuguese
-  - 🇯🇵 Japanese
-  - 🇨🇳 Chinese
+- Choose from 8 languages:
+      - 🇺🇸 English
+      - 🇵🇱 Polish
+      - 🇩🇪 German
+      - 🇨🇿 Czech
+      - 🇸🇰 Slovak
+      - 🇺🇦 Ukrainian
+      - 🇱🇹 Lithuanian
+      - 🇷🇺 Russian
 
 ## Limitations of In-Memory Mode
 
