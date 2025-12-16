@@ -112,48 +112,7 @@
     </div>
 </div>
 
-<!-- Language Selection Modal -->
-<div class="modal fade" id="languageModal" tabindex="-1" aria-labelledby="languageModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="languageModalLabel">@Localizer["SelectLanguage"]</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <div class="list-group language-list">
-                    <button type="button" class="list-group-item list-group-item-action" data-culture="en" data-flag="gb">
-                        <span class="flag-icon fi fi-gb fis me-2" aria-hidden="true"></span> English
-                    </button>
-                    <button type="button" class="list-group-item list-group-item-action" data-culture="pl-PL" data-flag="pl">
-                        <span class="flag-icon fi fi-pl fis me-2" aria-hidden="true"></span> Polski
-                    </button>
-                    <button type="button" class="list-group-item list-group-item-action" data-culture="de-DE" data-flag="de">
-                        <span class="flag-icon fi fi-de fis me-2" aria-hidden="true"></span> Deutsch
-                    </button>
-                    <button type="button" class="list-group-item list-group-item-action" data-culture="cs-CZ" data-flag="cz">
-                        <span class="flag-icon fi fi-cz fis me-2" aria-hidden="true"></span> Čeština
-                    </button>
-                    <button type="button" class="list-group-item list-group-item-action" data-culture="sk-SK" data-flag="sk">
-                        <span class="flag-icon fi fi-sk fis me-2" aria-hidden="true"></span> Slovenčina
-                    </button>
-                    <button type="button" class="list-group-item list-group-item-action" data-culture="uk-UA" data-flag="ua">
-                        <span class="flag-icon fi fi-ua fis me-2" aria-hidden="true"></span> Українська
-                    </button>
-                    <button type="button" class="list-group-item list-group-item-action" data-culture="be-BY" data-flag="by">
-                        <span class="flag-icon fi fi-by fis me-2" aria-hidden="true"></span> Беларуская
-                    </button>
-                    <button type="button" class="list-group-item list-group-item-action" data-culture="lt-LT" data-flag="lt">
-                        <span class="flag-icon fi fi-lt fis me-2" aria-hidden="true"></span> Lietuvių
-                    </button>
-                    <button type="button" class="list-group-item list-group-item-action" data-culture="ru-RU" data-flag="ru">
-                        <span class="flag-icon fi fi-ru fis me-2" aria-hidden="true"></span> Русский
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
+<partial name="_LanguageSelectionModal" />
 
 @section Scripts {
     <script src="~/lib/bootstrap/js/bootstrap.bundle.min.js"></script>
