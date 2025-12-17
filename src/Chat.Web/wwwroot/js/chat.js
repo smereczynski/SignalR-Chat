@@ -293,6 +293,121 @@ if(window.__chatAppBooted){
     state.messages.forEach(m=> renderSingleMessage(m, false));
     finalizeMessageRender();
   }
+
+  // Translation UI helpers -------------------------------------------------
+  function getUiLanguageCode(){
+    const culture = (document.documentElement.lang || 'en').toLowerCase();
+    return (culture.split('-')[0] || 'en').trim() || 'en';
+  }
+  function normalizeTranslationStatus(m){
+    return (m && (m.translationStatus || m.TranslationStatus) || 'None');
+  }
+  function normalizeTranslations(m){
+    const t = m && (m.translations || m.Translations);
+    return (t && typeof t === 'object') ? t : {};
+  }
+  function shouldShowTranslationPanel(m){
+    const status = (normalizeTranslationStatus(m) || '').toLowerCase();
+    const translations = normalizeTranslations(m);
+    const hasTranslations = translations && Object.keys(translations).length > 0;
+    return hasTranslations || status === 'pending' || status === 'inprogress' || status === 'failed';
+  }
+  function getExpectedTranslationLanguages(m){
+    const translations = normalizeTranslations(m);
+    const keys = Object.keys(translations || {});
+    if(keys.length) return keys;
+    // Minimal, frontend-only expectation: always include English, and also the current UI language.
+    const ui = getUiLanguageCode();
+    const langs = ['en'];
+    if(ui && ui !== 'en') langs.push(ui);
+    return langs;
+  }
+  function renderTranslationPanel(messageContentEl, m){
+    if(!messageContentEl) return;
+    const existing = messageContentEl.querySelector('.translation-panel');
+    if(existing) existing.remove();
+
+    if(!shouldShowTranslationPanel(m)) return;
+
+    const statusRaw = normalizeTranslationStatus(m);
+    const status = (statusRaw || '').toLowerCase();
+    const translations = normalizeTranslations(m);
+    const errorMessage = m && (m.translationFailureMessage || m.translationErrorMessage || m.translationError || '');
+
+    const panel = document.createElement('div');
+    panel.className = 'translation-panel mt-2 pt-2 border-top';
+
+    const inner = document.createElement('div');
+    inner.className = 'bg-body-tertiary rounded p-2';
+
+    const titleRow = document.createElement('div');
+    titleRow.className = 'd-flex align-items-center justify-content-between mb-1';
+    const title = document.createElement('span');
+    title.className = 'small fw-semibold';
+    title.textContent = window.i18n?.translations || 'Translations';
+    titleRow.appendChild(title);
+
+    if(status === 'pending' || status === 'inprogress'){
+      const busy = document.createElement('span');
+      busy.className = 'small text-muted d-inline-flex align-items-center gap-2';
+      const spinner = document.createElement('span');
+      spinner.className = 'spinner-border spinner-border-sm';
+      spinner.setAttribute('role','status');
+      spinner.setAttribute('aria-hidden','true');
+      busy.appendChild(spinner);
+      const txt = document.createElement('span');
+      txt.textContent = window.i18n?.translating || 'Translating…';
+      busy.appendChild(txt);
+      titleRow.appendChild(busy);
+    }
+
+    inner.appendChild(titleRow);
+
+    const langs = getExpectedTranslationLanguages(m);
+    langs.forEach(lang => {
+      const row = document.createElement('div');
+      row.className = 'd-flex gap-2 align-items-start';
+
+      const badge = document.createElement('span');
+      badge.className = 'badge text-bg-secondary';
+      badge.textContent = String(lang || '').toUpperCase();
+      row.appendChild(badge);
+
+      const text = document.createElement('div');
+      text.className = 'small';
+      const translatedText = translations && (translations[lang] || translations[String(lang).toLowerCase()] || translations[String(lang).toUpperCase()]);
+
+      if(translatedText){
+        text.textContent = translatedText;
+      } else if(status === 'failed'){
+        text.classList.add('text-danger');
+        text.textContent = errorMessage ? errorMessage : (window.i18n?.translationFailed || 'Translation failed.');
+      } else {
+        // Pending / in progress: expected placeholder per language
+        const wrap = document.createElement('span');
+        wrap.className = 'text-muted d-inline-flex align-items-center gap-2';
+        const sp = document.createElement('span');
+        sp.className = 'spinner-border spinner-border-sm';
+        sp.setAttribute('role','status');
+        sp.setAttribute('aria-hidden','true');
+        wrap.appendChild(sp);
+        const t = document.createElement('span');
+        t.textContent = window.i18n?.translationPending || '…';
+        wrap.appendChild(t);
+        text.appendChild(wrap);
+      }
+
+      row.appendChild(text);
+      inner.appendChild(row);
+    });
+
+    panel.appendChild(inner);
+    // Insert translations between message body and read receipts.
+    const rr = messageContentEl.querySelector('.read-receipt');
+    if(rr) rr.before(panel);
+    else messageContentEl.appendChild(panel);
+  }
+
   function renderSingleMessage(m, scrollIntoView){
     if(!els.messagesList) return;
     const li=document.createElement('li');
@@ -313,6 +428,10 @@ if(window.__chatAppBooted){
     }
     content.appendChild(info);
   const body=document.createElement('div'); body.className='content'; body.textContent=m.content; content.appendChild(body);
+
+  // Translation panel (original message always visible; translations below)
+  renderTranslationPanel(content, m);
+
   // Read receipt indicator (compact)
   const rr = document.createElement('div'); rr.className='read-receipt small text-muted';
   updateReadReceiptDom(rr, m);
@@ -357,6 +476,10 @@ if(window.__chatAppBooted){
     let rr = node.querySelector('.read-receipt');
     if(!rr){ rr = document.createElement('div'); rr.className='read-receipt small text-muted'; const content = node.querySelector('.message-content'); if(content) content.appendChild(rr); }
     updateReadReceiptDom(rr, m);
+
+    // Update translation panel
+    const contentEl = node.querySelector('.message-content');
+    renderTranslationPanel(contentEl, m);
     return true;
   }
   function updateReadReceiptDom(rrEl, m){
@@ -731,7 +854,7 @@ if(window.__chatAppBooted){
       if(mineUser && m.correlationId){
         const idx = state.messages.findIndex(x=> x.isMine && x.correlationId===m.correlationId);
         if(idx>=0){
-          state.messages[idx] = {id:m.id,content:m.content,timestamp:m.timestamp,fromUserName:m.fromUserName,fromFullName:m.fromFullName,avatar:m.avatar,isMine:true, correlationId:m.correlationId, readBy: m.readBy||[]};
+          state.messages[idx] = {id:m.id,content:m.content,timestamp:m.timestamp,fromUserName:m.fromUserName,fromFullName:m.fromFullName,avatar:m.avatar,isMine:true, correlationId:m.correlationId, readBy: m.readBy||[], translationStatus: (m.translationStatus||m.TranslationStatus||'None'), translations: (m.translations||m.Translations||{}), translationErrorMessage: ''};
           // pendingMessages entry may have been removed on invoke ack; ensure cleanup if present
           if(state.pendingMessages[m.correlationId]) delete state.pendingMessages[m.correlationId];
           // Remove any duplicate server entry with the same id that might have been loaded via history
@@ -750,7 +873,7 @@ if(window.__chatAppBooted){
         const byIdIdx = state.messages.findIndex(x=> x && x.id===m.id);
         if(byIdIdx>=0){
           const isMine = !!(state.profile && state.profile.userName === m.fromUserName);
-          state.messages[byIdIdx] = {id:m.id,content:m.content,timestamp:m.timestamp,fromUserName:m.fromUserName,fromFullName:m.fromFullName,avatar:m.avatar,isMine, correlationId: m.correlationId||state.messages[byIdIdx].correlationId, readBy: m.readBy||state.messages[byIdIdx].readBy||[]};
+          state.messages[byIdIdx] = {id:m.id,content:m.content,timestamp:m.timestamp,fromUserName:m.fromUserName,fromFullName:m.fromFullName,avatar:m.avatar,isMine, correlationId: m.correlationId||state.messages[byIdIdx].correlationId, readBy: m.readBy||state.messages[byIdIdx].readBy||[], translationStatus: (m.translationStatus||m.TranslationStatus||state.messages[byIdIdx].translationStatus||'None'), translations: (m.translations||m.Translations||state.messages[byIdIdx].translations||{}), translationErrorMessage: (state.messages[byIdIdx].translationErrorMessage||'')};
           renderMessages();
           finalizeMessageRender();
           return;
@@ -782,6 +905,38 @@ if(window.__chatAppBooted){
           const msg = state.messages[idx];
           msg.readBy = readers;
           updateMessageDom(msg) || renderMessages();
+        }
+      } catch(_) { /* ignore */ }
+    });
+
+    // Translation updates (emitted by TranslationBackgroundService)
+    c.on('translationCompleted', payload => {
+      try {
+        const id = payload && (payload.messageId || payload.MessageId);
+        const translations = (payload && (payload.translations || payload.Translations)) || {};
+        const idx = state.messages.findIndex(x=> x && x.id===id);
+        if(idx>=0){
+          const msg = state.messages[idx];
+          msg.translationStatus = 'Completed';
+          msg.translations = translations;
+          msg.translationErrorMessage = '';
+          updateMessageDom(msg) || renderMessages();
+          finalizeMessageRender();
+        }
+      } catch(_) { /* ignore */ }
+    });
+    c.on('translationFailed', payload => {
+      try {
+        const id = payload && (payload.messageId || payload.MessageId);
+        const errMsg = (payload && (payload.message || payload.error || payload.Message)) || '';
+        const idx = state.messages.findIndex(x=> x && x.id===id);
+        if(idx>=0){
+          const msg = state.messages[idx];
+          msg.translationStatus = 'Failed';
+          msg.translationErrorMessage = errMsg;
+          msg.translations = msg.translations || {};
+          updateMessageDom(msg) || renderMessages();
+          finalizeMessageRender();
         }
       } catch(_) { /* ignore */ }
     });
@@ -883,7 +1038,7 @@ if(window.__chatAppBooted){
     let existingIdx = -1;
     if(m && m.correlationId){ existingIdx = state.messages.findIndex(x=> x && x.correlationId===m.correlationId); }
     if(existingIdx<0 && m && m.id!==undefined){ existingIdx = state.messages.findIndex(x=> x && x.id===m.id); }
-  const rec={id:m.id,content:m.content,timestamp:m.timestamp,fromUserName:m.fromUserName,fromFullName:m.fromFullName,avatar:m.avatar,isMine, correlationId:m.correlationId, readBy: m.readBy||[]};
+  const rec={id:m.id,content:m.content,timestamp:m.timestamp,fromUserName:m.fromUserName,fromFullName:m.fromFullName,avatar:m.avatar,isMine, correlationId:m.correlationId, readBy: m.readBy||[], translationStatus: (m.translationStatus||m.TranslationStatus||'None'), translations: (m.translations||m.Translations||{}), translationErrorMessage: (m.translationErrorMessage||m.translationFailureMessage||m.translationError||'')};
     if(existingIdx>=0){
       state.messages[existingIdx] = rec;
       renderMessages();
@@ -1000,7 +1155,7 @@ if(window.__chatAppBooted){
     apiGet('/api/Messages/Room/'+encodeURIComponent(state.joinedRoom.name)+'?take='+state.pageSize)
       .then(list=>{
         // Server returns ascending order (repository sorts ascending)
-  state.messages = list.map(m=>({id:m.id,content:m.content,timestamp:m.timestamp,fromUserName:m.fromUserName,fromFullName:m.fromFullName,avatar:m.avatar,isMine: state.profile && state.profile.userName===m.fromUserName, readBy: m.readBy||[]}));
+  state.messages = list.map(m=>({id:m.id,content:m.content,timestamp:m.timestamp,fromUserName:m.fromUserName,fromFullName:m.fromFullName,avatar:m.avatar,isMine: state.profile && state.profile.userName===m.fromUserName, readBy: m.readBy||[], translationStatus: (m.translationStatus||m.TranslationStatus||'None'), translations: (m.translations||m.Translations||{}), translationErrorMessage: (m.translationErrorMessage||m.translationFailureMessage||m.translationError||'')}));
         // After baseline load, reattach any locally unsent (pending/failed) messages captured for this room
         restoreUnsentForRoom(state.joinedRoom.name);
         if(state.messages.length>0){
@@ -1033,7 +1188,7 @@ if(window.__chatAppBooted){
           return;
         }
         if(!Array.isArray(list) || list.length===0){ state.canLoadMore=false; postTelemetry('messages.page.empty',{token:reqToken}); return; }
-  const mapped=list.map(m=>({id:m.id,content:m.content,timestamp:m.timestamp,fromUserName:m.fromUserName,fromFullName:m.fromFullName,avatar:m.avatar,isMine: state.profile && state.profile.userName===m.fromUserName, readBy: m.readBy||[]}));
+  const mapped=list.map(m=>({id:m.id,content:m.content,timestamp:m.timestamp,fromUserName:m.fromUserName,fromFullName:m.fromFullName,avatar:m.avatar,isMine: state.profile && state.profile.userName===m.fromUserName, readBy: m.readBy||[], translationStatus: (m.translationStatus||m.TranslationStatus||'None'), translations: (m.translations||m.Translations||{}), translationErrorMessage: (m.translationErrorMessage||m.translationFailureMessage||m.translationError||'')}));
         const mc=document.querySelector('.messages-container'); let prevScrollHeight = mc? mc.scrollHeight:0;
         // Prepend and adjust oldest timestamp verifying monotonicity
         const prevOldest = state.oldestLoaded;
