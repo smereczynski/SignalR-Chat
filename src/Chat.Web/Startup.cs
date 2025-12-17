@@ -251,6 +251,21 @@ namespace Chat.Web
                     }
                 }
             });
+
+            services.PostConfigure<Chat.Web.Options.TranslationOptions>(opts =>
+            {
+                // In Azure App Service, secrets are sometimes configured under "Connection strings".
+                // Bicep currently sets Translation__SubscriptionKey as a connection string, while the app binds
+                // TranslationOptions from the "Translation" section. Bridge that gap here.
+                if (string.IsNullOrWhiteSpace(opts.SubscriptionKey))
+                {
+                    var subscriptionKey = Configuration.GetConnectionString("Translation__SubscriptionKey");
+                    if (!string.IsNullOrWhiteSpace(subscriptionKey))
+                    {
+                        opts.SubscriptionKey = subscriptionKey;
+                    }
+                }
+            });
             services.AddSingleton<IOtpHasher, Argon2OtpHasher>();
 
             // Baseline health checks so mapping exists even in Testing:InMemory mode
