@@ -477,7 +477,6 @@ document.addEventListener('DOMContentLoaded', () => {
             'cs-CZ': 'cz',
             'sk-SK': 'sk',
             'uk-UA': 'ua',
-            'be-BY': 'by',
             'lt-LT': 'lt',
             'ru-RU': 'ru'
         };

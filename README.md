@@ -1,8 +1,8 @@
 # SignalR Chat (v0.9.5)
 
-A production-ready real-time chat application with **asynchronous AI-powered translation** built using ASP.NET Core 9, SignalR, Azure Cosmos DB, Redis, and Azure AI Foundry. Features multi-language chat rooms, dual authentication (Entra ID + OTP), read receipts, presence tracking, and comprehensive observability.
+A production-ready real-time chat application with **asynchronous AI-powered translation** built using ASP.NET Core 9, SignalR, Azure Cosmos DB, Redis, and Azure AI Translator (Text Translation REST API). Features multi-language chat rooms, dual authentication (Entra ID + OTP), read receipts, presence tracking, and comprehensive observability.
 
-> **Status**: Production-ready | **License**: [MIT](LICENSE) | **Tests**: 165 passing ✅
+> **Status**: Production-ready | **License**: [MIT](LICENSE) | **Tests**: 193 passing ✅
 
 ![Chat Application](docs/images/hero.gif)
 <!-- TODO: Add screenshot showing login, rooms, read receipts, reconnection -->
@@ -13,11 +13,11 @@ SignalR Chat demonstrates modern real-time web application patterns with product
 
 **What it does**:
 - 🚀 Real-time messaging with SignalR (WebSocket + Server-Sent Events fallback)
-- 🌐 **Asynchronous AI-powered translation** (Azure AI Foundry GPT-4o-mini, 9 languages, background workers)
+- 🌐 **Asynchronous AI-powered translation** (Azure AI Translator, background workers; targets derived from room languages)
 - 🔐 Dual authentication: Microsoft Entra ID (enterprise) + OTP fallback (Argon2id hashing, rate limiting)
 - 👥 Fixed chat rooms: General, Tech, Random, Sports (no DMs)
 - ✓ Read receipts, typing indicators, presence tracking
-- 🌍 9 languages supported (i18n with server-side + client-side resources)
+- 🌍 8 languages supported (i18n with server-side + client-side resources)
 - 📊 Full observability (OpenTelemetry, Azure App Insights, health checks)
 - 🔒 Security headers (CSP with nonces, HSTS, frame protection)
 
@@ -40,7 +40,7 @@ cd SignalR-Chat
 dotnet build ./src/Chat.sln
 
 # Run with in-memory mode
-dotnet run --project ./src/Chat.Web --urls=http://localhost:5099
+Testing__InMemory=true dotnet run --project ./src/Chat.Web --urls=http://localhost:5099
 
 # Open browser: http://localhost:5099
 # Users: alice, bob, charlie, dave, eve
@@ -70,6 +70,8 @@ dotnet run --project ./src/Chat.Web --urls=http://localhost:5099
 | **Reference** | API, configuration, telemetry | [docs/reference/](docs/reference/) |
 
 ---
+
+Translation deep-dive: [docs/architecture/translation-architecture.md](docs/architecture/translation-architecture.md)
 
 ## 🏗️ Architecture Overview
 
@@ -123,7 +125,7 @@ graph TD
 | **Backend** | ASP.NET Core 9, SignalR | Web server, WebSocket hub |
 | **Database** | Azure Cosmos DB (NoSQL) | Messages, rooms, read receipts, translations |
 | **Cache** | Redis | OTP storage, rate limiting, translation job queue |
-| **AI Translation** | Azure AI Foundry (GPT-4o-mini) | Real-time message translation (9 languages) |
+| **AI Translation** | Azure AI Translator (Text Translation REST API) | Asynchronous message translation |
 | **Auth** | Cookie authentication + Entra ID/OTP | Dual authentication: enterprise SSO + guest OTP |
 | **Observability** | OpenTelemetry, App Insights | Metrics, traces, logs |
 | **Deployment** | Azure App Service (Linux), Bicep IaC | Infrastructure as Code |
@@ -144,9 +146,9 @@ SignalR-Chat/
 │   │   └── Middleware/       # Security headers, logging
 │   └── Chat.sln              # Solution file
 ├── tests/
-│   ├── Chat.Tests/           # Unit tests (93 tests)
-│   ├── Chat.IntegrationTests/# Integration tests (22 tests)
-│   └── Chat.Web.Tests/       # Web/security tests (9 tests)
+│   ├── Chat.Tests/           # Unit tests (included in Chat.sln)
+│   ├── Chat.IntegrationTests/# Integration tests (not included in Chat.sln)
+│   └── Chat.Web.Tests/       # Web/security tests (not included in Chat.sln)
 ├── infra/
 │   └── bicep/                # Azure infrastructure (Bicep)
 ├── docs/                     # Documentation (detailed guides)
@@ -159,25 +161,21 @@ SignalR-Chat/
 
 ## 🧪 Testing
 
-**165 tests** (100% passing) covering unit, integration, and web security:
+**193 unit tests** (100% passing) in `tests/Chat.Tests` (this is the only test project included in `src/Chat.sln`):
 
 ```bash
 # Run all tests
 dotnet test src/Chat.sln
 
 # Run specific test project
-dotnet test tests/Chat.Tests/           # 142 tests (unit + integration)
-dotnet test tests/Chat.IntegrationTests/ # 14 tests (ChatHub, OTP, auth)
-dotnet test tests/Chat.Web.Tests/       # 9 tests (security headers, health)
+dotnet test tests/Chat.Tests/
+
+# Optional: additional test projects exist under tests/, but are not referenced by Chat.sln
+# dotnet test tests/Chat.IntegrationTests/
+# dotnet test tests/Chat.Web.Tests/
 ```
 
-**Test coverage**:
-- ✅ 55 localization tests (9 languages × 6 categories)
-- ✅ 23 translation tests (models, queue, service integration)
-- ✅ 14 integration tests (ChatHub lifecycle, OTP flow, rate limiting)
-- ✅ 13 security tests (log sanitization, CORS, CSP)
-- ✅ 9 web tests (security headers, health endpoints)
-- ✅ 51 other tests (presence, URL validation, OTP hashing, connection state)
+Note: additional test projects exist under `tests/`, but they are not currently referenced by `src/Chat.sln`.
 
 ➡️ [Testing guide](docs/development/testing.md)
 
@@ -265,9 +263,9 @@ Cors__AllowAllOrigins=false
 
 ## 🌍 Localization
 
-Supports 9 languages with both server-side (.resx) and client-side (API) translations:
+Supports 8 languages with both server-side (.resx) and client-side (API) translations:
 
-**Languages**: English, Polish, Spanish, French, German, Italian, Portuguese, Japanese, Chinese
+**Languages**: English, Polish, German, Czech, Slovak, Ukrainian, Lithuanian, Russian
 
 ```bash
 # Add new language key
@@ -285,7 +283,7 @@ dotnet test tests/Chat.Tests/ --filter "Category=Localization"
 
 ## 📊 Observability
 
-**Metrics, Traces, Logs** via OpenTelemetry → Azure Application Insights
+**Metrics, Traces, Logs** via OpenTelemetry → Azure Application Insights (when configured)
 
 **Custom Metrics**:
 - `chat.otp.requests` - OTP generation count
@@ -296,8 +294,9 @@ dotnet test tests/Chat.Tests/ --filter "Category=Localization"
 **Health Checks**:
 - `/healthz` - Liveness probe (responds 200 OK)
 - `/healthz/ready` - Readiness probe (checks Cosmos + Redis)
+- `/healthz/metrics` - Lightweight in-process metrics snapshot
 
-➡️ [Monitoring guide](docs/operations/monitoring.md) | [Diagnostics](docs/operations/diagnostics.md)
+➡️ [Monitoring guide](docs/operations/monitoring.md)
 
 ---
 
@@ -340,7 +339,7 @@ This project is licensed under the MIT License - see [LICENSE](LICENSE) file for
 
 | Feature | Description | Implementation |
 |---------|-------------|----------------|
-| **Async Translation** | Real-time AI translation of messages | Redis queue → Background workers → GPT-4o-mini → SignalR broadcast |
+| **Async Translation** | Real-time AI translation of messages | Redis queue → Background workers → Azure AI Translator → SignalR broadcast |
 | **Translation Cache** | Reduce API costs with 1-hour caching | Redis cache with translation results |
 | **Translation Retry** | Automatic retry with exponential backoff | Max 3 attempts, high priority requeue |
 | **Optimistic Send** | Messages appear instantly, confirmed async | SignalR invoke + server broadcast |

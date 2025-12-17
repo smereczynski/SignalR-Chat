@@ -1,153 +1,80 @@
-# Documentation Status Report
+﻿# Documentation Status Report
 
-**Generated**: December 3, 2025  
+**Generated**: 2025-12-17  
 **Version**: 0.9.5  
-**Branch**: 127-p0-implement-real-time-message-translation
+**Branch**: fix/issue-139
 
 ---
 
 ## Executive Summary
 
-The SignalR Chat documentation is **substantially complete** with a well-defined structure and good content coverage. The `DOCUMENTATION-PLAN.md` provides a comprehensive roadmap, and recent migrations have improved organization.
+The documentation structure is stable and generally accurate, but several planned sections are still missing (notably **Operations** and **Reference**), and the root `README.md` still contains a few broken links.
 
-### Overall Status
-- ✅ **Structure**: Excellent organization following Diátaxis framework
-- ✅ **Coverage**: ~50% complete (34/68 planned files exist)
-- ⚠️ **Accuracy**: Recently fixed critical in-memory mode documentation errors
-- ⚠️ **Link Integrity**: Some broken internal links remain
-- ✅ **Quality**: Existing documentation is high quality
-
----
-
-## Documentation Structure Assessment
-
-### ✅ Complete Sections
-
-#### Getting Started (100% complete)
-- ✅ `README.md` - Navigation and learning paths
-- ✅ `quickstart.md` - 5-minute local setup guide (corrected Nov 21, 2025)
-- ✅ `configuration.md` - Environment variables reference
-- ✅ `installation.md` - **COMPLETE** (576 lines, P0 Critical - Azure setup guide)
-
-#### Architecture (80% complete)
-- ✅ `README.md` - Architecture navigation (but references missing files)
-- ✅ `overview.md` - System architecture with diagrams
-- ✅ `system-design.md` - High-level design, **UPDATED** with translation architecture (Dec 3, 2025)
-- ✅ `translation-architecture.md` - **NEW** (12k words, comprehensive translation system documentation with Mermaid diagrams, Dec 3, 2025)
-- ✅ `decisions/` - 3 ADRs documented:
-  - ADR 0001: SignalR CORS Origin Validation
-  - ADR 0002: Cosmos DB Continuous Backup
-  - ADR 0003: Login SSO Email OTP
-- ✅ `data-model.md` - **COMPLETE** (P1 added Nov 21, 2025)
-- ❌ `security.md` - **MISSING** (Security architecture)
-- ❌ `diagrams/` - **MISSING** (Visual diagrams directory)
-
-#### Deployment (100% complete)
-- ✅ `README.md` - Deployment overview (updated Dec 2, 2025)
-- ✅ `bootstrap.md` - Complete deployment from scratch (1011 lines)
-- ✅ `production-checklist.md` - Pre-launch verification
-- ✅ `windows-to-linux-migration.md` - Platform migration guide
-- ✅ `github-secrets.md` - **UPDATED** (5 repository secrets, updated Dec 2, 2025)
-- ✅ `github-variables.md` - **UPDATED** (11 repository variables including VPN IP, Entra ID, updated Dec 2, 2025)
-- ✅ `github-actions.md` - **COMPLETE** (Enhanced with static IP allocation, private endpoints, Dec 2, 2025)
-- ✅ `post-deployment-manual-steps.md` - Manual configuration after deployment
-- ✅ `azure/` - **NEW** (P1 added Dec 2, 2025)
-  - ✅ `README.md` - Azure deployment navigation
-  - ✅ `bicep-templates.md` - **COMPLETE** (Migrated from infra/bicep/README.md)
-- ✅ `.github/workflows/README.md` - **CONSOLIDATED** (Replaced with migration notice, comprehensive docs moved to docs/deployment/, Dec 2, 2025)
-
-#### Features (50% complete)
-- ✅ `README.md` - Features overview
-- ✅ `authentication.md` - OTP authentication guide
-- ✅ `sessions.md` - Session handling
-- ✅ `presence.md` - Presence tracking
-- ✅ `async-translation-implementation-plan.md` - Translation implementation plan (Phase 2)
-- ❌ `real-time-messaging.md` - **MISSING**
-- ❌ `read-receipts.md` - **MISSING**
-- ❌ `notifications.md` - **MISSING**
-- ❌ `localization.md` - **MISSING**
-- ❌ `rate-limiting.md` - **MISSING**
-- ❌ `pagination.md` - **MISSING**
-
-#### Development (60% complete)
-- ✅ `entra-id-multi-tenant-setup.md` - Entra ID configuration (comprehensive)
-- ✅ `admin-panel-app-role-integration.md` - Admin panel setup
-- ✅ `local-setup.md` - **COMPLETE** (336 lines, P0 Critical - corrected Nov 21, 2025)
-- ✅ `testing.md` - **COMPLETE** (updated Dec 3, 2025 with 165 tests, translation test coverage)
-- ❌ `project-structure.md` - **MISSING**
-- ❌ `debugging.md` - **MISSING**
-- ❌ `vscode-setup.md` - **MISSING**
-
-### ❌ Missing Sections
-
-#### Operations (20% complete)
-- ❌ `README.md` - **MISSING**
-- ✅ `disaster-recovery.md` - Disaster recovery procedures
-- ✅ `monitoring.md` - **COMPLETE** (P1 added Nov 21, 2025)
-- ❌ `opentelemetry.md` - **MISSING**
-- ❌ `application-insights.md` - **MISSING**
-- ❌ `logging.md` - **MISSING**
-- ❌ `diagnostics.md` - **MISSING**
-- ❌ `health-checks.md` - **MISSING**
-- ❌ `performance.md` - **MISSING**
-
-#### Reference (12% complete)
-- ❌ `README.md` - **MISSING**
-- ❌ `api/rest-endpoints.md` - **MISSING**
-- ❌ `api/signalr-hub.md` - **MISSING**
-- ❌ `configuration-reference.md` - **MISSING**
-- ❌ `telemetry-reference.md` - **MISSING**
-- ❌ `error-codes.md` - **MISSING**
-- ✅ `faq.md` - **COMPLETE** (653 lines, P0 Critical - comprehensive FAQ, corrected Nov 21, 2025)
-- ❌ `glossary.md` - **MISSING**
+### Overall status (code-backed)
+- ✅ **Structure**: Diátaxis-style folders exist (`getting-started/`, `features/`, `architecture/`, `deployment/`, `operations/`, `reference/`).
+- ✅ **Coverage**: 40 markdown files in `docs/`.
+- ✅ **Accuracy**: Observability docs were refreshed to match current code paths and exporter selection.
+- ⚠️ **Link integrity**: 4 broken `docs/*` links remain in the root README.
 
 ---
 
-## Broken Links Analysis
+## Inventory (what exists today)
 
-### README.md Broken Links
-The main README.md references **27 missing documentation files**:
+Markdown files per section:
+- `docs/getting-started`: 4
+- `docs/architecture`: 7 (+ 3 ADRs under `docs/architecture/decisions/`)
+- `docs/deployment`: 13 (+ `docs/deployment/azure/*`)
+- `docs/development`: 5
+- `docs/features`: 5
+- `docs/operations`: 2
+- `docs/reference`: 1
 
-1. `docs/getting-started/installation.md` - Full installation guide
-2. `docs/deployment/azure.md` - Azure deployment
-3. `docs/architecture/security.md` - Security architecture
-4. `docs/features/real-time-messaging.md` - SignalR implementation
-5. `docs/features/read-receipts.md` - Read status tracking
-6. `docs/features/notifications.md` - Email/SMS notifications
-7. `docs/features/localization.md` - i18n implementation
-8. `docs/features/rate-limiting.md` - Rate limiting strategies
-9. `docs/features/pagination.md` - Message pagination
-10. `docs/development/local-setup.md` - Development environment
-11. `docs/development/project-structure.md` - Code organization
-12. `docs/development/testing.md` - Testing guide
-13. `docs/development/debugging.md` - Debugging tips
-14. `docs/development/vscode-setup.md` - VS Code setup
-15. `docs/operations/monitoring.md` - Observability overview
-16. `docs/operations/opentelemetry.md` - OpenTelemetry config
-17. `docs/operations/application-insights.md` - Azure monitoring
-18. `docs/operations/logging.md` - Logging best practices
-19. `docs/operations/diagnostics.md` - Troubleshooting production
-20. `docs/operations/health-checks.md` - Health endpoints
-21. `docs/operations/performance.md` - Performance tuning
-22. `docs/reference/api/rest-endpoints.md` - HTTP endpoints
-23. `docs/reference/api/signalr-hub.md` - WebSocket methods
-24. `docs/reference/configuration-reference.md` - All config options
-25. `docs/reference/telemetry-reference.md` - Metrics and traces
-26. `docs/reference/faq.md` - Frequently asked questions
-27. `docs/reference/glossary.md` - Terms and definitions
+### Highlights
+- `docs/operations/monitoring.md` updated to reflect actual telemetry export and destinations.
+- Translation documentation is split across:
+   - `docs/architecture/translation-architecture.md`
+   - `docs/deployment/azure-translation.md`
+   - `docs/features/async-translation-implementation-plan.md`
 
-### docs/README.md Broken Links
-The documentation index references **30+ missing files** across all sections.
-
-### Cross-Reference Issues
-- `architecture/overview.md` → `security.md` (missing)
-- `architecture/overview.md` → `diagrams/` (missing directory)
-- ~~`deployment/README.md` → `azure/`, `github-actions.md`~~ ✅ **RESOLVED** (Dec 2, 2025)
-- Old references to `environments.md`, `troubleshooting.md` (removed as not planned)
+### Notable gaps (still missing)
+- Operations section lacks a landing page and most “how-to” docs (logging/health-checks/performance, etc.).
+- Reference section currently contains only `docs/reference/faq.md` (no API/config reference pages).
 
 ---
 
-## Content Quality Assessment
+## Broken links (current)
+
+### Root README.md
+The root `README.md` currently references these missing paths:
+1. `docs/deployment/azure.md`
+2. `docs/architecture/security.md`
+3. `docs/features/localization.md`
+4. `docs/images/hero.gif`
+
+Recommendation:
+- Either create these files/assets, or update the README links to point to existing docs (e.g., `docs/deployment/README.md`, `docs/deployment/azure/README.md`).
+
+---
+
+## Accuracy notes (recent)
+
+- The solution `src/Chat.sln` currently includes only `Chat.Web` and `Chat.Tests`.
+- Latest local test run: **193 passing** tests.
+
+---
+
+## Suggested next steps
+
+P0 (quick wins):
+- Fix the 4 broken README links by either adding stubs/assets or retargeting links.
+
+P1:
+- Add `docs/operations/README.md` as a landing page and index.
+- Add `docs/architecture/security.md` (even as a minimal “threat model + controls” doc).
+- Add `docs/features/localization.md` (current i18n model, supported cultures, and resource flow).
+
+P2:
+- Add reference docs for REST endpoints and SignalR hub methods.
 
 ### ✅ High Quality Existing Content
 

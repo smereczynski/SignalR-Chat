@@ -55,35 +55,8 @@ public class AzureTranslatorService : ITranslationService
         TranslateRequest request,
         CancellationToken cancellationToken = default)
     {
-        if (!_options.Enabled)
-        {
-            _logger.LogDebug("Translation service is disabled");
-            throw new InvalidOperationException("Translation service is disabled");
-        }
-
-        if (string.IsNullOrEmpty(_options.Endpoint))
-        {
-            _logger.LogError("Translation endpoint is not configured");
-            throw new InvalidOperationException("Translation endpoint is not configured");
-        }
-
-        if (string.IsNullOrEmpty(_options.SubscriptionKey))
-        {
-            _logger.LogError("Translation subscription key is not configured");
-            throw new InvalidOperationException("Translation subscription key is not configured");
-        }
-
-        if (request.Targets.Count == 0)
-        {
-            throw new ArgumentException("At least one target language is required", nameof(request));
-        }
-
-        // Validate that EN is always included in targets
-        var hasEnglish = request.Targets.Any(t => t.Language.Equals("en", StringComparison.OrdinalIgnoreCase));
-        if (!hasEnglish)
-        {
-            throw new ArgumentException("English (en) must always be included in translation targets", nameof(request));
-        }
+        EnsureEnabledAndConfigured();
+        ValidateRequest(request);
 
         try
         {
@@ -145,6 +118,10 @@ public class AzureTranslatorService : ITranslationService
         var endpoint = _options.Endpoint.TrimEnd('/');
         var url = $"{endpoint}/translator/text/translate?api-version={_options.ApiVersion}";
 
+        // Azure Translator auto-detect is performed by omitting the language field.
+        // Do not send "auto" to the API.
+        var sourceLanguage = NormalizeSourceLanguage(request.SourceLanguage);
+
         // Build API request matching nested targets structure
         var apiRequest = new TranslateApiRequest
         {
@@ -153,7 +130,7 @@ public class AzureTranslatorService : ITranslationService
                 new TranslateInput
                 {
                     Text = request.Text,
-                    Language = request.SourceLanguage,
+                    Language = sourceLanguage,
                     Targets = request.Targets.Select(t => new TranslateTarget
                     {
                         Language = t.Language,
@@ -167,7 +144,11 @@ public class AzureTranslatorService : ITranslationService
         var requestJson = JsonSerializer.Serialize(apiRequest, _jsonOptions);
         
         _logger.LogDebug("Translation API request: {Url}", url);
-        _logger.LogDebug("Translation API request body: {RequestJson}", requestJson);
+        _logger.LogDebug(
+            "Translation API request details: source={SourceLanguage}, targets={TargetsCount}, textLength={TextLength}",
+            sourceLanguage ?? "auto-detect",
+            request.Targets.Count,
+            request.Text?.Length ?? 0);
         
         using var content = new StringContent(requestJson, Encoding.UTF8, "application/json");
 
@@ -239,6 +220,63 @@ public class AzureTranslatorService : ITranslationService
             }).ToArray() ?? Array.Empty<Translation>(),
             FromCache = false
         };
+    }
+
+    private void EnsureEnabledAndConfigured()
+    {
+        if (!_options.Enabled)
+        {
+            _logger.LogDebug("Translation service is disabled");
+            throw new InvalidOperationException("Translation service is disabled");
+        }
+
+        if (string.IsNullOrEmpty(_options.Endpoint))
+        {
+            _logger.LogError("Translation endpoint is not configured");
+            throw new InvalidOperationException("Translation endpoint is not configured");
+        }
+
+        if (string.IsNullOrEmpty(_options.SubscriptionKey))
+        {
+            _logger.LogError("Translation subscription key is not configured");
+            throw new InvalidOperationException("Translation subscription key is not configured");
+        }
+    }
+
+    private static void ValidateRequest(TranslateRequest request)
+    {
+        if (request.Targets.Count == 0)
+        {
+            throw new ArgumentException("At least one target language is required", nameof(request));
+        }
+
+        var targetLanguages = request.Targets.Select(static t => t.Language).ToList();
+        if (!targetLanguages.Any(static lang => lang.Equals("en", StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new ArgumentException("English (en) must always be included in translation targets", nameof(request));
+        }
+
+        if (targetLanguages.Any(static lang => string.IsNullOrWhiteSpace(lang)))
+        {
+            throw new ArgumentException("Target language cannot be empty", nameof(request));
+        }
+
+        if (targetLanguages.Any(static lang => lang.Equals("auto", StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new ArgumentException("Target language 'auto' is not supported", nameof(request));
+        }
+    }
+
+    private static string? NormalizeSourceLanguage(string? sourceLanguage)
+    {
+        if (string.IsNullOrWhiteSpace(sourceLanguage))
+        {
+            return null;
+        }
+
+        return sourceLanguage.Equals("auto", StringComparison.OrdinalIgnoreCase)
+            ? null
+            : sourceLanguage;
     }
 
     private async Task<TranslateResponse?> TryGetFromCacheAsync(

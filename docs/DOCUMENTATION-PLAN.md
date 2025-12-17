@@ -2,9 +2,9 @@
 
 ## Goals
 1. **Streamline README.md** - Keep it concise (< 500 lines), focus on quickstart and navigation
-2. **Organize docs/** - Follow best practices from successful OSS projects (Kubernetes, React, Next.js)
+2. **Organize docs/** - Follow Diátaxis-style grouping (getting-started / features / architecture / deployment / operations / reference)
 3. **Improve discoverability** - Clear navigation, logical grouping, search-friendly
-4. **Maintain quality** - Incorporate existing guides, expand with diagrams, examples
+4. **Maintain quality** - Keep docs code-backed and up to date
 5. **Enable contributors** - Clear contribution guidelines, ADRs for decisions
 
 ## Documentation Framework
@@ -15,89 +15,57 @@ Following [Diátaxis framework](https://diataxis.fr/):
 - **Reference** (information-oriented): reference/, architecture/
 - **Explanation** (understanding-oriented): architecture/decisions/
 
-## New Structure
+## Current Structure (as of 2025-12-17)
 
 ```
 docs/
-├── README.md                        # Documentation index
+├── README.md
 ├── getting-started/
-│   ├── README.md                   # Getting started overview
-│   ├── quickstart.md               # 5-min local setup (in-memory)
-│   ├── installation.md             # Full installation guide
-│   ├── configuration.md            # Environment variables, options
-│   └── first-deployment.md         # Deploy to Azure (simple)
+│   ├── README.md
+│   ├── quickstart.md
+│   ├── installation.md
+│   └── configuration.md
 ├── architecture/
-│   ├── README.md                   # Architecture overview (from ARCHITECTURE.md)
-│   ├── system-design.md            # High-level design
-│   ├── data-model.md               # Cosmos DB schema, Redis keys
-│   ├── security.md                 # Security architecture
-│   ├── diagrams/
-│   │   ├── runtime-architecture.svg     # App → SignalR → Cosmos/Redis
-│   │   ├── infrastructure.svg           # Azure resources
-│   │   ├── auth-flow.svg                # OTP authentication flow
-│   │   └── message-flow.svg             # Message lifecycle
-│   └── decisions/                  # ADRs (Architecture Decision Records)
-│       ├── README.md               # ADR index
-│       ├── 001-cosmos-db-choice.md
-│       ├── 002-redis-for-otp.md
-│       ├── 003-signalr-hybrid-mode.md
-│       ├── 004-argon2id-hashing.md
-│       └── 005-fixed-rooms.md
+│   ├── overview.md
+│   ├── system-design.md
+│   ├── translation-architecture.md
+│   ├── data-model.md
+│   └── decisions/
+│       ├── 0001-signalr-cors-origin-validation.md
+│       ├── 0002-cosmos-db-continuous-backup.md
+│       └── 0003-login-sso-email-otp.md
 ├── features/
-│   ├── README.md                   # Features overview
-│   ├── authentication.md           # OTP flow (from GUIDE-OTP-hashing.md)
-│   ├── sessions.md                 # Session handling (from GUIDE-Session-handling.md)
-│   ├── presence.md                 # Presence tracking (from GUIDE-Visibility.md)
-│   ├── real-time-messaging.md      # SignalR implementation
-│   ├── read-receipts.md            # Read status tracking
-│   ├── notifications.md            # Email/SMS notifications
-│   ├── localization.md             # i18n implementation
-│   ├── rate-limiting.md            # Rate limiting strategies
-│   └── pagination.md               # Message pagination
+│   ├── README.md
+│   ├── authentication.md
+│   ├── sessions.md
+│   ├── presence.md
+│   └── async-translation-implementation-plan.md
 ├── deployment/
-│   ├── README.md                   # Deployment overview
-│   ├── azure/
-│   │   ├── README.md               # Azure deployment guide
-│   │   ├── bicep-templates.md      # Bicep IaC (from infra/bicep/README.md)
-│   │   ├── app-service.md          # App Service configuration
-│   │   ├── networking.md           # VNet, private endpoints
-│   │   └── monitoring.md           # Application Insights setup
-│   ├── environments.md             # Dev/Staging/Prod configs
-│   ├── github-actions.md           # CI/CD (from .github/workflows/README.md)
-│   ├── production-checklist.md     # Pre-launch checklist
-│   └── troubleshooting.md          # Common deployment issues
+│   ├── README.md
+│   ├── bootstrap.md
+│   ├── production-checklist.md
+│   ├── github-actions.md
+│   ├── github-secrets.md
+│   ├── github-secrets-setup.md
+│   ├── github-variables.md
+│   ├── post-deployment-manual-steps.md
+│   ├── windows-to-linux-migration.md
+│   ├── azure-translation.md
+│   ├── translation-environment-configuration.md
+│   └── azure/
+│       ├── README.md
+│       └── bicep-templates.md
 ├── development/
-│   ├── README.md                   # Development overview
-│   ├── local-setup.md              # Detailed local setup
-│   ├── project-structure.md        # Code organization
-│   ├── testing.md                  # Testing guide
-│   ├── debugging.md                # Debugging tips
-│   ├── vscode-setup.md             # VS Code configuration
-│   └── contributing.md             # Link to /CONTRIBUTING.md
+│   ├── local-setup.md
+│   ├── testing.md
+│   ├── entra-id-multi-tenant-setup.md
+│   ├── admin-panel-app-role-integration.md
+│   └── integration-tests-improvements.md
 ├── operations/
-│   ├── README.md                   # Operations overview
-│   ├── monitoring.md               # Observability overview
-│   ├── opentelemetry.md            # OpenTelemetry configuration
-│   ├── application-insights.md     # Application Insights setup
-│   ├── logging.md                  # Logging best practices
-│   ├── diagnostics.md              # Troubleshooting production
-│   ├── health-checks.md            # Health endpoint details
-│   ├── performance.md              # Performance tuning
-│   └── incident-response.md        # Handling outages
-├── reference/
-│   ├── README.md                   # Reference overview
-│   ├── api/
-│   │   ├── rest-endpoints.md       # REST API reference
-│   │   └── signalr-hub.md          # SignalR hub methods
-│   ├── configuration-reference.md  # All config options
-│   ├── telemetry-reference.md      # Metrics, traces, logs
-│   ├── error-codes.md              # Error reference
-│   └── glossary.md                 # Terms and definitions
-└── images/                         # Screenshots, diagrams
-    ├── hero.gif                    # Demo GIF
-    ├── login-page.png
-    ├── chat-interface.png
-    └── language-picker.png
+│   ├── monitoring.md
+│   └── disaster-recovery.md
+└── reference/
+    └── faq.md
 ```
 
 ## Migration Plan
@@ -106,8 +74,8 @@ docs/
 1. ✅ Create new README.md (streamlined)
 2. ✅ Create CONTRIBUTING.md
 3. ✅ Update CHANGELOG.md
-4. Create docs/ directory structure
-5. Create placeholder README.md in each section
+4. ✅ Create docs/ directory structure
+5. ⚠️ Create placeholder README.md in each section (partially complete)
 
 ### Phase 2: Migrate Existing Content
 1. **ARCHITECTURE.md** → `docs/architecture/README.md` + split into:
@@ -122,12 +90,12 @@ docs/
 9. ✅ **infra/bicep/README.md** → `docs/deployment/azure/bicep-templates.md` (MIGRATED Dec 2, 2025)
 
 ### Phase 3: Create New Content
-1. Production checklist (security, performance, monitoring)
+1. ✅ Production checklist (security, performance, monitoring)
 2. Architecture diagrams (runtime, infrastructure, flows)
-3. ADRs for key decisions
-4. Quickstart guide (5-minute setup)
+3. ✅ ADRs for key decisions (initial set)
+4. ✅ Quickstart guide (5-minute setup)
 5. API reference
-6. FAQ
+6. ✅ FAQ
 
 ### Phase 4: Add Visual Assets
 1. Screenshot: Login page
@@ -159,9 +127,9 @@ docs/
 
 ## Success Metrics
 
-- README.md < 500 lines (currently ~650)
-- All existing guides migrated
-- Zero broken links
+- README.md < 500 lines (currently ~360)
+- All existing guides migrated (or intentionally retired)
+- Zero broken links in README.md and docs index
 - Search-friendly structure
 - Clear navigation path for newcomers
 - Easy to maintain (logical grouping)

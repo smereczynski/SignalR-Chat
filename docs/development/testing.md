@@ -212,7 +212,7 @@ The test suite covers all critical functionality:
 - **Log Sanitization**: PII removal, log injection prevention (CWE-117)
 - **URL Validation**: Local URL detection for secure redirects
 - **Configuration Guards**: Validation of required configuration at startup
-- **Localization**: Multi-language support validation (55 tests across 9 languages)
+- **Localization**: Multi-language support validation (culture coverage)
 - **Translation Models**: Message translation lifecycle, status tracking (14 tests)
 - **Translation Queue**: Redis FIFO queue operations, priority handling (9 tests)
 

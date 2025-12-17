@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Chat.Web.Models;
 using Chat.Web.Services;
+using Chat.Web.Utilities;
 using System.Threading.Tasks;
 
 namespace Chat.Web.Repositories
@@ -24,6 +25,11 @@ namespace Chat.Web.Repositories
         {
             if (user == null || string.IsNullOrWhiteSpace(user.UserName)) return Task.CompletedTask;
             // Do not attempt to sync room membership here; Chat.Web treats room users list as externally managed.
+            if (_users.TryGetValue(user.UserName, out var existing))
+            {
+                user.PreferredLanguage = PreferredLanguageMerger.Merge(user.PreferredLanguage, existing.PreferredLanguage);
+            }
+
             _users[user.UserName] = user;
             return Task.CompletedTask;
         }
@@ -37,7 +43,7 @@ namespace Chat.Web.Repositories
         {
             // Pre-initialize static rooms for testing (deterministic IDs 1..n)
             var rooms = new[]{"general","ops","random"};
-            int id=1; foreach(var r in rooms){ var room=new Room{Id=id++, Name=r, Users = new List<string>()}; _roomsById[room.Id]=room; _roomsByName[room.Name]=room; }
+            int id=1; foreach(var r in rooms){ var room=new Room{Id=id++, Name=r, Users = new List<string>(), Languages = new List<string>()}; _roomsById[room.Id]=room; _roomsByName[room.Name]=room; }
         }
         public Task<IEnumerable<Room>> GetAllAsync() => Task.FromResult<IEnumerable<Room>>(_roomsById.Values);
         public Task<Room> GetByIdAsync(int id) => Task.FromResult(_roomsById.TryGetValue(id, out var r) ? r : null);
@@ -57,6 +63,18 @@ namespace Chat.Web.Repositories
             {
                 var set = new HashSet<string>(room.Users, StringComparer.OrdinalIgnoreCase);
                 if (set.Remove(userName)) room.Users = set.ToList();
+            }
+            return Task.CompletedTask;
+        }
+
+        public Task AddLanguageToRoomAsync(string roomName, string language)
+        {
+            if (string.IsNullOrWhiteSpace(language)) return Task.CompletedTask;
+
+            if (_roomsByName.TryGetValue(roomName, out var room))
+            {
+                var set = new HashSet<string>(room.Languages ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
+                if (set.Add(language)) room.Languages = set.ToList();
             }
             return Task.CompletedTask;
         }
@@ -88,13 +106,28 @@ namespace Chat.Web.Repositories
             return Task.FromResult(m);
         }
         
-        public Task<Message> UpdateTranslationAsync(int id, TranslationStatus status, System.Collections.Generic.Dictionary<string, string> translations, string jobId = null, DateTime? failedAt = null)
+        public Task<Message> UpdateTranslationAsync(
+            int id,
+            MessageTranslationUpdate update)
         {
             if (!_messages.TryGetValue(id, out var m)) return Task.FromResult<Message>(null);
-            m.TranslationStatus = status;
-            m.Translations = translations ?? new System.Collections.Generic.Dictionary<string, string>();
-            m.TranslationJobId = jobId;
-            m.TranslationFailedAt = failedAt;
+            m.TranslationStatus = update.Status;
+            m.Translations = update.Translations ?? new System.Collections.Generic.Dictionary<string, string>();
+            m.TranslationJobId = update.JobId;
+            m.TranslationFailedAt = update.FailedAt;
+
+            if (update.Status == TranslationStatus.Failed)
+            {
+                m.TranslationFailureCategory = update.FailureCategory ?? TranslationFailureCategory.Unknown;
+                m.TranslationFailureCode = update.FailureCode ?? TranslationFailureCode.Unknown;
+                m.TranslationFailureMessage = update.FailureMessage;
+            }
+            else
+            {
+                m.TranslationFailureCategory = TranslationFailureCategory.Unknown;
+                m.TranslationFailureCode = TranslationFailureCode.Unknown;
+                m.TranslationFailureMessage = null;
+            }
             return Task.FromResult(m);
         }
     }

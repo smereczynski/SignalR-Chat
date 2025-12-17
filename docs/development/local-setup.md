@@ -261,7 +261,7 @@ src/Chat.Web/wwwroot/
 │   ├── login.js            # Login/OTP flow
 │   └── common.js           # Shared utilities
 ├── lib/                    # Third-party libraries (Bootstrap, SignalR)
-└── locales/                # i18n JSON files (9 languages)
+└── locales/                # i18n JSON files (8 languages)
 ```
 
 ### 4. Hot Reload

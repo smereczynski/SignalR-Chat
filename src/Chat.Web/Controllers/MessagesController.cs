@@ -262,6 +262,12 @@ namespace Chat.Web.Controllers
             
             if (message.TranslationStatus != TranslationStatus.Failed)
                 return BadRequest(new { error = "Translation is not in failed state" });
+
+            var senderProfile = await _users.GetByUserNameAsync(message.FromUser?.UserName);
+            var sourceLanguage = Chat.Web.Utilities.LanguageCode.NormalizeToLanguageCode(senderProfile?.PreferredLanguage) ?? "auto";
+
+            var room = await _rooms.GetByNameAsync(message.ToRoom?.Name);
+            var targets = Chat.Web.Utilities.LanguageCode.BuildTargetLanguages(room?.Languages, sourceLanguage);
             
             // Create new job with high priority
             var job = new MessageTranslationJob
@@ -269,8 +275,8 @@ namespace Chat.Web.Controllers
                 MessageId = message.Id,
                 RoomName = message.ToRoom.Name,
                 Content = message.Content,
-                SourceLanguage = "auto",
-                TargetLanguages = new List<string> { "en", "pl", "de", "fr", "es", "it", "pt", "ja", "zh" },
+                SourceLanguage = sourceLanguage,
+                TargetLanguages = targets,
                 DeploymentName = _translationOptions.Value.DeploymentName,
                 CreatedAt = DateTime.UtcNow,
                 RetryCount = 0,
@@ -279,7 +285,12 @@ namespace Chat.Web.Controllers
             };
             
             await _translationQueue.RequeueAsync(job, highPriority: true);
-            await _messages.UpdateTranslationAsync(message.Id, TranslationStatus.Pending, new Dictionary<string, string>(), job.JobId);
+            await _messages.UpdateTranslationAsync(
+                message.Id,
+                new MessageTranslationUpdate(
+                    Status: TranslationStatus.Pending,
+                    Translations: new Dictionary<string, string>(),
+                    JobId: job.JobId));
             
             _logger.LogInformation("Manual retry triggered for message {MessageId} by user {User}", id, User.Identity.Name);
             

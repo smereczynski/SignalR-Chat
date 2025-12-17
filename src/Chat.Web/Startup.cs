@@ -454,9 +454,6 @@ namespace Chat.Web
                     new System.Globalization.CultureInfo("uk"),
                     new System.Globalization.CultureInfo("uk-UA"), // Ukraine
 
-                    new System.Globalization.CultureInfo("be"),
-                    new System.Globalization.CultureInfo("be-BY"), // Belarus
-
                     new System.Globalization.CultureInfo("lt"),
                     new System.Globalization.CultureInfo("lt-LT"), // Lithuania
 

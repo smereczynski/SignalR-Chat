@@ -102,6 +102,7 @@ namespace Chat.Web.Repositories
         public string userName { get; set; } 
         public string fullName { get; set; } 
         public string avatar { get; set; } 
+        public string preferredLanguage { get; set; }
         public string email { get; set; } 
         public string mobile { get; set; } 
         public bool? enabled { get; set; } 
@@ -113,7 +114,7 @@ namespace Chat.Web.Repositories
         public string[] fixedRooms { get; set; } 
         public string defaultRoom { get; set; } 
     }
-    internal class RoomDoc { public string id { get; set; } public string name { get; set; } public string admin { get; set; } public string[] users { get; set; } }
+    internal class RoomDoc { public string id { get; set; } public string name { get; set; } public string admin { get; set; } public string[] users { get; set; } public string[] languages { get; set; } }
     internal class MessageDoc 
     { 
         public string id { get; set; } 
@@ -126,6 +127,9 @@ namespace Chat.Web.Repositories
         public Dictionary<string, string> translations { get; set; }  // {"en": "Hello", "pl": "Cześć"}
         public string translationJobId { get; set; }  // "transjob:123:1638360000000"
         public DateTime? translationFailedAt { get; set; }  // nullable timestamp
+        public string translationFailureCategory { get; set; }
+        public string translationFailureCode { get; set; }
+        public string translationFailureMessage { get; set; }
     }
 
     /// <summary>
@@ -223,6 +227,7 @@ namespace Chat.Web.Repositories
                 UserName = d.userName,
                 FullName = d.fullName,
                 Avatar = d.avatar,
+                PreferredLanguage = d.preferredLanguage,
                 Email = d.email,
                 MobileNumber = d.mobile,
                 Enabled = d.enabled ?? true,
@@ -284,6 +289,9 @@ namespace Chat.Web.Repositories
             // Check if user already exists to preserve their ID
             var existing = await GetByUserNameAsync(user.UserName).ConfigureAwait(false);
             var documentId = existing != null ? await GetDocumentIdAsync(user.UserName).ConfigureAwait(false) : Guid.NewGuid().ToString();
+
+            // Preserve PreferredLanguage when the caller doesn't set it (common in partial updates / admin flows)
+            var preferredLanguage = PreferredLanguageMerger.Merge(user.PreferredLanguage, existing?.PreferredLanguage);
             
                 var doc = new UserDoc 
             { 
@@ -291,6 +299,7 @@ namespace Chat.Web.Repositories
                 userName = user.UserName, 
                 fullName = user.FullName, 
                 avatar = user.Avatar, 
+                preferredLanguage = preferredLanguage,
                 email = user.Email, 
                 mobile = user.MobileNumber, 
                 enabled = user.Enabled, 
@@ -337,7 +346,7 @@ namespace Chat.Web.Repositories
             var q = _rooms.GetItemQueryIterator<RoomDoc>(new QueryDefinition("SELECT * FROM c ORDER BY c.name"));
             var list = await CosmosQueryHelper.ExecutePaginatedQueryAsync(
                 q,
-                d => new Room { Id = DocIdUtil.TryParseRoomId(d.id), Name = d.name, Users = d.users != null ? new List<string>(d.users) : new List<string>() },
+                d => new Room { Id = DocIdUtil.TryParseRoomId(d.id), Name = d.name, Users = d.users != null ? new List<string>(d.users) : new List<string>(), Languages = d.languages != null ? new List<string>(d.languages) : new List<string>() },
                 activity,
                 _logger,
                 "cosmos.rooms.getall");
@@ -351,7 +360,7 @@ namespace Chat.Web.Repositories
             var q = _rooms.GetItemQueryIterator<RoomDoc>(new QueryDefinition("SELECT * FROM c WHERE c.id = @id").WithParameter("@id", id.ToString()));
             return await CosmosQueryHelper.ExecuteSingleResultQueryAsync(
                 q,
-                d => new Room { Id = DocIdUtil.TryParseRoomId(d.id), Name = d.name, Users = d.users != null ? new List<string>(d.users) : new List<string>() },
+                d => new Room { Id = DocIdUtil.TryParseRoomId(d.id), Name = d.name, Users = d.users != null ? new List<string>(d.users) : new List<string>(), Languages = d.languages != null ? new List<string>(d.languages) : new List<string>() },
                 activity,
                 _logger,
                 "cosmos.rooms.getbyid");
@@ -364,7 +373,7 @@ namespace Chat.Web.Repositories
             var q = _rooms.GetItemQueryIterator<RoomDoc>(new QueryDefinition("SELECT * FROM c WHERE c.name = @n").WithParameter("@n", name));
             return await CosmosQueryHelper.ExecuteSingleResultQueryAsync(
                 q,
-                d => new Room { Id = DocIdUtil.TryParseRoomId(d.id), Name = d.name, Users = d.users != null ? new List<string>(d.users) : new List<string>() },
+                d => new Room { Id = DocIdUtil.TryParseRoomId(d.id), Name = d.name, Users = d.users != null ? new List<string>(d.users) : new List<string>(), Languages = d.languages != null ? new List<string>(d.languages) : new List<string>() },
                 activity,
                 _logger,
                 "cosmos.rooms.getbyname");
@@ -380,26 +389,87 @@ namespace Chat.Web.Repositories
             await UpsertRoomUserAsync(roomName, userName, add: false).ConfigureAwait(false);
         }
 
-        private async Task UpsertRoomUserAsync(string roomName, string userName, bool add)
+        public async Task AddLanguageToRoomAsync(string roomName, string language)
         {
-            var q = _rooms.GetItemQueryIterator<RoomDoc>(new QueryDefinition("SELECT * FROM c WHERE c.name = @n").WithParameter("@n", roomName));
-            RoomDoc room = null;
-            while (q.HasMoreResults && room == null)
+            await UpsertRoomLanguageAsync(roomName, language).ConfigureAwait(false);
+        }
+
+        private async Task<List<RoomDoc>> GetRoomDocsByNameAsync(string roomName)
+        {
+            var q = _rooms.GetItemQueryIterator<RoomDoc>(
+                new QueryDefinition("SELECT * FROM c WHERE c.name = @n").WithParameter("@n", roomName));
+
+            var rooms = new List<RoomDoc>();
+            while (q.HasMoreResults)
             {
                 var page = await Resilience.RetryHelper.ExecuteAsync(
                     _ => q.ReadNextAsync(),
                     Transient.IsCosmosTransient,
                     _logger,
                     "cosmos.rooms.byname.forRoomRepo").ConfigureAwait(false);
-                room = page.FirstOrDefault();
+
+                rooms.AddRange(page);
+
+                // Defensive limit: a room name should be unique.
+                if (rooms.Count >= 50) break;
             }
-            if (room == null) return;
-            var users = new HashSet<string>(room.users ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
-            if (add ? users.Add(userName) : users.Remove(userName))
+
+            if (rooms.Count > 1)
             {
-                room.users = users.ToArray();
-                await _rooms.UpsertItemAsync(room, new PartitionKey(roomName)).ConfigureAwait(false);
+                _logger.LogWarning(
+                    "Multiple room documents found for name {Room}. Merging users/languages to avoid data loss.",
+                    LogSanitizer.Sanitize(roomName));
             }
+
+            return rooms;
+        }
+
+        private async Task UpsertRoomUserAsync(string roomName, string userName, bool add)
+        {
+            var rooms = await GetRoomDocsByNameAsync(roomName).ConfigureAwait(false);
+            if (rooms.Count == 0) return;
+
+            var mergedUsers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var mergedLanguages = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var r in rooms)
+            {
+                foreach (var u in r.users ?? Array.Empty<string>()) mergedUsers.Add(u);
+                foreach (var l in r.languages ?? Array.Empty<string>()) mergedLanguages.Add(l);
+            }
+
+            var changed = add ? mergedUsers.Add(userName) : mergedUsers.Remove(userName);
+            if (!changed) return;
+
+            var room = rooms.FirstOrDefault(r => r.languages != null && r.languages.Length > 0) ?? rooms[0];
+            room.users = mergedUsers.ToArray();
+            room.languages = mergedLanguages.ToArray();
+
+            await _rooms.UpsertItemAsync(room, new PartitionKey(roomName)).ConfigureAwait(false);
+        }
+
+        private async Task UpsertRoomLanguageAsync(string roomName, string language)
+        {
+            if (string.IsNullOrWhiteSpace(language)) return;
+
+            var rooms = await GetRoomDocsByNameAsync(roomName).ConfigureAwait(false);
+            if (rooms.Count == 0) return;
+
+            var mergedUsers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var mergedLanguages = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var r in rooms)
+            {
+                foreach (var u in r.users ?? Array.Empty<string>()) mergedUsers.Add(u);
+                foreach (var l in r.languages ?? Array.Empty<string>()) mergedLanguages.Add(l);
+            }
+
+            if (!mergedLanguages.Add(language)) return;
+
+            var room = rooms.FirstOrDefault(r => r.languages != null) ?? rooms[0];
+            room.users = mergedUsers.ToArray();
+            room.languages = mergedLanguages.ToArray();
+
+            await _rooms.UpsertItemAsync(room, new PartitionKey(roomName)).ConfigureAwait(false);
         }
     }
 
@@ -446,7 +516,10 @@ namespace Chat.Web.Repositories
                 TranslationStatus = Enum.TryParse<TranslationStatus>(d.translationStatus, out var status) ? status : TranslationStatus.None,
                 Translations = d.translations ?? new Dictionary<string, string>(),
                 TranslationJobId = d.translationJobId,
-                TranslationFailedAt = d.translationFailedAt
+                TranslationFailedAt = d.translationFailedAt,
+                TranslationFailureCategory = Enum.TryParse<TranslationFailureCategory>(d.translationFailureCategory, out var cat) ? cat : TranslationFailureCategory.Unknown,
+                TranslationFailureCode = Enum.TryParse<TranslationFailureCode>(d.translationFailureCode, out var code) ? code : TranslationFailureCode.Unknown,
+                TranslationFailureMessage = d.translationFailureMessage
             };
         }
 
@@ -467,7 +540,10 @@ namespace Chat.Web.Repositories
                 translationStatus = message.TranslationStatus.ToString(),
                 translations = message.Translations,
                 translationJobId = message.TranslationJobId,
-                translationFailedAt = message.TranslationFailedAt
+                translationFailedAt = message.TranslationFailedAt,
+                translationFailureCategory = message.TranslationStatus == TranslationStatus.Failed ? message.TranslationFailureCategory.ToString() : null,
+                translationFailureCode = message.TranslationStatus == TranslationStatus.Failed ? message.TranslationFailureCode.ToString() : null,
+                translationFailureMessage = message.TranslationFailureMessage
             };
             try
             {
@@ -590,11 +666,13 @@ namespace Chat.Web.Repositories
             return MapMessage(d);
         }
 
-        public async Task<Message> UpdateTranslationAsync(int id, TranslationStatus status, Dictionary<string, string> translations, string jobId = null, DateTime? failedAt = null)
+        public async Task<Message> UpdateTranslationAsync(
+            int id,
+            MessageTranslationUpdate update)
         {
             using var activity = Tracing.ActivitySource.StartActivity("cosmos.messages.updatetranslation", ActivityKind.Client);
             activity?.SetTag("app.message.id", id);
-            activity?.SetTag("app.translation.status", status.ToString());
+            activity?.SetTag("app.translation.status", update.Status.ToString());
             
             var q = _messages.GetItemQueryIterator<MessageDoc>(new QueryDefinition("SELECT TOP 1 * FROM c WHERE c.id = @id").WithParameter("@id", id.ToString()));
             MessageDoc d = null;
@@ -612,10 +690,23 @@ namespace Chat.Web.Repositories
             var pk = d.roomName;
             
             // Update translation fields
-            d.translationStatus = status.ToString();
-            d.translations = translations ?? new Dictionary<string, string>();
-            d.translationJobId = jobId;
-            d.translationFailedAt = failedAt;
+            d.translationStatus = update.Status.ToString();
+            d.translations = update.Translations ?? new Dictionary<string, string>();
+            d.translationJobId = update.JobId;
+            d.translationFailedAt = update.FailedAt;
+
+            if (update.Status == TranslationStatus.Failed)
+            {
+                d.translationFailureCategory = update.FailureCategory?.ToString();
+                d.translationFailureCode = update.FailureCode?.ToString();
+                d.translationFailureMessage = update.FailureMessage;
+            }
+            else
+            {
+                d.translationFailureCategory = null;
+                d.translationFailureCode = null;
+                d.translationFailureMessage = null;
+            }
             
             try
             {

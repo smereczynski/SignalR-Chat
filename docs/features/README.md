@@ -15,7 +15,7 @@ Learn about SignalR Chat's features and how they work.
 - **[Read Receipts](read-receipts.md)** - Message read status tracking
 
 ### User Experience
-- **[Localization](localization.md)** - Multi-language support (9 languages)
+- **[Localization](localization.md)** - Multi-language support (8 languages)
 - **[Notifications](notifications.md)** - Email/SMS notifications for unread messages
 - **[Pagination](pagination.md)** - Efficient message loading
 
@@ -32,7 +32,7 @@ Learn about SignalR Chat's features and how they work.
 | Real-time Messaging | ✅ Production | [real-time-messaging.md](real-time-messaging.md) |
 | Read Receipts | ✅ Production | [read-receipts.md](read-receipts.md) |
 | Presence Tracking | ✅ Production | [presence.md](presence.md) |
-| Localization (9 languages) | ✅ Production | [localization.md](localization.md) |
+| Localization (8 languages) | ✅ Production | [localization.md](localization.md) |
 | Rate Limiting | ✅ Production | [rate-limiting.md](rate-limiting.md) |
 | Email/SMS Notifications | ✅ Production | [notifications.md](notifications.md) |
 | Message Pagination | ✅ Production | [pagination.md](pagination.md) |

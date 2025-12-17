@@ -12,6 +12,12 @@ namespace Chat.Web.Models
         public string UserName { get; set; }
         public string FullName { get; set; }
         public string Avatar { get; set; }
+
+        /// <summary>
+        /// Preferred language code for translations (ISO 639-1, e.g., "en", "pl").
+        /// Can also be a culture string (e.g., "pl-PL") and will be normalized by the translation pipeline.
+        /// </summary>
+        public string PreferredLanguage { get; set; }
         
         /// <summary>
         /// Whether this user is allowed to sign in. Defaults to true.

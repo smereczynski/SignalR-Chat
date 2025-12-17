@@ -434,7 +434,7 @@ sequenceDiagram
 - Persistence: Azure Cosmos DB with custom repository pattern; in-memory repositories when Testing:InMemory mode enabled
 - OTP store: Redis in normal mode, in-memory in Testing:InMemory
 - Auth: Cookie authentication after OTP verification (dedicated `/login` page)
-- Localization: ASP.NET Core Localization with 9 supported markets (en, pl-PL, de-DE, cs-CZ, sk-SK, uk-UA, be-BY, lt-LT, ru-RU); culture resolution via Cookie > Accept-Language header; API endpoint (`/api/localization/strings`) provides client-side translations
+- Localization: ASP.NET Core Localization with 8 supported markets (en, pl-PL, de-DE, cs-CZ, sk-SK, uk-UA, lt-LT, ru-RU); culture resolution via Cookie > Accept-Language header; API endpoint (`/api/localization/strings`) provides client-side translations
 - Observability: OpenTelemetry (traces, metrics, logs) with exporter auto-selection
 - SignalR transport: In-process by default; Azure SignalR is automatically added when not in Testing:InMemory mode
 - Read receipts: Client marks messages as read in two ways: (1) on reaching timeline bottom (existing), and (2) after join/reconnect by scanning the viewport for visible, non-self messages and invoking `markRead` per id (debounced, idempotent). This ensures historical messages seen on reconnect are recorded as read.
@@ -536,7 +536,6 @@ The application supports the following cultures with complete translations:
 | `cs-CZ` | Czech | Czech Republic | Informal friendly |
 | `sk-SK` | Slovak | Slovakia | |
 | `uk-UA` | Ukrainian | Ukraine | Modern Ukrainian, Cyrillic |
-| `be-BY` | Belarusian | Belarus | Proper Belarusian, Cyrillic |
 | `lt-LT` | Lithuanian | Lithuania | Baltic language, Latin script |
 | `ru-RU` | Russian | Russia | Standard contemporary Russian, Cyrillic |
 
@@ -615,7 +614,6 @@ All translations focus on natural, idiomatic language rather than literal machin
 - **German**: Formal business style ("Sie" form throughout)
 - **Czech/Slovak**: Informal friendly tone appropriate for chat
 - **Ukrainian**: Modern Ukrainian avoiding Russianisms
-- **Belarusian**: Proper Belarusian, distinct from Russian
 - **Lithuanian**: Natural Baltic phrasing with proper diacritics
 
 Examples:
@@ -679,7 +677,7 @@ This section captures core components and runtime flows beyond OTP specifics.
 | Services | `AzureTranslatorService` | Azure AI Foundry wrapper for message translation; Redis caching with 1-hour TTL. |
 | Services | `TranslationJobQueue` | Redis-based FIFO queue for translation jobs; LPUSH/RPOP with priority support. |
 | Localization | `LocalizationController` | API endpoint (`/api/localization/strings`) providing JSON translations for current culture; cached with `Accept-Language` header variance. |
-| Localization | `SharedResources` | Resource files (`SharedResources.[locale].resx`) containing 60+ translated strings for 9 supported markets. |
+| Localization | `SharedResources` | Resource files (`SharedResources.[locale].resx`) containing translated strings for 8 supported cultures. |
 | Auth | Auth Controllers / OTP API | `start` (generate/store OTP in Redis), `verify` (validate OTP, issue auth cookie), `logout`. |
 | Data | `ApplicationDbContext` & EF migrations | Stores Users, Rooms, Messages. |
 | OTP Store | `RedisOtpStore` | Wrapper over StackExchange.Redis for code set/get/delete with TTL. |
@@ -702,6 +700,8 @@ Client read-marking is idempotent and safe across reconnects: the browser dedupl
 
 **Overview:**
 - Messages are immediately broadcast, then asynchronously translated in background
+- Source language is derived from sender preference (or `auto`)
+- Target languages are derived from the room language set (plus always `en`)
 - Redis-based FIFO queue with 5 concurrent workers
 - Automatic retry logic (max 3 attempts) with exponential backoff
 - Redis caching with 1-hour TTL reduces API costs by 40-60%
@@ -713,12 +713,12 @@ Client read-marking is idempotent and safe across reconnects: the browser dedupl
 |-----------|-----------|---------|
 | Translation Queue | Redis (FIFO) | LPUSH/RPOP job queue with priority support |
 | Background Workers | IHostedService | 5 concurrent workers processing translation jobs |
-| AI Translation | Azure AI Foundry (GPT-4o-mini) | Serverless API for message translation (9 languages) |
+| AI Translation | Azure AI Foundry (GPT-4o-mini) | Serverless API for message translation |
 | Translation Cache | Redis | 1-hour TTL cache for common phrases |
 | Translation Status | Message Model | Lifecycle tracking: None → Pending → InProgress → Completed/Failed |
 
 **Translation Flow:**
-1. User sends message → Saved to Cosmos DB (status: None) → Broadcast to room
+1. User sends message → Saved to Cosmos DB (status: Pending when translation is enabled) → Broadcast to room
 2. Translation job enqueued to Redis queue (LPUSH)
 3. Background worker dequeues job (RPOP)
 4. Worker updates status to InProgress
@@ -742,7 +742,7 @@ Client read-marking is idempotent and safe across reconnects: the browser dedupl
 
 **Performance:**
 - Message send latency: <50ms (non-blocking)
-- Translation latency: 1-3 seconds per message (9 languages)
+- Translation latency: 1-3 seconds per message (depends on room language set)
 - Queue throughput: 5-10 jobs/second
 - Cache hit rate: 40-60%
 

@@ -8,13 +8,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Per-user and per-room translation language selection** (#139, 2025-12-16):
+  - ✅ Added user `preferredLanguage` (stored in Cosmos DB user documents)
+  - ✅ Added room `languages` set (stored in Cosmos DB room documents)
+  - ✅ Room language set is updated on join (normalized + deduplicated)
+  - ✅ Translation targets derived from room languages + always `en`
+
+- **Translation failure diagnostics (category/code/message)** (2025-12-17):
+  - ✅ Persisted translation failure details on messages (`category`, `code`, safe `message`)
+  - ✅ Enriched SignalR `translationFailed` payload with `category`, `code`, `message` (kept legacy `error`)
+  - ✅ Added OpenTelemetry tags for failure classification (`translation.failure.*`)
+  - ✅ Skip retries for non-retryable translation failures
+  - ✅ Added unit tests for failure classification
+
 - **Phase 2: Asynchronous Real-Time Message Translation** (#127, 2025-12-03):
   - ✅ Background translation worker service with 5 concurrent workers
   - ✅ Redis-based FIFO job queue with priority support (high/normal)
   - ✅ Translation status lifecycle: None → Pending → InProgress → Completed/Failed
   - ✅ Automatic retry logic (max 3 attempts) with exponential backoff
   - ✅ Real-time SignalR broadcasting of translation updates to room members
-  - ✅ Integration with Azure AI Translator (GPT-4o-mini) for 9 languages
+  - ✅ Integration with Azure AI Translator (GPT-4o-mini) for 8 languages
   - ✅ Redis caching with 1-hour TTL to reduce API costs
   - ✅ Translation tone preservation (casual/professional/friendly)
   - ✅ OpenTelemetry metrics for translation pipeline observability
@@ -35,8 +48,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - ✅ Test results: **165/165 passing (100%)**, 0 skipped, 0 failing
   - 📈 **Quality**: Tests now validate actual behavior with meaningful assertions
 
+- **Translation docs: unknown words and short strings** (2025-12-17):
+  - ✅ Documented expected behavior for out-of-vocabulary tokens (may translate unchanged)
+  - ✅ Documented auto-detect low-confidence risk on very short strings
+
+- **Monitoring & observability documentation** (2025-12-17):
+  - ✅ Updated docs to reflect current exporter selection (Azure Monitor vs OTLP vs Console)
+  - ✅ Documented file logging toggle and output location
+  - ✅ Listed current span names, metric names, and diagnostics endpoints
+
 ### Fixed
+- **Translation target language validation** (#139, 2025-12-16):
+  - ✅ Prevented invalid target languages (notably `auto`) from being sent to the translator
+  - ✅ Reduced risk of leaking user message content via logs during translation
+
+- **Preserve user preferredLanguage on upsert** (2025-12-17):
+  - ✅ Prevented `preferredLanguage` from being unintentionally wiped when partial user updates are upserted
+
 - **Infrastructure: AI Foundry Private Endpoint Static IP Configuration** (2025-12-03):
+  ### Removed
+  - **Localization: Belarusian locale** (2025-12-16):
+    - ✅ Removed `be-BY` from supported cultures, UI language selector, assets, and tests
   - ✅ Fixed deployment error: Azure PE requires unique memberName for each IP configuration
   - ✅ Configured AI Foundry PE with 3 static IPs using correct memberNames from Azure:
     - `default` - cognitiveservices.azure.com (.169)
@@ -603,7 +635,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added language selection modal with all 9 language options, native language names, and active language highlighting
   - Fixed "Who's Here" user counter display to use parameterized translation string with dynamic count formatting
   - Removed unused search functionality from users list (container, CSS, and API endpoint)
-  - Translated message read receipts ("Delivered" and "Read by") for all 9 languages
+  - Translated message read receipts ("Delivered" and "Read by") for all 8 languages
   - Added translations for language picker UI: ChangeLanguage, SelectLanguage, Logout
   - Fixed parameterized string tests by restoring `{0}` placeholder in WhosHere translations and updating UI to format count dynamically
 

@@ -147,7 +147,7 @@ public class LocalizationTests
     }
     
     // ============================================================================
-    // Multi-Locale Tests - All 9 Markets
+    // Multi-Locale Tests - All 8 Markets
     // ============================================================================
     
     [Theory]
@@ -157,7 +157,6 @@ public class LocalizationTests
     [InlineData("cs-CZ", "SignalR Chat", "Chatovací aplikace v reálném čase.", "Načítání…")]
     [InlineData("sk-SK", "SignalR Chat", "Chatovacia aplikácia v reálnom čase.", "Načítava sa…")]
     [InlineData("uk-UA", "SignalR Чат", "Чат-додаток у реальному часі.", "Завантаження…")]
-    [InlineData("be-BY", "SignalR Чат", "Чат-прыкладанне ў рэжыме рэальнага часу.", "Загрузка…")]
     [InlineData("lt-LT", "SignalR pokalbiai", "Pokalbių programa realiuoju laiku.", "Įkeliama…")]
     [InlineData("ru-RU", "SignalR чат", "Чат-приложение в режиме реального времени.", "Загрузка…")]
     public void Localizer_ShouldReturnCorrectTranslations_ForAllLocales(
@@ -191,7 +190,6 @@ public class LocalizationTests
     [InlineData("cs-CZ", "Chyba", "Chatovací místnosti", "Přihlaste se a pokračujte")]
     [InlineData("sk-SK", "Chyba", "Chatovacie miestnosti", "Prihláste sa a pokračujte")]
     [InlineData("uk-UA", "Помилка", "Чат-кімнати", "Увійдіть, щоб продовжити")]
-    [InlineData("be-BY", "Памылка", "Чат-пакоі", "Увайдзіце, каб працягнуць")]
     [InlineData("lt-LT", "Klaida", "Pokalbių kambariai", "Prisijunkite, kad tęstumėte")]
     [InlineData("ru-RU", "Ошибка", "Комнаты чата", "Войдите, чтобы продолжить")]
     public void Localizer_ShouldReturnCorrectUIStrings_ForAllLocales(
@@ -225,7 +223,6 @@ public class LocalizationTests
     [InlineData("cs-CZ", "Odeslat kód", "Ověřit", "6místný kód")]
     [InlineData("sk-SK", "Odoslať kód", "Overiť", "6-miestny kód")]
     [InlineData("uk-UA", "Надіслати код", "Підтвердити", "6-значний код")]
-    [InlineData("be-BY", "Даслаць код", "Пацвердзіць", "6-лічбавы код")]
     [InlineData("lt-LT", "Siųsti kodą", "Patvirtinti", "6 skaitmenų kodas")]
     [InlineData("ru-RU", "Отправить код", "Подтвердить", "6-значный код")]
     public void Localizer_ShouldReturnCorrectAuthStrings_ForAllLocales(
@@ -259,7 +256,6 @@ public class LocalizationTests
     [InlineData("cs-CZ")]
     [InlineData("sk-SK")]
     [InlineData("uk-UA")]
-    [InlineData("be-BY")]
     [InlineData("lt-LT")]
     [InlineData("ru-RU")]
     public void Localizer_ShouldHaveAllRequiredKeys_ForAllLocales(string cultureName)
@@ -346,7 +342,6 @@ public class LocalizationTests
     [InlineData("cs-CZ", 7, "Kdo je tady (7)")]
     [InlineData("sk-SK", 4, "Kto je tu (4)")]
     [InlineData("uk-UA", 6, "Хто тут (6)")]
-    [InlineData("be-BY", 8, "Хто тут (8)")]
     [InlineData("lt-LT", 2, "Kas čia (2)")]
     [InlineData("ru-RU", 9, "Кто здесь (9)")]
     public void Localizer_ShouldSupportParameterizedStrings_ForAllLocales(

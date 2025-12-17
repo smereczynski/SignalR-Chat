@@ -32,7 +32,7 @@ Provides unified access to:
 - **Cost**: ~$10/million characters (first 2M free)
 - **Latency**: ~100-300ms per request
 - **Quality**: Good for general chat messages
-- **API**: REST API v3.0
+- **API**: Translator `translate` endpoint (no `deploymentName` required)
 
 ### 2. LLM-GPT4oMini - Default
 
@@ -42,7 +42,7 @@ Provides unified access to:
 - **Cost**: ~$0.15/1M input tokens + $0.60/1M output tokens
 - **Latency**: ~500-1000ms per request
 - **Quality**: Better context understanding, handles slang/idioms
-- **API**: Azure OpenAI Chat Completions API
+- **API**: Translator `translate` endpoint with `deploymentName` (LLM deployment)
 
 ### 3. LLM-GPT4o
 
@@ -119,66 +119,31 @@ Translation__Provider=LLM-GPT4oMini  # Default: LLM-GPT4oMini, also: NMT, LLM-GP
 Translation__ModelDeploymentName=gpt-4o-mini  # empty for NMT, model name for LLM
 ```
 
-## API Usage
+## API Usage (Used by the App)
 
-### NMT Translation (REST API)
+The application uses the Translator `translate` endpoint with the configured `Translation__ApiVersion` (default: `2025-10-01-preview`).
 
 ```bash
-# Translate "Hello world" to Polish and German
-curl -X POST "https://<endpoint>/translator/text/v3.0/translate?api-version=3.0&to=pl&to=de" \
+curl -X POST "https://<endpoint>/translator/text/translate?api-version=2025-10-01-preview" \
   -H "Ocp-Apim-Subscription-Key: <apiKey>" \
-  -H "Content-Type: application/json" \
-  -d '[{"text": "Hello world"}]'
-```
-
-Response:
-```json
-[
-  {
-    "detectedLanguage": {"language": "en", "score": 1.0},
-    "translations": [
-      {"text": "Witaj świecie", "to": "pl"},
-      {"text": "Hallo Welt", "to": "de"}
-    ]
-  }
-]
-```
-
-### LLM Translation (OpenAI API)
-
-```bash
-curl -X POST "https://<endpoint>/openai/deployments/gpt-4o-mini/chat/completions?api-version=2024-08-01-preview" \
-  -H "api-key: <apiKey>" \
+  -H "Ocp-Apim-Subscription-Region: <region>" \
   -H "Content-Type: application/json" \
   -d '{
-    "messages": [
+    "inputs": [
       {
-        "role": "system",
-        "content": "You are a translator. Translate the following chat message from English to Polish. Preserve emoji and formatting. Only output the translated text."
-      },
-      {
-        "role": "user",
-        "content": "Hey what'\''s up? 🙂"
+        "text": "bry!",
+        "targets": [
+          { "language": "en", "deploymentName": "gpt-4o-mini", "tone": "casual" },
+          { "language": "pl", "deploymentName": "gpt-4o-mini", "tone": "casual" }
+        ]
       }
-    ],
-    "temperature": 0.3,
-    "max_tokens": 500
+    ]
   }'
 ```
 
-Response:
-```json
-{
-  "choices": [
-    {
-      "message": {
-        "role": "assistant",
-        "content": "Hej, co słychać? 🙂"
-      }
-    }
-  ]
-}
-```
+Notes:
+- Omitting `language` enables **auto-detect** (the service returns detected language + confidence score).
+- For NMT, `deploymentName` is typically not required; for LLM deployments it must match your configured model deployment.
 
 ## Cost Estimates
 
@@ -200,9 +165,45 @@ Response:
 
 ## Supported Languages
 
-All 9 languages in the application:
-- English (en), Polish (pl), German (de), French (fr), Spanish (es)
-- Italian (it), Portuguese (pt), Japanese (ja), Chinese (zh)
+All languages currently enabled in the application localization layer:
+- English (en)
+- Polish (pl)
+- German (de)
+- Czech (cs)
+- Slovak (sk)
+- Ukrainian (uk)
+- Lithuanian (lt)
+- Russian (ru)
+
+## How the App Chooses Languages
+
+- **Source language**: sender's user preference (`preferredLanguage`) when set; otherwise `auto`.
+- **Target languages**: the room's language set (`languages`) plus **always** English (`en`).
+- **No invalid targets**: `auto` is never sent as a target language.
+- **No retroactive translation**: room language changes apply only to new messages.
+
+## Unknown Words, Names, and Very Short Strings
+
+Chat messages often contain **names**, **typos**, **slang**, **abbreviations**, or fully **out-of-vocabulary (OOV)** strings (for example: `bry!`).
+
+### What to Expect
+
+- **LLM provider (GPT)**: Typically preserves OOV tokens and formatting better.
+  - In practice, if a token can't be translated (brand name, typo, code-like string), the output often keeps it unchanged.
+- **NMT provider (classic Translator)**: May **copy through** unknown tokens (especially named entities/acronyms), but this behavior is **not guaranteed**.
+  - Microsoft notes that “as-is” copying isn't guaranteed in some dictionary scenarios, and the system can inflect/case-normalize text.
+
+### Why This Happens
+
+- **Auto-detect on short inputs can be low confidence**.
+  - If you omit the source language (`from`), the service returns a detected language and a confidence `score`.
+  - Short or non-language strings can yield low scores, which can lead to unstable translations.
+
+### Recommendations (This Project)
+
+- Prefer setting user `preferredLanguage` to avoid auto-detect on short messages.
+- Treat “unchanged output” as a valid outcome for OOV strings.
+- If you must guarantee copy-through for specific terms (product names, acronyms), use Translator dictionary features (phrase/verbatim dictionaries) on the NMT path.
 
 ## Migration Path
 
@@ -215,54 +216,4 @@ All 9 languages in the application:
 - If budget constrained: Switch to `translationProvider: 'NMT'`
 - Compare quality degradation vs cost savings
 - Monitor user feedback
-
-**Phase 3**: Quality Upgrade (if needed)
-- If quality critical: Upgrade to `translationProvider: 'LLM-GPT4o'`
-- Highest quality, higher cost (~$200-300/month)
-- Consider for production only
-
-## Security
-
-- **API Keys**: Stored as secure outputs, passed to App Service
-- **Managed Identity**: System-assigned identity enabled for Entra ID auth
-- **Network**: Supports private endpoints (set `publicNetworkAccess: false`)
-- **Local Auth**: Can be disabled for Entra ID-only access
-
-## Monitoring
-
-Key metrics to track:
-- Translation requests/min
-- API latency (p50, p95, p99)
-- Error rate
-- Token usage (for LLM providers)
-- Cost per day/month
-
-## Troubleshooting
-
-### Error: "Deployment not found"
-- Ensure `translationProvider` is set to LLM variant (not NMT)
-- Check model deployment name matches output
-
-### Error: "Rate limit exceeded"
-- Increase SKU capacity (10 TPM → 50 TPM)
-- Add retry logic with exponential backoff
-- Consider scaling to multiple regions
-
-### Error: "Invalid API version"
-- NMT: Use `api-version=3.0`
-- LLM: Use `api-version=2024-08-01-preview`
-
-### High Latency
-- LLM translation slower than NMT (expected)
-- Consider caching common translations
-- Use async processing for bulk translations
-
-## References
-
-- [Azure AI Translator Docs](https://learn.microsoft.com/azure/ai-services/translator/)
-- [Azure OpenAI Service Docs](https://learn.microsoft.com/azure/ai-services/openai/)
-- [Microsoft Foundry Overview](https://learn.microsoft.com/azure/ai-foundry/what-is-azure-ai-foundry)
-- [Translation API Reference](https://learn.microsoft.com/azure/ai-services/translator/reference/v3-0-translate)
-- [Bicep Module: translation.bicep](../../infra/bicep/modules/translation.bicep)
-
 [Back to Deployment](README.md) | [Back to Documentation](../README.md)
