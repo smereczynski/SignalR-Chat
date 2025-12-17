@@ -303,8 +303,15 @@ var appSettingsAllowedTenants = [for (i, tenantId) in entraIdAllowedTenants: {
   value: tenantId
 }]
 
+var translationAppSettingArray = translationSubscriptionKey != '' ? [
+  {
+    name: 'Translation__SubscriptionKey'
+    value: translationSubscriptionKey
+  }
+] : []
+
 // Final app settings array
-var allAppSettings = concat(baseAppSettings, appSettingsAllowedTenants)
+var allAppSettings = concat(baseAppSettings, appSettingsAllowedTenants, translationAppSettingArray)
 
 // Base connection strings
 var baseConnectionStrings = [
@@ -335,14 +342,6 @@ var baseConnectionStrings = [
   }
 ]
 
-var translationConnectionStringArray = translationSubscriptionKey != '' ? [
-  {
-    name: 'Translation__SubscriptionKey'
-    connectionString: translationSubscriptionKey
-    type: 'Custom'
-  }
-] : []
-
 var entraConnectionStringArray = entraIdConnectionString != '' ? [
   {
     name: 'EntraId'
@@ -351,7 +350,7 @@ var entraConnectionStringArray = entraIdConnectionString != '' ? [
   }
 ] : []
 
-var allConnectionStrings = concat(baseConnectionStrings, translationConnectionStringArray, entraConnectionStringArray)
+var allConnectionStrings = concat(baseConnectionStrings, entraConnectionStringArray)
 
 // ==========================================
 // App Service Plan

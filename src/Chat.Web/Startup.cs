@@ -259,7 +259,36 @@ namespace Chat.Web
                 // TranslationOptions from the "Translation" section. Bridge that gap here.
                 if (string.IsNullOrWhiteSpace(opts.SubscriptionKey))
                 {
-                    var subscriptionKey = Configuration.GetConnectionString("Translation__SubscriptionKey");
+                    static string GetEnvVarInsensitive(string name)
+                    {
+                        var direct = Environment.GetEnvironmentVariable(name);
+                        if (!string.IsNullOrWhiteSpace(direct))
+                        {
+                            return direct;
+                        }
+
+                        // Azure App Service on Linux has been observed to uppercase environment variable names.
+                        // Environment.GetEnvironmentVariable is case-sensitive on Linux, so probe case-insensitively.
+                        foreach (System.Collections.DictionaryEntry entry in Environment.GetEnvironmentVariables())
+                        {
+                            if (entry.Key is string key && key.Equals(name, StringComparison.OrdinalIgnoreCase))
+                            {
+                                return entry.Value as string;
+                            }
+                        }
+
+                        return null;
+                    }
+
+                    // NOTE: On Azure App Service, entries from the "Connection strings" blade are injected as
+                    // environment variables with provider-specific prefixes (e.g. CUSTOMCONNSTR_{name}).
+                    // These are not always surfaced via IConfiguration as ConnectionStrings:{name} unless an
+                    // additional provider is used. Handle the common App Service prefixes explicitly.
+                    var subscriptionKey = Configuration.GetConnectionString("Translation__SubscriptionKey")
+                        ?? GetEnvVarInsensitive("CUSTOMCONNSTR_Translation__SubscriptionKey")
+                        ?? GetEnvVarInsensitive("ConnectionStrings__Translation__SubscriptionKey")
+                        ?? GetEnvVarInsensitive("Translation__SubscriptionKey")
+                        ?? GetEnvVarInsensitive("Translation:SubscriptionKey");
                     if (!string.IsNullOrWhiteSpace(subscriptionKey))
                     {
                         opts.SubscriptionKey = subscriptionKey;
