@@ -127,6 +127,9 @@ namespace Chat.Web.Repositories
         public Dictionary<string, string> translations { get; set; }  // {"en": "Hello", "pl": "Cześć"}
         public string translationJobId { get; set; }  // "transjob:123:1638360000000"
         public DateTime? translationFailedAt { get; set; }  // nullable timestamp
+        public string translationFailureCategory { get; set; }
+        public string translationFailureCode { get; set; }
+        public string translationFailureMessage { get; set; }
     }
 
     /// <summary>
@@ -513,7 +516,10 @@ namespace Chat.Web.Repositories
                 TranslationStatus = Enum.TryParse<TranslationStatus>(d.translationStatus, out var status) ? status : TranslationStatus.None,
                 Translations = d.translations ?? new Dictionary<string, string>(),
                 TranslationJobId = d.translationJobId,
-                TranslationFailedAt = d.translationFailedAt
+                TranslationFailedAt = d.translationFailedAt,
+                TranslationFailureCategory = Enum.TryParse<TranslationFailureCategory>(d.translationFailureCategory, out var cat) ? cat : TranslationFailureCategory.Unknown,
+                TranslationFailureCode = Enum.TryParse<TranslationFailureCode>(d.translationFailureCode, out var code) ? code : TranslationFailureCode.Unknown,
+                TranslationFailureMessage = d.translationFailureMessage
             };
         }
 
@@ -534,7 +540,10 @@ namespace Chat.Web.Repositories
                 translationStatus = message.TranslationStatus.ToString(),
                 translations = message.Translations,
                 translationJobId = message.TranslationJobId,
-                translationFailedAt = message.TranslationFailedAt
+                translationFailedAt = message.TranslationFailedAt,
+                translationFailureCategory = message.TranslationStatus == TranslationStatus.Failed ? message.TranslationFailureCategory.ToString() : null,
+                translationFailureCode = message.TranslationStatus == TranslationStatus.Failed ? message.TranslationFailureCode.ToString() : null,
+                translationFailureMessage = message.TranslationFailureMessage
             };
             try
             {
@@ -657,7 +666,15 @@ namespace Chat.Web.Repositories
             return MapMessage(d);
         }
 
-        public async Task<Message> UpdateTranslationAsync(int id, TranslationStatus status, Dictionary<string, string> translations, string jobId = null, DateTime? failedAt = null)
+        public async Task<Message> UpdateTranslationAsync(
+            int id,
+            TranslationStatus status,
+            Dictionary<string, string> translations,
+            string jobId = null,
+            DateTime? failedAt = null,
+            TranslationFailureCategory? failureCategory = null,
+            TranslationFailureCode? failureCode = null,
+            string failureMessage = null)
         {
             using var activity = Tracing.ActivitySource.StartActivity("cosmos.messages.updatetranslation", ActivityKind.Client);
             activity?.SetTag("app.message.id", id);
@@ -683,6 +700,19 @@ namespace Chat.Web.Repositories
             d.translations = translations ?? new Dictionary<string, string>();
             d.translationJobId = jobId;
             d.translationFailedAt = failedAt;
+
+            if (status == TranslationStatus.Failed)
+            {
+                d.translationFailureCategory = failureCategory?.ToString();
+                d.translationFailureCode = failureCode?.ToString();
+                d.translationFailureMessage = failureMessage;
+            }
+            else
+            {
+                d.translationFailureCategory = null;
+                d.translationFailureCode = null;
+                d.translationFailureMessage = null;
+            }
             
             try
             {

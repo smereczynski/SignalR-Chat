@@ -106,13 +106,34 @@ namespace Chat.Web.Repositories
             return Task.FromResult(m);
         }
         
-        public Task<Message> UpdateTranslationAsync(int id, TranslationStatus status, System.Collections.Generic.Dictionary<string, string> translations, string jobId = null, DateTime? failedAt = null)
+        public Task<Message> UpdateTranslationAsync(
+            int id,
+            TranslationStatus status,
+            System.Collections.Generic.Dictionary<string, string> translations,
+            string jobId = null,
+            DateTime? failedAt = null,
+            TranslationFailureCategory? failureCategory = null,
+            TranslationFailureCode? failureCode = null,
+            string failureMessage = null)
         {
             if (!_messages.TryGetValue(id, out var m)) return Task.FromResult<Message>(null);
             m.TranslationStatus = status;
             m.Translations = translations ?? new System.Collections.Generic.Dictionary<string, string>();
             m.TranslationJobId = jobId;
             m.TranslationFailedAt = failedAt;
+
+            if (status == TranslationStatus.Failed)
+            {
+                m.TranslationFailureCategory = failureCategory ?? TranslationFailureCategory.Unknown;
+                m.TranslationFailureCode = failureCode ?? TranslationFailureCode.Unknown;
+                m.TranslationFailureMessage = failureMessage;
+            }
+            else
+            {
+                m.TranslationFailureCategory = TranslationFailureCategory.Unknown;
+                m.TranslationFailureCode = TranslationFailureCode.Unknown;
+                m.TranslationFailureMessage = null;
+            }
             return Task.FromResult(m);
         }
     }

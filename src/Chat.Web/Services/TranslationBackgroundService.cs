@@ -229,13 +229,23 @@ public class TranslationBackgroundService : BackgroundService
         }
         catch (Exception ex)
         {
-            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-            _logger.LogError(ex,
-                "Translation failed for message {MessageId} (attempt {Retry}/{Max}): {Error}",
-                job.MessageId, job.RetryCount + 1, _options!.MaxRetries + 1, ex.Message);
+            var failure = TranslationFailureClassifier.Classify(ex);
+            activity?.SetStatus(ActivityStatusCode.Error, failure.Code.ToString());
+            activity?.SetTag("translation.failure.category", failure.Category.ToString());
+            activity?.SetTag("translation.failure.code", failure.Code.ToString());
+            activity?.SetTag("translation.failure.retryable", failure.IsRetryable);
 
-            // Retry logic
-            if (job.RetryCount < _options.MaxRetries)
+            _logger.LogError(ex,
+                "Translation failed for message {MessageId} (attempt {Retry}/{Max}) category={Category} code={Code} retryable={Retryable}",
+                job.MessageId,
+                job.RetryCount + 1,
+                _options!.MaxRetries + 1,
+                failure.Category,
+                failure.Code,
+                failure.IsRetryable);
+
+            // Retry logic (skip retries for non-retryable categories/codes)
+            if (failure.IsRetryable && job.RetryCount < _options.MaxRetries)
             {
                 job.RetryCount++;
                 var delay = TimeSpan.FromSeconds(_options!.RetryDelaySeconds * job.RetryCount);
@@ -249,24 +259,47 @@ public class TranslationBackgroundService : BackgroundService
             }
             else
             {
-                // Max retries exceeded - mark as failed
+                // Permanent failure (either non-retryable, or max retries exceeded)
+                var attempts = job.RetryCount + 1;
                 _logger.LogError(
-                    "Translation failed permanently for message {MessageId} after {MaxRetries} attempts",
-                    job.MessageId, _options!.MaxRetries + 1);
+                    "Translation failed permanently for message {MessageId} after {Attempts} attempt(s) category={Category} code={Code}",
+                    job.MessageId,
+                    attempts,
+                    failure.Category,
+                    failure.Code);
+
+                var safeMessage = failure.SafeMessage;
+                if (attempts > 1)
+                {
+                    safeMessage = $"{safeMessage} (after {attempts} attempts)";
+                }
+
+                // Keep message small and user-safe.
+                if (safeMessage.Length > 200)
+                {
+                    safeMessage = safeMessage.Substring(0, 200);
+                }
 
                 await _messages!.UpdateTranslationAsync(
                     job.MessageId,
                     TranslationStatus.Failed,
                     new Dictionary<string, string>(),
                     job.JobId,
-                    DateTime.UtcNow).ConfigureAwait(false);
+                    DateTime.UtcNow,
+                    failure.Category,
+                    failure.Code,
+                    safeMessage).ConfigureAwait(false);
 
                 // Broadcast failure
                 await _hubContext!.Clients.Group(job.RoomName)
                     .SendAsync("translationFailed", new
                     {
                         messageId = job.MessageId,
-                        error = "Translation failed after multiple attempts",
+                        // Back-compat field (legacy clients)
+                        error = safeMessage,
+                        category = failure.Category.ToString(),
+                        code = failure.Code.ToString(),
+                        message = safeMessage,
                         timestamp = DateTime.UtcNow
                     }, cancellationToken).ConfigureAwait(false);
             }

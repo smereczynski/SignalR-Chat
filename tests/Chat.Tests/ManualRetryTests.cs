@@ -205,7 +205,10 @@ public class ManualRetryTests
             It.IsAny<TranslationStatus>(),
             It.IsAny<Dictionary<string, string>>(),
             It.IsAny<string>(),
-            It.IsAny<DateTime?>()))
+            It.IsAny<DateTime?>(),
+            It.IsAny<Chat.Web.Models.TranslationFailureCategory?>(),
+            It.IsAny<Chat.Web.Models.TranslationFailureCode?>(),
+            It.IsAny<string>()))
             .ReturnsAsync(message);
 
         MessageTranslationJob? capturedJob = null;
@@ -244,7 +247,10 @@ public class ManualRetryTests
             It.Is<TranslationStatus>(s => s == TranslationStatus.Pending),
             It.IsAny<Dictionary<string, string>>(),
             It.Is<string>(s => !string.IsNullOrEmpty(s)),
-            It.Is<DateTime?>(d => !d.HasValue)), Times.Once);
+            It.Is<DateTime?>(d => !d.HasValue),
+            It.IsAny<Chat.Web.Models.TranslationFailureCategory?>(),
+            It.IsAny<Chat.Web.Models.TranslationFailureCode?>(),
+            It.IsAny<string>()), Times.Once);
 
         // Verify queue requeue
         _mockQueue.Verify(q => q.RequeueAsync(
