@@ -583,6 +583,22 @@ curl http://localhost:5099/health
 curl -i http://localhost:5099/chathub/negotiate
 ```
 
+### Message translation looks "untranslated" (output is identical)
+
+**Symptoms**:
+- A translated message update arrives, but the translated text is the same as the original (e.g., `bry!`).
+
+**Why this can be OK**:
+- Very short inputs, names, typos, slang, and other out-of-vocabulary tokens can legitimately translate to the same output.
+- If the source language is auto-detected, short strings may have low detection confidence, which can reduce translation stability.
+
+**What to do**:
+- Ensure the user has `preferredLanguage` set to avoid auto-detect on short messages.
+- Treat “unchanged output” as a valid outcome for unknown tokens.
+- For NMT-style translation, consider dictionary features (phrase/verbatim dictionaries) if you must guarantee copy-through for specific terms.
+
+See [docs/deployment/azure-translation.md](../deployment/azure-translation.md) for details.
+
 ### Build fails after translation changes
 
 **Solution**: Clean and rebuild:

@@ -567,6 +567,10 @@ public class TranslationQueueHealthCheck : IHealthCheck
    - **Impact**: No VIP user priority or room-specific prioritization
    - **Future**: Priority queues per room or user tier
 
+5. **Short / OOV Inputs**: Very short strings, typos, slang, or out-of-vocabulary tokens may be returned unchanged
+    - **Impact**: Some messages (e.g., `bry!`) may look “untranslated” even when the job succeeds
+    - **Mitigation**: Prefer setting user `preferredLanguage` to avoid low-confidence auto-detect on short inputs
+
 ### Design Trade-offs
 
 **Asynchronous vs Synchronous**:

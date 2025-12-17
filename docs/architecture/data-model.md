@@ -88,7 +88,7 @@ Database name: `chat` (configurable via `Cosmos:Database`).
   "defaultRoom": "general",                      // Preferred starting room
 
   // Translation / localization preference
-  "preferredLanguage": "pl",                     // Optional, normalized language code (e.g. "pl", "de"); may be missing for existing users
+  "preferredLanguage": "pl",                     // Optional, normalized language code (e.g. "pl", "de"); may be missing for existing users. If a partial upsert omits it, the existing value is preserved.
   
   // Entra ID fields (null for OTP-only users)
   "upn": "alice@contoso.com",                    // User Principal Name

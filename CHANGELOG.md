@@ -41,10 +41,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - ✅ Test results: **165/165 passing (100%)**, 0 skipped, 0 failing
   - 📈 **Quality**: Tests now validate actual behavior with meaningful assertions
 
+- **Translation docs: unknown words and short strings** (2025-12-17):
+  - ✅ Documented expected behavior for out-of-vocabulary tokens (may translate unchanged)
+  - ✅ Documented auto-detect low-confidence risk on very short strings
+
 ### Fixed
 - **Translation target language validation** (#139, 2025-12-16):
   - ✅ Prevented invalid target languages (notably `auto`) from being sent to the translator
   - ✅ Reduced risk of leaking user message content via logs during translation
+
+- **Preserve user preferredLanguage on upsert** (2025-12-17):
+  - ✅ Prevented `preferredLanguage` from being unintentionally wiped when partial user updates are upserted
 
 - **Infrastructure: AI Foundry Private Endpoint Static IP Configuration** (2025-12-03):
   ### Removed
