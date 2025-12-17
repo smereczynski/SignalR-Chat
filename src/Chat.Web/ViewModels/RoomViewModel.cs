@@ -1,4 +1,5 @@
 ﻿using System.ComponentModel.DataAnnotations;
+using System.Collections.Generic;
 
 namespace Chat.Web.ViewModels
 {
@@ -14,6 +15,11 @@ namespace Chat.Web.ViewModels
     [StringLength(100, ErrorMessageResourceName = "ValidationRoomNameLength", ErrorMessageResourceType = typeof(Resources.SharedResources), MinimumLength = 2)]
         [RegularExpression(@"^\w+( \w+)*$", ErrorMessageResourceName = "ValidationRoomNamePattern", ErrorMessageResourceType = typeof(Resources.SharedResources))]
         public string Name { get; set; }
+
+        /// <summary>
+        /// Language codes enabled for this room (e.g., "en", "pl").
+        /// </summary>
+        public ICollection<string> Languages { get; set; } = new List<string>();
 
     // Admin field removed
     }

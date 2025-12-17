@@ -325,10 +325,9 @@ if(window.__chatAppBooted){
 
     // While translating (or immediately after user-triggered retry), show room target languages.
     // This supports the "new language added to room" scenario.
-    const msgRoom = (m && (m.room || m.Room)) || null;
-    const activeRoomName = state.joinedRoom && state.joinedRoom.name;
-    const roomMatches = msgRoom && activeRoomName && String(msgRoom).toLowerCase() === String(activeRoomName).toLowerCase();
-    const roomLangs = roomMatches && state.joinedRoom && Array.isArray(state.joinedRoom.languages) ? state.joinedRoom.languages : null;
+    // Note: message payloads in the client do not reliably include room name/id, and the
+    // message list is already scoped to the joined room. Use joined room languages directly.
+    const roomLangs = state.joinedRoom && Array.isArray(state.joinedRoom.languages) ? state.joinedRoom.languages : null;
     if(roomLangs && roomLangs.length){
       return roomLangs.map(l => String(l || '').toLowerCase()).filter(Boolean);
     }
@@ -1095,7 +1094,23 @@ if(window.__chatAppBooted){
   }
 
   // --------------- Mutators -------------
-  function upsertRoom(r){ const e=state.rooms.find(x=>x.id===r.id); if(e){ e.name=r.name; e.admin=r.admin; } else state.rooms.push({id:r.id,name:r.name,admin:r.admin}); renderRooms(); }
+  function upsertRoom(r){
+    const normalized = {
+      id: r.id!==undefined? r.id : r.Id,
+      name: r.name!==undefined? r.name : r.Name,
+      admin: r.admin!==undefined? r.admin : r.Admin,
+      languages: r.languages!==undefined? r.languages : r.Languages
+    };
+    const e=state.rooms.find(x=>x.id===normalized.id);
+    if(e){
+      e.name=normalized.name;
+      e.admin=normalized.admin;
+      if(normalized.languages!==undefined) e.languages=normalized.languages;
+    } else {
+      state.rooms.push(normalized);
+    }
+    renderRooms();
+  }
   function upsertUser(u){
     const normalized = {
       userName: u.userName || u.UserName || u.username || '',
@@ -1204,7 +1219,8 @@ if(window.__chatAppBooted){
       state.rooms = (list||[]).map(r=>({
         id: r.id!==undefined? r.id : r.Id,
         name: r.name!==undefined? r.name : r.Name,
-        admin: r.admin!==undefined? r.admin : r.Admin
+        admin: r.admin!==undefined? r.admin : r.Admin,
+        languages: r.languages!==undefined? r.languages : r.Languages
       }));
       renderRooms();
       const stored=localStorage.getItem('lastRoom');
