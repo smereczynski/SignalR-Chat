@@ -14,6 +14,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - ✅ Room language set is updated on join (normalized + deduplicated)
   - ✅ Translation targets derived from room languages + always `en`
 
+- **Translation failure diagnostics (category/code/message)** (2025-12-17):
+  - ✅ Persisted translation failure details on messages (`category`, `code`, safe `message`)
+  - ✅ Enriched SignalR `translationFailed` payload with `category`, `code`, `message` (kept legacy `error`)
+  - ✅ Added OpenTelemetry tags for failure classification (`translation.failure.*`)
+  - ✅ Skip retries for non-retryable translation failures
+  - ✅ Added unit tests for failure classification
+
 - **Phase 2: Asynchronous Real-Time Message Translation** (#127, 2025-12-03):
   - ✅ Background translation worker service with 5 concurrent workers
   - ✅ Redis-based FIFO job queue with priority support (high/normal)
@@ -44,6 +51,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Translation docs: unknown words and short strings** (2025-12-17):
   - ✅ Documented expected behavior for out-of-vocabulary tokens (may translate unchanged)
   - ✅ Documented auto-detect low-confidence risk on very short strings
+
+- **Monitoring & observability documentation** (2025-12-17):
+  - ✅ Updated docs to reflect current exporter selection (Azure Monitor vs OTLP vs Console)
+  - ✅ Documented file logging toggle and output location
+  - ✅ Listed current span names, metric names, and diagnostics endpoints
 
 ### Fixed
 - **Translation target language validation** (#139, 2025-12-16):
