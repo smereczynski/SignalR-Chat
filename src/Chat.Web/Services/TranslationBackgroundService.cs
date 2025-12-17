@@ -165,11 +165,17 @@ public class TranslationBackgroundService : BackgroundService
                 job.JobId).ConfigureAwait(false);
 
             // 2. Call translation API
+            var sourceLanguage = string.IsNullOrWhiteSpace(job.SourceLanguage)
+                ? null
+                : (job.SourceLanguage.Equals("auto", StringComparison.OrdinalIgnoreCase) ? null : job.SourceLanguage);
+
             var request = new TranslateRequest
             {
                 Text = job.Content,
-                SourceLanguage = job.SourceLanguage ?? "auto",
-                Targets = job.TargetLanguages.Select(lang => new TranslationTarget
+                SourceLanguage = sourceLanguage,
+                Targets = job.TargetLanguages
+                    .Where(lang => !string.Equals(lang, "auto", StringComparison.OrdinalIgnoreCase))
+                    .Select(lang => new TranslationTarget
                 {
                     Language = lang,
                     DeploymentName = job.DeploymentName

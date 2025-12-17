@@ -159,6 +159,12 @@ public class AzureTranslatorService : ITranslationService
         var endpoint = _options.Endpoint.TrimEnd('/');
         var url = $"{endpoint}/translator/text/translate?api-version={_options.ApiVersion}";
 
+        // Azure Translator auto-detect is performed by omitting the language field.
+        // Do not send "auto" to the API.
+        var sourceLanguage = string.IsNullOrWhiteSpace(request.SourceLanguage)
+            ? null
+            : (request.SourceLanguage.Equals("auto", StringComparison.OrdinalIgnoreCase) ? null : request.SourceLanguage);
+
         // Build API request matching nested targets structure
         var apiRequest = new TranslateApiRequest
         {
@@ -167,7 +173,7 @@ public class AzureTranslatorService : ITranslationService
                 new TranslateInput
                 {
                     Text = request.Text,
-                    Language = request.SourceLanguage,
+                    Language = sourceLanguage,
                     Targets = request.Targets.Select(t => new TranslateTarget
                     {
                         Language = t.Language,
@@ -183,7 +189,7 @@ public class AzureTranslatorService : ITranslationService
         _logger.LogDebug("Translation API request: {Url}", url);
         _logger.LogDebug(
             "Translation API request details: source={SourceLanguage}, targets={TargetsCount}, textLength={TextLength}",
-            request.SourceLanguage ?? "auto",
+            sourceLanguage ?? "auto-detect",
             request.Targets.Count,
             request.Text?.Length ?? 0);
         
