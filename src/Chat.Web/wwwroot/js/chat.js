@@ -375,12 +375,17 @@ if(window.__chatAppBooted){
     titleRow.appendChild(title);
 
     // Retry/refresh translations (re-runs full translation flow).
-    if(m && typeof m.id === 'number'){
+    const rawMessageId = m && (m.id ?? m.Id);
+    const messageId = (typeof rawMessageId === 'number')
+      ? rawMessageId
+      : (typeof rawMessageId === 'string' && rawMessageId.trim() !== '' ? Number(rawMessageId) : NaN);
+    if(Number.isFinite(messageId)){
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'btn btn-link p-0 small text-decoration-none';
       btn.setAttribute('aria-label', window.i18n?.retryTranslation || 'Retry translation');
-      btn.innerHTML = '<i class="bi bi-arrow-clockwise"></i>';
+      // Use a Unicode refresh glyph so it renders even without Bootstrap Icons loaded.
+      btn.innerHTML = '<span aria-hidden="true">↻</span>';
       btn.addEventListener('click', async (e) => {
         e.preventDefault();
         try{
@@ -391,7 +396,7 @@ if(window.__chatAppBooted){
             finalizeMessageRender();
           }
 
-          const resp = await fetch(`/api/Messages/${m.id}/retry-translation`, {
+          const resp = await fetch(`/api/Messages/${messageId}/retry-translation`, {
             method: 'POST',
             credentials: 'same-origin',
             headers: { 'Content-Type': 'application/json' }
