@@ -29,6 +29,11 @@ namespace Chat.Web.ViewModels
         /// Translation status (None, Pending, InProgress, Completed, Failed).
         /// </summary>
         public string TranslationStatus { get; set; }
+
+        /// <summary>
+        /// The message source language used when computing translation targets (e.g., "pl" or "auto").
+        /// </summary>
+        public string SourceLanguage { get; set; }
         /// <summary>
         /// Translated versions of the message (key: language code, value: translated text).
         /// Example: { "en": "Hello", "pl": "Cześć", "de": "Hallo" }

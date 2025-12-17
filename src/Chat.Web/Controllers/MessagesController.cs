@@ -95,6 +95,7 @@ namespace Chat.Web.Controllers
                 Timestamp = message.Timestamp,
                 ReadBy = message.ReadBy != null ? message.ReadBy.ToArray() : Array.Empty<string>(),
                 TranslationStatus = message.TranslationStatus.ToString(),
+                SourceLanguage = Chat.Web.Utilities.LanguageCode.NormalizeToLanguageCode(message.FromUser?.PreferredLanguage, allowAuto: true) ?? "auto",
                 Translations = message.Translations ?? new System.Collections.Generic.Dictionary<string, string>(),
                 IsTranslated = message.IsTranslated
             };
@@ -128,6 +129,7 @@ namespace Chat.Web.Controllers
                 Timestamp = m.Timestamp,
                 ReadBy = m.ReadBy != null ? m.ReadBy.ToArray() : Array.Empty<string>(),
                 TranslationStatus = m.TranslationStatus.ToString(),
+                SourceLanguage = Chat.Web.Utilities.LanguageCode.NormalizeToLanguageCode(m.FromUser?.PreferredLanguage, allowAuto: true) ?? "auto",
                 Translations = m.Translations ?? new System.Collections.Generic.Dictionary<string, string>(),
                 IsTranslated = m.IsTranslated
             });
@@ -205,6 +207,7 @@ namespace Chat.Web.Controllers
                 CorrelationId = dto.CorrelationId,
                 ReadBy = message.ReadBy != null ? message.ReadBy.ToArray() : Array.Empty<string>(),
                 TranslationStatus = message.TranslationStatus.ToString(),
+                SourceLanguage = Chat.Web.Utilities.LanguageCode.NormalizeToLanguageCode(message.FromUser?.PreferredLanguage, allowAuto: true) ?? "auto",
                 Translations = message.Translations ?? new System.Collections.Generic.Dictionary<string, string>(),
                 IsTranslated = message.IsTranslated
             };
