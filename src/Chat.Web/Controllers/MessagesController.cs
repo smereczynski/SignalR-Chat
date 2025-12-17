@@ -93,7 +93,10 @@ namespace Chat.Web.Controllers
                 Avatar = message.FromUser?.Avatar,
                 Room = message.ToRoom?.Name,
                 Timestamp = message.Timestamp,
-                ReadBy = message.ReadBy != null ? message.ReadBy.ToArray() : Array.Empty<string>()
+                ReadBy = message.ReadBy != null ? message.ReadBy.ToArray() : Array.Empty<string>(),
+                TranslationStatus = message.TranslationStatus.ToString(),
+                Translations = message.Translations ?? new System.Collections.Generic.Dictionary<string, string>(),
+                IsTranslated = message.IsTranslated
             };
             return Ok(vm);
         }
@@ -123,7 +126,10 @@ namespace Chat.Web.Controllers
                 Avatar = m.FromUser?.Avatar,
                 Room = room.Name,
                 Timestamp = m.Timestamp,
-                ReadBy = m.ReadBy != null ? m.ReadBy.ToArray() : Array.Empty<string>()
+                ReadBy = m.ReadBy != null ? m.ReadBy.ToArray() : Array.Empty<string>(),
+                TranslationStatus = m.TranslationStatus.ToString(),
+                Translations = m.Translations ?? new System.Collections.Generic.Dictionary<string, string>(),
+                IsTranslated = m.IsTranslated
             });
             if (UseManualSerialization)
             {
@@ -197,7 +203,10 @@ namespace Chat.Web.Controllers
                 Room = room.Name,
                 Timestamp = message.Timestamp,
                 CorrelationId = dto.CorrelationId,
-                ReadBy = message.ReadBy != null ? message.ReadBy.ToArray() : Array.Empty<string>()
+                ReadBy = message.ReadBy != null ? message.ReadBy.ToArray() : Array.Empty<string>(),
+                TranslationStatus = message.TranslationStatus.ToString(),
+                Translations = message.Translations ?? new System.Collections.Generic.Dictionary<string, string>(),
+                IsTranslated = message.IsTranslated
             };
 
             // Fire-and-forget hub broadcast (do not block API latency on network fan-out)
@@ -260,8 +269,8 @@ namespace Chat.Web.Controllers
                 return Forbid();
             }
             
-            if (message.TranslationStatus != TranslationStatus.Failed)
-                return BadRequest(new { error = "Translation is not in failed state" });
+            if (message.TranslationStatus is TranslationStatus.Pending or TranslationStatus.InProgress)
+                return BadRequest(new { error = "Translation is already in progress" });
 
             var senderProfile = await _users.GetByUserNameAsync(message.FromUser?.UserName);
             var sourceLanguage = Chat.Web.Utilities.LanguageCode.NormalizeToLanguageCode(senderProfile?.PreferredLanguage) ?? "auto";
@@ -289,7 +298,7 @@ namespace Chat.Web.Controllers
                 message.Id,
                 new MessageTranslationUpdate(
                     Status: TranslationStatus.Pending,
-                    Translations: new Dictionary<string, string>(),
+                    Translations: message.Translations ?? new Dictionary<string, string>(),
                     JobId: job.JobId));
             
             _logger.LogInformation("Manual retry triggered for message {MessageId} by user {User}", id, User.Identity.Name);

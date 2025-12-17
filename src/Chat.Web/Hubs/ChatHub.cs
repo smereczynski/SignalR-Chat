@@ -689,9 +689,9 @@ namespace Chat.Web.Hubs
                 return;
             }
             
-            if (message.TranslationStatus != TranslationStatus.Failed)
+            if (message.TranslationStatus is TranslationStatus.Pending or TranslationStatus.InProgress)
             {
-                await Clients.Caller.SendAsync("onError", "Translation is not in failed state");
+                await Clients.Caller.SendAsync("onError", "Translation is already in progress");
                 return;
             }
             
@@ -721,7 +721,7 @@ namespace Chat.Web.Hubs
                 message.Id,
                 new MessageTranslationUpdate(
                     Status: TranslationStatus.Pending,
-                    Translations: new Dictionary<string, string>(),
+                    Translations: message.Translations ?? new Dictionary<string, string>(),
                     JobId: job.JobId));
             
             // Broadcast status update to room
