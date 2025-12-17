@@ -202,13 +202,7 @@ public class ManualRetryTests
 
         _mockMessages.Setup(m => m.UpdateTranslationAsync(
             It.IsAny<int>(),
-            It.IsAny<TranslationStatus>(),
-            It.IsAny<Dictionary<string, string>>(),
-            It.IsAny<string>(),
-            It.IsAny<DateTime?>(),
-            It.IsAny<Chat.Web.Models.TranslationFailureCategory?>(),
-            It.IsAny<Chat.Web.Models.TranslationFailureCode?>(),
-            It.IsAny<string>()))
+            It.IsAny<Chat.Web.Models.MessageTranslationUpdate>()))
             .ReturnsAsync(message);
 
         MessageTranslationJob? capturedJob = null;
@@ -244,13 +238,10 @@ public class ManualRetryTests
         // Verify status update
         _mockMessages.Verify(m => m.UpdateTranslationAsync(
             It.Is<int>(i => i == 123),
-            It.Is<TranslationStatus>(s => s == TranslationStatus.Pending),
-            It.IsAny<Dictionary<string, string>>(),
-            It.Is<string>(s => !string.IsNullOrEmpty(s)),
-            It.Is<DateTime?>(d => !d.HasValue),
-            It.IsAny<Chat.Web.Models.TranslationFailureCategory?>(),
-            It.IsAny<Chat.Web.Models.TranslationFailureCode?>(),
-            It.IsAny<string>()), Times.Once);
+            It.Is<Chat.Web.Models.MessageTranslationUpdate>(u =>
+                u.Status == TranslationStatus.Pending &&
+                !string.IsNullOrEmpty(u.JobId) &&
+                !u.FailedAt.HasValue)), Times.Once);
 
         // Verify queue requeue
         _mockQueue.Verify(q => q.RequeueAsync(

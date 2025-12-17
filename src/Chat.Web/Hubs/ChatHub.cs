@@ -452,10 +452,11 @@ namespace Chat.Web.Hubs
                     msg.TranslationStatus = Models.TranslationStatus.Pending;
                     msg.TranslationJobId = job.JobId;
                     await _messages.UpdateTranslationAsync(
-                        msg.Id, 
-                        Models.TranslationStatus.Pending, 
-                        new System.Collections.Generic.Dictionary<string, string>(), 
-                        job.JobId);
+                        msg.Id,
+                        new Models.MessageTranslationUpdate(
+                            Status: Models.TranslationStatus.Pending,
+                            Translations: new System.Collections.Generic.Dictionary<string, string>(),
+                            JobId: job.JobId));
                     
                     await _translationQueue.EnqueueAsync(job);
                     
@@ -716,7 +717,12 @@ namespace Chat.Web.Hubs
             };
             
             await _translationQueue.RequeueAsync(job, highPriority: true);
-            await _messages.UpdateTranslationAsync(message.Id, TranslationStatus.Pending, new Dictionary<string, string>(), job.JobId);
+            await _messages.UpdateTranslationAsync(
+                message.Id,
+                new MessageTranslationUpdate(
+                    Status: TranslationStatus.Pending,
+                    Translations: new Dictionary<string, string>(),
+                    JobId: job.JobId));
             
             // Broadcast status update to room
             await Clients.Group(currentRoom).SendAsync("translationRetrying", new

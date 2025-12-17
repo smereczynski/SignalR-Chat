@@ -160,14 +160,13 @@ public class TranslationBackgroundService : BackgroundService
             // 1. Update status to InProgress
             await _messages!.UpdateTranslationAsync(
                 job.MessageId,
-                TranslationStatus.InProgress,
-                new Dictionary<string, string>(),
-                job.JobId).ConfigureAwait(false);
+                new MessageTranslationUpdate(
+                    Status: TranslationStatus.InProgress,
+                    Translations: new Dictionary<string, string>(),
+                    JobId: job.JobId)).ConfigureAwait(false);
 
             // 2. Call translation API
-            var sourceLanguage = string.IsNullOrWhiteSpace(job.SourceLanguage)
-                ? null
-                : (job.SourceLanguage.Equals("auto", StringComparison.OrdinalIgnoreCase) ? null : job.SourceLanguage);
+            var sourceLanguage = NormalizeSourceLanguage(job.SourceLanguage);
 
             var request = new TranslateRequest
             {
@@ -197,9 +196,10 @@ public class TranslationBackgroundService : BackgroundService
             // 4. Update status to Completed
             await _messages.UpdateTranslationAsync(
                 job.MessageId,
-                TranslationStatus.Completed,
-                translations,
-                job.JobId).ConfigureAwait(false);
+                new MessageTranslationUpdate(
+                    Status: TranslationStatus.Completed,
+                    Translations: translations,
+                    JobId: job.JobId)).ConfigureAwait(false);
 
             var duration = DateTime.UtcNow - startTime;
             activity?.SetTag("translation.durationMs", duration.TotalMilliseconds);
@@ -282,13 +282,14 @@ public class TranslationBackgroundService : BackgroundService
 
                 await _messages!.UpdateTranslationAsync(
                     job.MessageId,
-                    TranslationStatus.Failed,
-                    new Dictionary<string, string>(),
-                    job.JobId,
-                    DateTime.UtcNow,
-                    failure.Category,
-                    failure.Code,
-                    safeMessage).ConfigureAwait(false);
+                    new MessageTranslationUpdate(
+                        Status: TranslationStatus.Failed,
+                        Translations: new Dictionary<string, string>(),
+                        JobId: job.JobId,
+                        FailedAt: DateTime.UtcNow,
+                        FailureCategory: failure.Category,
+                        FailureCode: failure.Code,
+                        FailureMessage: safeMessage)).ConfigureAwait(false);
 
                 // Broadcast failure
                 await _hubContext!.Clients.Group(job.RoomName)
@@ -304,6 +305,18 @@ public class TranslationBackgroundService : BackgroundService
                     }, cancellationToken).ConfigureAwait(false);
             }
         }
+    }
+
+    private static string? NormalizeSourceLanguage(string? sourceLanguage)
+    {
+        if (string.IsNullOrWhiteSpace(sourceLanguage))
+        {
+            return null;
+        }
+
+        return sourceLanguage.Equals("auto", StringComparison.OrdinalIgnoreCase)
+            ? null
+            : sourceLanguage;
     }
 
     public override void Dispose()

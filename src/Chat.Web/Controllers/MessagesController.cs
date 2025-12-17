@@ -285,7 +285,12 @@ namespace Chat.Web.Controllers
             };
             
             await _translationQueue.RequeueAsync(job, highPriority: true);
-            await _messages.UpdateTranslationAsync(message.Id, TranslationStatus.Pending, new Dictionary<string, string>(), job.JobId);
+            await _messages.UpdateTranslationAsync(
+                message.Id,
+                new MessageTranslationUpdate(
+                    Status: TranslationStatus.Pending,
+                    Translations: new Dictionary<string, string>(),
+                    JobId: job.JobId));
             
             _logger.LogInformation("Manual retry triggered for message {MessageId} by user {User}", id, User.Identity.Name);
             

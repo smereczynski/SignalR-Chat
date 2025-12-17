@@ -108,25 +108,19 @@ namespace Chat.Web.Repositories
         
         public Task<Message> UpdateTranslationAsync(
             int id,
-            TranslationStatus status,
-            System.Collections.Generic.Dictionary<string, string> translations,
-            string jobId = null,
-            DateTime? failedAt = null,
-            TranslationFailureCategory? failureCategory = null,
-            TranslationFailureCode? failureCode = null,
-            string failureMessage = null)
+            MessageTranslationUpdate update)
         {
             if (!_messages.TryGetValue(id, out var m)) return Task.FromResult<Message>(null);
-            m.TranslationStatus = status;
-            m.Translations = translations ?? new System.Collections.Generic.Dictionary<string, string>();
-            m.TranslationJobId = jobId;
-            m.TranslationFailedAt = failedAt;
+            m.TranslationStatus = update.Status;
+            m.Translations = update.Translations ?? new System.Collections.Generic.Dictionary<string, string>();
+            m.TranslationJobId = update.JobId;
+            m.TranslationFailedAt = update.FailedAt;
 
-            if (status == TranslationStatus.Failed)
+            if (update.Status == TranslationStatus.Failed)
             {
-                m.TranslationFailureCategory = failureCategory ?? TranslationFailureCategory.Unknown;
-                m.TranslationFailureCode = failureCode ?? TranslationFailureCode.Unknown;
-                m.TranslationFailureMessage = failureMessage;
+                m.TranslationFailureCategory = update.FailureCategory ?? TranslationFailureCategory.Unknown;
+                m.TranslationFailureCode = update.FailureCode ?? TranslationFailureCode.Unknown;
+                m.TranslationFailureMessage = update.FailureMessage;
             }
             else
             {

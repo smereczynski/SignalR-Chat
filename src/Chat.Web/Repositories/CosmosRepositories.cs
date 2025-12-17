@@ -668,17 +668,11 @@ namespace Chat.Web.Repositories
 
         public async Task<Message> UpdateTranslationAsync(
             int id,
-            TranslationStatus status,
-            Dictionary<string, string> translations,
-            string jobId = null,
-            DateTime? failedAt = null,
-            TranslationFailureCategory? failureCategory = null,
-            TranslationFailureCode? failureCode = null,
-            string failureMessage = null)
+            MessageTranslationUpdate update)
         {
             using var activity = Tracing.ActivitySource.StartActivity("cosmos.messages.updatetranslation", ActivityKind.Client);
             activity?.SetTag("app.message.id", id);
-            activity?.SetTag("app.translation.status", status.ToString());
+            activity?.SetTag("app.translation.status", update.Status.ToString());
             
             var q = _messages.GetItemQueryIterator<MessageDoc>(new QueryDefinition("SELECT TOP 1 * FROM c WHERE c.id = @id").WithParameter("@id", id.ToString()));
             MessageDoc d = null;
@@ -696,16 +690,16 @@ namespace Chat.Web.Repositories
             var pk = d.roomName;
             
             // Update translation fields
-            d.translationStatus = status.ToString();
-            d.translations = translations ?? new Dictionary<string, string>();
-            d.translationJobId = jobId;
-            d.translationFailedAt = failedAt;
+            d.translationStatus = update.Status.ToString();
+            d.translations = update.Translations ?? new Dictionary<string, string>();
+            d.translationJobId = update.JobId;
+            d.translationFailedAt = update.FailedAt;
 
-            if (status == TranslationStatus.Failed)
+            if (update.Status == TranslationStatus.Failed)
             {
-                d.translationFailureCategory = failureCategory?.ToString();
-                d.translationFailureCode = failureCode?.ToString();
-                d.translationFailureMessage = failureMessage;
+                d.translationFailureCategory = update.FailureCategory?.ToString();
+                d.translationFailureCode = update.FailureCode?.ToString();
+                d.translationFailureMessage = update.FailureMessage;
             }
             else
             {
