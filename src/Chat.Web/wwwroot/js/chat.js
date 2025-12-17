@@ -322,6 +322,22 @@ if(window.__chatAppBooted){
     if(ui && ui !== 'en') langs.push(ui);
     return langs;
   }
+  function getTranslationBoxClass(lang){
+    const code = String(lang || '').toLowerCase();
+    // Use Bootstrap contextual backgrounds (no custom colors) to keep contrast readable.
+    const map = {
+      en: 'text-bg-primary',
+      pl: 'text-bg-success',
+      de: 'text-bg-warning',
+      fr: 'text-bg-info',
+      es: 'text-bg-danger',
+      it: 'text-bg-dark',
+      pt: 'text-bg-secondary',
+      ja: 'text-bg-primary',
+      zh: 'text-bg-success'
+    };
+    return map[code] || 'text-bg-secondary';
+  }
   function renderTranslationPanel(messageContentEl, m){
     if(!messageContentEl) return;
     const existing = messageContentEl.querySelector('.translation-panel');
@@ -337,71 +353,55 @@ if(window.__chatAppBooted){
     const panel = document.createElement('div');
     panel.className = 'translation-panel mt-2 pt-2 border-top';
 
-    const inner = document.createElement('div');
-    inner.className = 'bg-body-tertiary rounded p-2';
-
-    const titleRow = document.createElement('div');
-    titleRow.className = 'd-flex align-items-center justify-content-between mb-1';
-    const title = document.createElement('span');
-    title.className = 'small fw-semibold';
+    const title = document.createElement('div');
+    title.className = 'small fw-semibold mb-2';
     title.textContent = window.i18n?.translations || 'Translations';
-    titleRow.appendChild(title);
+    panel.appendChild(title);
 
-    if(status === 'pending' || status === 'inprogress'){
-      const busy = document.createElement('span');
-      busy.className = 'small text-muted d-inline-flex align-items-center gap-2';
-      const spinner = document.createElement('span');
-      spinner.className = 'spinner-border spinner-border-sm';
-      spinner.setAttribute('role','status');
-      spinner.setAttribute('aria-hidden','true');
-      busy.appendChild(spinner);
-      const txt = document.createElement('span');
-      txt.textContent = window.i18n?.translating || 'Translating…';
-      busy.appendChild(txt);
-      titleRow.appendChild(busy);
-    }
-
-    inner.appendChild(titleRow);
+    const boxes = document.createElement('div');
+    boxes.className = 'd-flex flex-column gap-2';
 
     const langs = getExpectedTranslationLanguages(m);
     langs.forEach(lang => {
-      const row = document.createElement('div');
-      row.className = 'd-flex gap-2 align-items-start';
-
-      const badge = document.createElement('span');
-      badge.className = 'badge text-bg-secondary';
-      badge.textContent = String(lang || '').toUpperCase();
-      row.appendChild(badge);
-
-      const text = document.createElement('div');
-      text.className = 'small';
       const translatedText = translations && (translations[lang] || translations[String(lang).toLowerCase()] || translations[String(lang).toUpperCase()]);
 
-      if(translatedText){
-        text.textContent = translatedText;
-      } else if(status === 'failed'){
-        text.classList.add('text-danger');
-        text.textContent = errorMessage ? errorMessage : (window.i18n?.translationFailed || 'Translation failed.');
-      } else {
-        // Pending / in progress: expected placeholder per language
-        const wrap = document.createElement('span');
-        wrap.className = 'text-muted d-inline-flex align-items-center gap-2';
+      const box = document.createElement('div');
+      box.className = `${getTranslationBoxClass(lang)} rounded p-2`;
+
+      const header = document.createElement('div');
+      header.className = 'd-flex align-items-center justify-content-between mb-1';
+      const code = document.createElement('span');
+      code.className = 'small fw-semibold';
+      code.textContent = String(lang || '').toUpperCase();
+      header.appendChild(code);
+
+      // No "Translating…" text; language code + animation is enough.
+      if(!translatedText && (status === 'pending' || status === 'inprogress')){
         const sp = document.createElement('span');
         sp.className = 'spinner-border spinner-border-sm';
         sp.setAttribute('role','status');
-        sp.setAttribute('aria-hidden','true');
-        wrap.appendChild(sp);
-        const t = document.createElement('span');
-        t.textContent = window.i18n?.translationPending || '…';
-        wrap.appendChild(t);
-        text.appendChild(wrap);
+        sp.setAttribute('aria-label','Translating');
+        header.appendChild(sp);
       }
 
-      row.appendChild(text);
-      inner.appendChild(row);
+      const text = document.createElement('div');
+      text.className = 'small';
+      if(translatedText){
+        text.textContent = translatedText;
+      } else if(status === 'failed'){
+        text.classList.add('fw-semibold');
+        text.textContent = errorMessage ? errorMessage : (window.i18n?.translationFailed || 'Translation failed.');
+      } else {
+        // Pending / in progress: keep it minimal (spinner in header).
+        text.textContent = window.i18n?.translationPending || '…';
+      }
+
+      box.appendChild(header);
+      box.appendChild(text);
+      boxes.appendChild(box);
     });
 
-    panel.appendChild(inner);
+    panel.appendChild(boxes);
     // Insert translations between message body and read receipts.
     const rr = messageContentEl.querySelector('.read-receipt');
     if(rr) rr.before(panel);
