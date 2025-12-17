@@ -315,12 +315,27 @@ if(window.__chatAppBooted){
   function getExpectedTranslationLanguages(m){
     const translations = normalizeTranslations(m);
     const keys = Object.keys(translations || {});
-    if(keys.length) return keys;
-    // Minimal, frontend-only expectation: always include English, and also the current UI language.
+    const langs = [];
+
+    // Prefer room-defined languages (for persistence + new languages added later).
+    const msgRoom = (m && (m.room || m.Room)) || null;
+    const activeRoomName = state.joinedRoom && state.joinedRoom.name;
+    const roomMatches = msgRoom && activeRoomName && String(msgRoom).toLowerCase() === String(activeRoomName).toLowerCase();
+    const roomLangs = roomMatches && state.joinedRoom && Array.isArray(state.joinedRoom.languages) ? state.joinedRoom.languages : null;
+    if(roomLangs && roomLangs.length){
+      roomLangs.forEach(l => { if(l) langs.push(String(l).toLowerCase()); });
+    }
+
+    // Include existing translation keys too (covers API responses that already have translations).
+    keys.forEach(k => { if(k) langs.push(String(k).toLowerCase()); });
+
+    // Always include English, and also the current UI language.
     const ui = getUiLanguageCode();
-    const langs = ['en'];
+    langs.push('en');
     if(ui && ui !== 'en') langs.push(ui);
-    return langs;
+
+    // De-duplicate + stable order.
+    return Array.from(new Set(langs)).filter(Boolean);
   }
   function getTranslationBoxClass(lang){
     const code = String(lang || '').toLowerCase();
@@ -353,10 +368,58 @@ if(window.__chatAppBooted){
     const panel = document.createElement('div');
     panel.className = 'translation-panel mt-2 pt-2 border-top';
 
+    const titleRow = document.createElement('div');
+    titleRow.className = 'd-flex align-items-center justify-content-between mb-2';
     const title = document.createElement('div');
-    title.className = 'small fw-semibold mb-2';
+    title.className = 'small fw-semibold';
     title.textContent = window.i18n?.translations || 'Translations';
-    panel.appendChild(title);
+    titleRow.appendChild(title);
+
+    // Retry/refresh translations (re-runs full translation flow).
+    if(m && typeof m.id === 'number'){
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'btn btn-link p-0 small text-decoration-none';
+      btn.setAttribute('aria-label', window.i18n?.retryTranslation || 'Retry translation');
+      btn.innerHTML = '<i class="bi bi-arrow-clockwise"></i>';
+      btn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        try{
+          // Optimistic UI: mark as pending so placeholders/spinner show.
+          m.translationStatus = 'Pending';
+          if(!(typeof updateMessageDom === 'function' && updateMessageDom(m))){
+            renderMessages();
+            finalizeMessageRender();
+          }
+
+          const resp = await fetch(`/api/Messages/${m.id}/retry-translation`, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' }
+          });
+          if(!resp.ok){
+            let errText = '';
+            try{ errText = (await resp.json())?.error || ''; } catch { /* ignore */ }
+            m.translationStatus = 'Failed';
+            m.translationErrorMessage = errText || (window.i18n?.translationRetryFailed || 'Retry failed.');
+            if(!(updateMessageDom(m))){
+              renderMessages();
+              finalizeMessageRender();
+            }
+          }
+        } catch(err){
+          m.translationStatus = 'Failed';
+          m.translationErrorMessage = window.i18n?.translationRetryFailed || 'Retry failed.';
+          if(!(updateMessageDom(m))){
+            renderMessages();
+            finalizeMessageRender();
+          }
+        }
+      });
+      titleRow.appendChild(btn);
+    }
+
+    panel.appendChild(titleRow);
 
     const boxes = document.createElement('div');
     boxes.className = 'd-flex flex-column gap-2';
@@ -934,6 +997,20 @@ if(window.__chatAppBooted){
           const msg = state.messages[idx];
           msg.translationStatus = 'Failed';
           msg.translationErrorMessage = errMsg;
+          msg.translations = msg.translations || {};
+          updateMessageDom(msg) || renderMessages();
+          finalizeMessageRender();
+        }
+      } catch(_) { /* ignore */ }
+    });
+    c.on('translationRetrying', payload => {
+      try {
+        const id = payload && (payload.messageId || payload.MessageId);
+        const idx = state.messages.findIndex(x=> x && x.id===id);
+        if(idx>=0){
+          const msg = state.messages[idx];
+          msg.translationStatus = 'Pending';
+          msg.translationErrorMessage = '';
           msg.translations = msg.translations || {};
           updateMessageDom(msg) || renderMessages();
           finalizeMessageRender();
