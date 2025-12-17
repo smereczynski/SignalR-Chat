@@ -306,6 +306,35 @@ if(window.__chatAppBooted){
     const t = m && (m.translations || m.Translations);
     return (t && typeof t === 'object') ? t : {};
   }
+  function normalizeLanguageCode(value, allowAuto){
+    if(value === null || value === undefined) return null;
+    const trimmed = String(value).trim();
+    if(!trimmed) return null;
+    const lower = trimmed.toLowerCase();
+    if(allowAuto && lower === 'auto') return 'auto';
+    if(lower === 'auto') return null;
+    const normalized = trimmed.replace(/_/g,'-');
+    const dash = normalized.indexOf('-');
+    const lang = (dash > 0 ? normalized.slice(0, dash) : normalized).trim().toLowerCase();
+    return lang || null;
+  }
+  function buildTargetLanguages(roomLanguages, sourceLanguage){
+    const targets = new Set();
+    targets.add('en');
+    if(Array.isArray(roomLanguages)){
+      roomLanguages.forEach(l => {
+        const lang = normalizeLanguageCode(l, /*allowAuto*/ false);
+        if(lang) targets.add(lang);
+      });
+    }
+    targets.delete('auto');
+    const src = normalizeLanguageCode(sourceLanguage, /*allowAuto*/ true);
+    if(src && src !== 'auto'){
+      targets.delete(src);
+      targets.add('en');
+    }
+    return Array.from(targets);
+  }
   function shouldShowTranslationPanel(m){
     const status = (normalizeTranslationStatus(m) || '').toLowerCase();
     const translations = normalizeTranslations(m);
@@ -328,8 +357,9 @@ if(window.__chatAppBooted){
     // Note: message payloads in the client do not reliably include room name/id, and the
     // message list is already scoped to the joined room. Use joined room languages directly.
     const roomLangs = state.joinedRoom && Array.isArray(state.joinedRoom.languages) ? state.joinedRoom.languages : null;
+    const sourceLanguage = m && (m.sourceLanguage || m.SourceLanguage);
     if(roomLangs && roomLangs.length){
-      return roomLangs.map(l => String(l || '').toLowerCase()).filter(Boolean);
+      return buildTargetLanguages(roomLangs, sourceLanguage).map(l => String(l || '').toLowerCase()).filter(Boolean);
     }
 
     // Fallback: show whatever we have.
@@ -920,7 +950,7 @@ if(window.__chatAppBooted){
       if(mineUser && m.correlationId){
         const idx = state.messages.findIndex(x=> x.isMine && x.correlationId===m.correlationId);
         if(idx>=0){
-          state.messages[idx] = {id:m.id,content:m.content,timestamp:m.timestamp,fromUserName:m.fromUserName,fromFullName:m.fromFullName,avatar:m.avatar,isMine:true, correlationId:m.correlationId, readBy: m.readBy||[], translationStatus: (m.translationStatus||m.TranslationStatus||'None'), translations: (m.translations||m.Translations||{}), translationErrorMessage: ''};
+          state.messages[idx] = {id:m.id,content:m.content,timestamp:m.timestamp,fromUserName:m.fromUserName,fromFullName:m.fromFullName,avatar:m.avatar,isMine:true, correlationId:m.correlationId, readBy: m.readBy||[], translationStatus: (m.translationStatus||m.TranslationStatus||'None'), sourceLanguage: (m.sourceLanguage||m.SourceLanguage||'auto'), translations: (m.translations||m.Translations||{}), translationErrorMessage: ''};
           // pendingMessages entry may have been removed on invoke ack; ensure cleanup if present
           if(state.pendingMessages[m.correlationId]) delete state.pendingMessages[m.correlationId];
           // Remove any duplicate server entry with the same id that might have been loaded via history
@@ -939,7 +969,7 @@ if(window.__chatAppBooted){
         const byIdIdx = state.messages.findIndex(x=> x && x.id===m.id);
         if(byIdIdx>=0){
           const isMine = !!(state.profile && state.profile.userName === m.fromUserName);
-          state.messages[byIdIdx] = {id:m.id,content:m.content,timestamp:m.timestamp,fromUserName:m.fromUserName,fromFullName:m.fromFullName,avatar:m.avatar,isMine, correlationId: m.correlationId||state.messages[byIdIdx].correlationId, readBy: m.readBy||state.messages[byIdIdx].readBy||[], translationStatus: (m.translationStatus||m.TranslationStatus||state.messages[byIdIdx].translationStatus||'None'), translations: (m.translations||m.Translations||state.messages[byIdIdx].translations||{}), translationErrorMessage: (state.messages[byIdIdx].translationErrorMessage||'')};
+          state.messages[byIdIdx] = {id:m.id,content:m.content,timestamp:m.timestamp,fromUserName:m.fromUserName,fromFullName:m.fromFullName,avatar:m.avatar,isMine, correlationId: m.correlationId||state.messages[byIdIdx].correlationId, readBy: m.readBy||state.messages[byIdIdx].readBy||[], translationStatus: (m.translationStatus||m.TranslationStatus||state.messages[byIdIdx].translationStatus||'None'), sourceLanguage: (m.sourceLanguage||m.SourceLanguage||state.messages[byIdIdx].sourceLanguage||'auto'), translations: (m.translations||m.Translations||state.messages[byIdIdx].translations||{}), translationErrorMessage: (state.messages[byIdIdx].translationErrorMessage||'')};
           renderMessages();
           finalizeMessageRender();
           return;
@@ -1134,7 +1164,7 @@ if(window.__chatAppBooted){
     let existingIdx = -1;
     if(m && m.correlationId){ existingIdx = state.messages.findIndex(x=> x && x.correlationId===m.correlationId); }
     if(existingIdx<0 && m && m.id!==undefined){ existingIdx = state.messages.findIndex(x=> x && x.id===m.id); }
-  const rec={id:m.id,content:m.content,timestamp:m.timestamp,fromUserName:m.fromUserName,fromFullName:m.fromFullName,avatar:m.avatar,isMine, correlationId:m.correlationId, readBy: m.readBy||[], translationStatus: (m.translationStatus||m.TranslationStatus||'None'), translations: (m.translations||m.Translations||{}), translationErrorMessage: (m.translationErrorMessage||m.translationFailureMessage||m.translationError||'')};
+  const rec={id:m.id,content:m.content,timestamp:m.timestamp,fromUserName:m.fromUserName,fromFullName:m.fromFullName,avatar:m.avatar,isMine, correlationId:m.correlationId, readBy: m.readBy||[], translationStatus: (m.translationStatus||m.TranslationStatus||'None'), sourceLanguage: (m.sourceLanguage||m.SourceLanguage||'auto'), translations: (m.translations||m.Translations||{}), translationErrorMessage: (m.translationErrorMessage||m.translationFailureMessage||m.translationError||'')};
     if(existingIdx>=0){
       state.messages[existingIdx] = rec;
       renderMessages();
@@ -1252,7 +1282,7 @@ if(window.__chatAppBooted){
     apiGet('/api/Messages/Room/'+encodeURIComponent(state.joinedRoom.name)+'?take='+state.pageSize)
       .then(list=>{
         // Server returns ascending order (repository sorts ascending)
-  state.messages = list.map(m=>({id:m.id,content:m.content,timestamp:m.timestamp,fromUserName:m.fromUserName,fromFullName:m.fromFullName,avatar:m.avatar,isMine: state.profile && state.profile.userName===m.fromUserName, readBy: m.readBy||[], translationStatus: (m.translationStatus||m.TranslationStatus||'None'), translations: (m.translations||m.Translations||{}), translationErrorMessage: (m.translationErrorMessage||m.translationFailureMessage||m.translationError||'')}));
+  state.messages = list.map(m=>({id:m.id,content:m.content,timestamp:m.timestamp,fromUserName:m.fromUserName,fromFullName:m.fromFullName,avatar:m.avatar,isMine: state.profile && state.profile.userName===m.fromUserName, readBy: m.readBy||[], translationStatus: (m.translationStatus||m.TranslationStatus||'None'), sourceLanguage: (m.sourceLanguage||m.SourceLanguage||'auto'), translations: (m.translations||m.Translations||{}), translationErrorMessage: (m.translationErrorMessage||m.translationFailureMessage||m.translationError||'')}));
         // After baseline load, reattach any locally unsent (pending/failed) messages captured for this room
         restoreUnsentForRoom(state.joinedRoom.name);
         if(state.messages.length>0){
@@ -1285,7 +1315,7 @@ if(window.__chatAppBooted){
           return;
         }
         if(!Array.isArray(list) || list.length===0){ state.canLoadMore=false; postTelemetry('messages.page.empty',{token:reqToken}); return; }
-  const mapped=list.map(m=>({id:m.id,content:m.content,timestamp:m.timestamp,fromUserName:m.fromUserName,fromFullName:m.fromFullName,avatar:m.avatar,isMine: state.profile && state.profile.userName===m.fromUserName, readBy: m.readBy||[], translationStatus: (m.translationStatus||m.TranslationStatus||'None'), translations: (m.translations||m.Translations||{}), translationErrorMessage: (m.translationErrorMessage||m.translationFailureMessage||m.translationError||'')}));
+  const mapped=list.map(m=>({id:m.id,content:m.content,timestamp:m.timestamp,fromUserName:m.fromUserName,fromFullName:m.fromFullName,avatar:m.avatar,isMine: state.profile && state.profile.userName===m.fromUserName, readBy: m.readBy||[], translationStatus: (m.translationStatus||m.TranslationStatus||'None'), sourceLanguage: (m.sourceLanguage||m.SourceLanguage||'auto'), translations: (m.translations||m.Translations||{}), translationErrorMessage: (m.translationErrorMessage||m.translationFailureMessage||m.translationError||'')}));
         const mc=document.querySelector('.messages-container'); let prevScrollHeight = mc? mc.scrollHeight:0;
         // Prepend and adjust oldest timestamp verifying monotonicity
         const prevOldest = state.oldestLoaded;

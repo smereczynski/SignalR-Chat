@@ -428,11 +428,13 @@ namespace Chat.Web.Hubs
             }
             
             // Enqueue translation if enabled
+            var sourceLanguageForUi = "auto";
             if (_translationOptions.Enabled)
             {
                 try
                 {
                     var sourceLanguage = Chat.Web.Utilities.LanguageCode.NormalizeToLanguageCode(domainUser?.PreferredLanguage) ?? "auto";
+                    sourceLanguageForUi = sourceLanguage;
                     var targets = Chat.Web.Utilities.LanguageCode.BuildTargetLanguages(room.Languages, sourceLanguage);
 
                     var job = new Models.MessageTranslationJob
@@ -482,6 +484,7 @@ namespace Chat.Web.Hubs
                 CorrelationId = correlationId,
                 ReadBy = (msg.ReadBy != null ? msg.ReadBy.ToArray() : Array.Empty<string>()),
                 TranslationStatus = msg.TranslationStatus.ToString(),
+                SourceLanguage = sourceLanguageForUi,
                 Translations = msg.Translations ?? new System.Collections.Generic.Dictionary<string, string>(),
                 IsTranslated = msg.IsTranslated
             };
