@@ -41,7 +41,7 @@ namespace Chat.Web.Controllers
             var allowed = profile?.FixedRooms ?? [];
             var rooms = (await _rooms.GetAllAsync())
                 .Where(r => allowed.Contains(r.Name))
-                .Select(r => new RoomViewModel { Id = r.Id, Name = r.Name })
+                .Select(r => new RoomViewModel { Id = r.Id, Name = r.Name, Languages = r.Languages })
                 .ToList();
 
             var json = JsonSerializer.Serialize(rooms, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
@@ -62,7 +62,7 @@ namespace Chat.Web.Controllers
             if (room == null || !allowed.Contains(room.Name))
                 return NotFound();
 
-            var vm = new RoomViewModel { Id = room.Id, Name = room.Name };
+            var vm = new RoomViewModel { Id = room.Id, Name = room.Name, Languages = room.Languages };
             return Ok(vm);
         }
     }
