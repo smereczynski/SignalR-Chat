@@ -315,27 +315,26 @@ if(window.__chatAppBooted){
   function getExpectedTranslationLanguages(m){
     const translations = normalizeTranslations(m);
     const keys = Object.keys(translations || {});
-    const langs = [];
+    const status = (normalizeTranslationStatus(m) || '').toLowerCase();
 
-    // Prefer room-defined languages (for persistence + new languages added later).
+    // "Previous version" behavior: once we have translations, show only translated languages.
+    // This avoids showing extra boxes (e.g., EN/UI/source language) that are not part of room targets.
+    if(keys.length && status !== 'pending' && status !== 'inprogress'){
+      return keys;
+    }
+
+    // While translating (or immediately after user-triggered retry), show room target languages.
+    // This supports the "new language added to room" scenario.
     const msgRoom = (m && (m.room || m.Room)) || null;
     const activeRoomName = state.joinedRoom && state.joinedRoom.name;
     const roomMatches = msgRoom && activeRoomName && String(msgRoom).toLowerCase() === String(activeRoomName).toLowerCase();
     const roomLangs = roomMatches && state.joinedRoom && Array.isArray(state.joinedRoom.languages) ? state.joinedRoom.languages : null;
     if(roomLangs && roomLangs.length){
-      roomLangs.forEach(l => { if(l) langs.push(String(l).toLowerCase()); });
+      return roomLangs.map(l => String(l || '').toLowerCase()).filter(Boolean);
     }
 
-    // Include existing translation keys too (covers API responses that already have translations).
-    keys.forEach(k => { if(k) langs.push(String(k).toLowerCase()); });
-
-    // Always include English, and also the current UI language.
-    const ui = getUiLanguageCode();
-    langs.push('en');
-    if(ui && ui !== 'en') langs.push(ui);
-
-    // De-duplicate + stable order.
-    return Array.from(new Set(langs)).filter(Boolean);
+    // Fallback: show whatever we have.
+    return keys;
   }
   function getTranslationBoxClass(lang){
     const code = String(lang || '').toLowerCase();
