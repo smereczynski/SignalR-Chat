@@ -388,52 +388,82 @@ namespace Chat.Web.Repositories
             await UpsertRoomLanguageAsync(roomName, language).ConfigureAwait(false);
         }
 
-        private async Task UpsertRoomUserAsync(string roomName, string userName, bool add)
+        private async Task<List<RoomDoc>> GetRoomDocsByNameAsync(string roomName)
         {
-            var q = _rooms.GetItemQueryIterator<RoomDoc>(new QueryDefinition("SELECT * FROM c WHERE c.name = @n").WithParameter("@n", roomName));
-            RoomDoc room = null;
-            while (q.HasMoreResults && room == null)
+            var q = _rooms.GetItemQueryIterator<RoomDoc>(
+                new QueryDefinition("SELECT * FROM c WHERE c.name = @n").WithParameter("@n", roomName));
+
+            var rooms = new List<RoomDoc>();
+            while (q.HasMoreResults)
             {
                 var page = await Resilience.RetryHelper.ExecuteAsync(
                     _ => q.ReadNextAsync(),
                     Transient.IsCosmosTransient,
                     _logger,
                     "cosmos.rooms.byname.forRoomRepo").ConfigureAwait(false);
-                room = page.FirstOrDefault();
+
+                rooms.AddRange(page);
+
+                // Defensive limit: a room name should be unique.
+                if (rooms.Count >= 50) break;
             }
-            if (room == null) return;
-            var users = new HashSet<string>(room.users ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
-            if (add ? users.Add(userName) : users.Remove(userName))
+
+            if (rooms.Count > 1)
             {
-                room.users = users.ToArray();
-                await _rooms.UpsertItemAsync(room, new PartitionKey(roomName)).ConfigureAwait(false);
+                _logger.LogWarning(
+                    "Multiple room documents found for name {Room}. Merging users/languages to avoid data loss.",
+                    LogSanitizer.Sanitize(roomName));
             }
+
+            return rooms;
+        }
+
+        private async Task UpsertRoomUserAsync(string roomName, string userName, bool add)
+        {
+            var rooms = await GetRoomDocsByNameAsync(roomName).ConfigureAwait(false);
+            if (rooms.Count == 0) return;
+
+            var mergedUsers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var mergedLanguages = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var r in rooms)
+            {
+                foreach (var u in r.users ?? Array.Empty<string>()) mergedUsers.Add(u);
+                foreach (var l in r.languages ?? Array.Empty<string>()) mergedLanguages.Add(l);
+            }
+
+            var changed = add ? mergedUsers.Add(userName) : mergedUsers.Remove(userName);
+            if (!changed) return;
+
+            var room = rooms.FirstOrDefault(r => r.languages != null && r.languages.Length > 0) ?? rooms[0];
+            room.users = mergedUsers.ToArray();
+            room.languages = mergedLanguages.ToArray();
+
+            await _rooms.UpsertItemAsync(room, new PartitionKey(roomName)).ConfigureAwait(false);
         }
 
         private async Task UpsertRoomLanguageAsync(string roomName, string language)
         {
             if (string.IsNullOrWhiteSpace(language)) return;
 
-            var q = _rooms.GetItemQueryIterator<RoomDoc>(
-                new QueryDefinition("SELECT * FROM c WHERE c.name = @n").WithParameter("@n", roomName));
-            RoomDoc room = null;
-            while (q.HasMoreResults && room == null)
-            {
-                var page = await Resilience.RetryHelper.ExecuteAsync(
-                    _ => q.ReadNextAsync(),
-                    Transient.IsCosmosTransient,
-                    _logger,
-                    "cosmos.rooms.byname.forRoomRepo").ConfigureAwait(false);
-                room = page.FirstOrDefault();
-            }
-            if (room == null) return;
+            var rooms = await GetRoomDocsByNameAsync(roomName).ConfigureAwait(false);
+            if (rooms.Count == 0) return;
 
-            var langs = new HashSet<string>(room.languages ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
-            if (langs.Add(language))
+            var mergedUsers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var mergedLanguages = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var r in rooms)
             {
-                room.languages = langs.ToArray();
-                await _rooms.UpsertItemAsync(room, new PartitionKey(roomName)).ConfigureAwait(false);
+                foreach (var u in r.users ?? Array.Empty<string>()) mergedUsers.Add(u);
+                foreach (var l in r.languages ?? Array.Empty<string>()) mergedLanguages.Add(l);
             }
+
+            if (!mergedLanguages.Add(language)) return;
+
+            var room = rooms.FirstOrDefault(r => r.languages != null) ?? rooms[0];
+            room.users = mergedUsers.ToArray();
+            room.languages = mergedLanguages.ToArray();
+
+            await _rooms.UpsertItemAsync(room, new PartitionKey(roomName)).ConfigureAwait(false);
         }
     }
 
