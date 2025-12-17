@@ -286,6 +286,9 @@ namespace Chat.Web.Repositories
             // Check if user already exists to preserve their ID
             var existing = await GetByUserNameAsync(user.UserName).ConfigureAwait(false);
             var documentId = existing != null ? await GetDocumentIdAsync(user.UserName).ConfigureAwait(false) : Guid.NewGuid().ToString();
+
+            // Preserve PreferredLanguage when the caller doesn't set it (common in partial updates / admin flows)
+            var preferredLanguage = PreferredLanguageMerger.Merge(user.PreferredLanguage, existing?.PreferredLanguage);
             
                 var doc = new UserDoc 
             { 
@@ -293,7 +296,7 @@ namespace Chat.Web.Repositories
                 userName = user.UserName, 
                 fullName = user.FullName, 
                 avatar = user.Avatar, 
-                preferredLanguage = user.PreferredLanguage,
+                preferredLanguage = preferredLanguage,
                 email = user.Email, 
                 mobile = user.MobileNumber, 
                 enabled = user.Enabled, 

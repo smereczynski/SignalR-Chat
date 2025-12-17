@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Chat.Web.Models;
 using Chat.Web.Services;
+using Chat.Web.Utilities;
 using System.Threading.Tasks;
 
 namespace Chat.Web.Repositories
@@ -24,6 +25,11 @@ namespace Chat.Web.Repositories
         {
             if (user == null || string.IsNullOrWhiteSpace(user.UserName)) return Task.CompletedTask;
             // Do not attempt to sync room membership here; Chat.Web treats room users list as externally managed.
+            if (_users.TryGetValue(user.UserName, out var existing))
+            {
+                user.PreferredLanguage = PreferredLanguageMerger.Merge(user.PreferredLanguage, existing.PreferredLanguage);
+            }
+
             _users[user.UserName] = user;
             return Task.CompletedTask;
         }
