@@ -48,7 +48,7 @@ git commit -m "test: add integration tests for OTP flow"
 
 ### What This Project Is
 SignalR Chat is a **production-ready real-time chat application** built with:
-- **Backend**: ASP.NET Core 9, SignalR, C# 13
+- **Backend**: ASP.NET Core 10, SignalR, C# 13
 - **Frontend**: Razor Pages, vanilla JavaScript (ES6+), Bootstrap 5
 - **Data**: Azure Cosmos DB (NoSQL), Redis (caching/rate limiting)
 - **Cloud**: Azure App Service (Linux), Azure SignalR Service, Azure Communication Services
@@ -144,7 +144,7 @@ resource webApp 'Microsoft.Web/sites@2024-11-01' = {
   kind: 'app,linux'
   properties: {
     siteConfig: {
-      linuxFxVersion: 'DOTNETCORE|9.0'
+      linuxFxVersion: 'DOTNETCORE|10.0'
       appSettings: [
         {
           name: 'Cosmos__Database'  // Use __ not :
@@ -220,7 +220,7 @@ docs/
 
 ## Key Technologies and Patterns
 
-### ASP.NET Core 9
+### ASP.NET Core 10
 - Minimal API approach where appropriate
 - Dependency injection for all services
 - Configuration via `appsettings.json` and environment variables

@@ -76,7 +76,7 @@ graph LR
 ## Infrastructure Components
 
 ### Azure Resources
-- **App Service (Linux)** - Web application hosting (.NET 9.0)
+- **App Service (Linux)** - Web application hosting (.NET 10.0)
 - **Cosmos DB** - NoSQL database
 - **Redis** - Cache and OTP storage
 - **SignalR Service** - Real-time scale-out (optional)

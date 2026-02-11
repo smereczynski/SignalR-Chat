@@ -13,7 +13,7 @@ graph TB
         SignalRClient[SignalR Client<br/>WebSocket/SSE]
     end
     
-    subgraph "Application Layer - ASP.NET Core 9"
+    subgraph "Application Layer - ASP.NET Core 10"
         RazorPages[Razor Pages<br/>/login, /chat]
         Controllers[REST Controllers<br/>API Endpoints]
         SignalRHub[SignalR Hub<br/>ChatHub]
@@ -80,7 +80,7 @@ graph TB
 
 | Component | Technology | Purpose |
 |-----------|-----------|---------|
-| **Web Server** | ASP.NET Core 9 | HTTP server, Razor Pages, WebSocket handling |
+| **Web Server** | ASP.NET Core 10 | HTTP server, Razor Pages, WebSocket handling |
 | **Real-time Engine** | SignalR | WebSocket hub for bidirectional communication |
 | **Database** | Azure Cosmos DB (NoSQL) | Messages, rooms, users, read receipts |
 | **Cache** | Azure Redis | OTP storage, rate limiting, presence tracking |
@@ -213,7 +213,7 @@ graph TB
             
             subgraph "Compute"
                 AppPlan[App Service Plan<br/>P0V4 Premium<br/>Linux]
-                WebApp[Web App<br/>ASP.NET Core 9<br/>Linux]
+                WebApp[Web App<br/>ASP.NET Core 10<br/>Linux]
             end
             
             subgraph "Data & Cache"
@@ -351,7 +351,7 @@ graph TD
 ## Technology Stack
 
 ### Backend
-- **Framework**: ASP.NET Core 9.0
+- **Framework**: ASP.NET Core 10.0
 - **Real-time**: SignalR (WebSocket + Server-Sent Events)
 - **Database**: Azure Cosmos DB (NoSQL, serverless → standard provisioned)
 - **Cache**: Azure Redis (Enterprise tier)
@@ -368,7 +368,7 @@ graph TD
 - **IaC**: Azure Bicep
 - **CI/CD**: GitHub Actions (federated identity)
 - **Monitoring**: OpenTelemetry + Azure Application Insights
-- **Deployment**: Azure App Service (Linux, .NET 9)
+- **Deployment**: Azure App Service (Linux, .NET 10)
 
 ## Scalability
 

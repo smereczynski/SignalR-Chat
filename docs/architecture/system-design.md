@@ -47,7 +47,7 @@ The application uses **Azure Bicep** templates for reproducible infrastructure d
 | **Azure SignalR Service** | Real-time communication hub | Standard_S1 for all environments (1/1/5 units) (deployed in application RG) |
 | **Azure Communication Services** | Email and SMS capabilities | Global resource, Europe data location (deployed in application RG) |
 | **App Service Plan** | Web application hosting | P0V4 PremiumV4 Windows for all environments (deployed in application RG) |
-| **App Service (Web App)** | SignalR Chat application | .NET 9.0 runtime, Windows OS, VNet integrated with outbound routing, HTTPS-only, TLS 1.2, identity disabled (deployed in application RG) |
+| **App Service (Web App)** | SignalR Chat application | .NET 10.0 runtime, Windows OS, VNet integrated with outbound routing, HTTPS-only, TLS 1.2, identity disabled (deployed in application RG) |
 | **Private Endpoints** | Secure connections to Cosmos DB, Redis, SignalR | Deployed in private endpoints subnet with DNS zone integration (cross-RG references) |
 
 ### Network Architecture (Critical Requirement)
@@ -430,7 +430,7 @@ sequenceDiagram
 ```
 
 ## Runtime overview
-- ASP.NET Core 9 (Razor Pages + Controllers + SignalR Hub)
+- ASP.NET Core 10 (Razor Pages + Controllers + SignalR Hub)
 - Persistence: Azure Cosmos DB with custom repository pattern; in-memory repositories when Testing:InMemory mode enabled
 - OTP store: Redis in normal mode, in-memory in Testing:InMemory
 - Auth: Cookie authentication after OTP verification (dedicated `/login` page)

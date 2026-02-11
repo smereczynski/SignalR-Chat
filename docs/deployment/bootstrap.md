@@ -46,7 +46,7 @@ Before deploying, ensure you have:
    sudo apt install jq  # Linux
    ```
 
-5. **.NET 9 SDK** (for data seeding)
+5. **.NET 10 SDK** (for data seeding)
    ```bash
    dotnet --version
    ```

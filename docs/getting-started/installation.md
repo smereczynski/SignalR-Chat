@@ -39,9 +39,9 @@ SignalR Chat can run in two modes:
    az --version
    ```
 
-3. **.NET 9.0 SDK**
+3. **.NET 10.0 SDK**
    ```bash
-   # Download from https://dotnet.microsoft.com/download/dotnet/9.0
+  # Download from https://dotnet.microsoft.com/download/dotnet/10.0
    
    # Verify installation
    dotnet --version

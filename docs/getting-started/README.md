@@ -45,7 +45,7 @@ Recommended order for new users:
 
 ### Minimum Requirements
 - **OS**: Windows, macOS, or Linux
-- **Runtime**: .NET 9.0 SDK
+- **Runtime**: .NET 10.0 SDK
 - **Browser**: Modern browser (Chrome, Firefox, Edge, Safari)
 - **RAM**: 2 GB available
 - **Disk**: 500 MB for source code and dependencies

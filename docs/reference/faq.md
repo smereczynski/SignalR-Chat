@@ -18,7 +18,7 @@ Common questions about SignalR Chat development, deployment, and troubleshooting
 
 ### What is SignalR Chat?
 
-SignalR Chat is a production-ready, real-time chat application built with ASP.NET Core 9, SignalR, and Azure services. It demonstrates modern web development practices including:
+SignalR Chat is a production-ready, real-time chat application built with ASP.NET Core 10, SignalR, and Azure services. It demonstrates modern web development practices including:
 - Real-time messaging with SignalR
 - OTP-based authentication (no passwords)
 - Azure cloud infrastructure (Cosmos DB, Redis, SignalR Service)
@@ -55,7 +55,7 @@ SignalR Chat is a production-ready, real-time chat application built with ASP.NE
 ### What technologies are used?
 
 **Backend**:
-- ASP.NET Core 9.0
+- ASP.NET Core 10.0
 - SignalR (real-time communication)
 - C# 13
 

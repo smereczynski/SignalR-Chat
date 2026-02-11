@@ -53,7 +53,7 @@ See [GitHub Variables Guide](github-variables.md) for detailed configuration.
 ## 3. CI Workflow (`ci.yml`)
 ### 3.1 Steps Summary
 1. Checkout
-2. Setup .NET 9 / Node.js 20
+2. Setup .NET 10 / Node.js 20
 3. Install npm dependencies (`npm ci`)
 4. Build frontend assets (`npm run build:prod`)
 5. Clean Chat.Web build artifacts (ensures fresh resource compilation – translations)
