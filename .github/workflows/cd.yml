@@ -19,9 +19,6 @@ on:
           - staging
           - prod
 
-permissions:
-  contents: read
-
 jobs:
   # ==========================================
   # Determine target environment based on trigger
@@ -65,6 +62,8 @@ jobs:
   build:
     name: Build Application
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     
     steps:
     - name: Checkout code
