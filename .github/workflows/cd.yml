@@ -19,10 +19,6 @@ on:
           - staging
           - prod
 
-permissions:
-  contents: write  # Required for creating GitHub releases
-  id-token: write  # Required for OIDC federation
-
 jobs:
   # ==========================================
   # Determine target environment based on trigger
@@ -66,6 +62,8 @@ jobs:
   build:
     name: Build Application
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     
     steps:
     - name: Checkout code
@@ -141,6 +139,9 @@ jobs:
     runs-on: ubuntu-latest
     needs: [determine-environment, build]
     environment: ${{ needs.determine-environment.outputs.environment }}
+    permissions:
+      contents: read
+      id-token: write
     
     steps:
     - name: Download build artifacts
@@ -186,6 +187,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: [determine-environment, deploy]
     if: needs.determine-environment.outputs.is-release == 'true'
+    permissions:
+      contents: write
     
     steps:
     - name: Checkout code
