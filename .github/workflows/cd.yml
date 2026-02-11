@@ -26,6 +26,8 @@ jobs:
   determine-environment:
     name: Determine Environment
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     outputs:
       environment: ${{ steps.set-env.outputs.environment }}
       is-release: ${{ steps.set-env.outputs.is-release }}
