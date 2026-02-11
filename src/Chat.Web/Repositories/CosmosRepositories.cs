@@ -414,7 +414,7 @@ namespace Chat.Web.Repositories
                 if (rooms.Count >= 50) break;
             }
 
-            if (rooms.Count > 1)
+            if (rooms.Skip(1).Any())
             {
                 _logger.LogWarning(
                     "Multiple room documents found for name {Room}. Merging users/languages to avoid data loss.",
