@@ -110,7 +110,8 @@ public class TranslationJobQueue : ITranslationJobQueue
             // Only create activity span when we actually have a job to process
             activity = Tracing.ActivitySource.StartActivity("translation.queue.dequeue");
 
-            var job = JsonSerializer.Deserialize<MessageTranslationJob>(result!, _jsonOptions);
+            var jobJson = (string)result!;
+            var job = JsonSerializer.Deserialize<MessageTranslationJob>(jobJson, _jsonOptions);
             if (job == null)
             {
                 _logger.LogWarning("Deserialized job is null");
@@ -222,7 +223,8 @@ public class TranslationJobQueue : ITranslationJobQueue
             {
                 if (jobJson.IsNullOrEmpty) continue;
 
-                var job = JsonSerializer.Deserialize<MessageTranslationJob>(jobJson!, _jsonOptions);
+                var jobPayload = (string)jobJson!;
+                var job = JsonSerializer.Deserialize<MessageTranslationJob>(jobPayload, _jsonOptions);
                 if (job?.JobId == jobId)
                 {
                     // Remove this specific job

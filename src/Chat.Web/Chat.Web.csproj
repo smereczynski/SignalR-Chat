@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <UserSecretsId>aspnet-Chat.Web-8692691F-5FD4-4BB5-A736-D380452CEE04</UserSecretsId>
     <CopyRefAssembliesToPublishDirectory>false</CopyRefAssembliesToPublishDirectory>
     <Version>0.9.5</Version>
@@ -26,9 +26,6 @@
     <!-- Entra ID Authentication -->
     <PackageReference Include="Microsoft.Identity.Web" Version="4.0.1" />
     <PackageReference Include="Microsoft.Identity.Web.UI" Version="4.0.1" />
-    <!-- Localization -->
-    <PackageReference Include="Microsoft.Extensions.Localization" Version="9.0.0" />
-    <PackageReference Include="Microsoft.AspNetCore.Localization" Version="2.2.0" />
     <!-- Observability -->
     <PackageReference Include="Serilog.AspNetCore" Version="8.0.1" />
     <PackageReference Include="Serilog.Sinks.Console" Version="5.0.1" />

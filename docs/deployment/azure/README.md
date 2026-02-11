@@ -32,7 +32,7 @@ This directory contains documentation for deploying SignalR Chat to Microsoft Az
 The Azure deployment includes:
 
 - **Networking**: VNet with 2 subnets (App Service + Private Endpoints)
-- **Compute**: App Service Plan (Linux) + Web App (.NET 9.0)
+- **Compute**: App Service Plan (Linux) + Web App (.NET 10.0)
 - **Database**: Cosmos DB NoSQL (messages, users, rooms)
 - **Cache**: Azure Managed Redis
 - **Real-time**: Azure SignalR Service

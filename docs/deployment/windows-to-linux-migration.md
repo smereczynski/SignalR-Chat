@@ -4,8 +4,8 @@ This document outlines all required changes to migrate the SignalR Chat applicat
 
 ## Executive Summary
 
-**Current State**: App Service Plan running on Windows with .NET 9.0
-**Target State**: App Service Plan running on Linux with .NET 9.0 runtime
+**Current State**: App Service Plan running on Windows with .NET 10.0
+**Target State**: App Service Plan running on Linux with .NET 10.0 runtime
 **Impact Level**: Medium - Requires Bicep changes, app settings cleanup, and validation
 **Estimated Effort**: 2-4 hours (infrastructure changes + testing)
 
@@ -17,7 +17,7 @@ This document outlines all required changes to migrate the SignalR Chat applicat
 
 | Aspect | Windows | Linux |
 |--------|---------|-------|
-| **Runtime Stack** | `netFrameworkVersion: 'v9.0'` | `linuxFxVersion: 'DOTNETCORE\|9.0'` |
+| **Runtime Stack** | `netFrameworkVersion: 'v10.0'` | `linuxFxVersion: 'DOTNETCORE\|10.0'` |
 | **Plan Kind** | `kind: 'windows'` | `kind: 'linux'` |
 | **Reserved Property** | Not required | `reserved: true` (required) |
 | **App Service Kind** | `kind: 'app'` | `kind: 'app,linux'` |
@@ -252,7 +252,7 @@ resource webApp 'Microsoft.Web/sites@2024-11-01' = {
       allTraffic: true
     }
     siteConfig: {
-      netFrameworkVersion: 'v9.0'  // ❌ Remove this
+      netFrameworkVersion: 'v10.0'  // ❌ Remove this
       alwaysOn: true
       // ... rest of config
     }
@@ -272,7 +272,7 @@ resource webApp 'Microsoft.Web/sites@2024-11-01' = {
     virtualNetworkSubnetId: vnetIntegrationSubnetId
     vnetRouteAllEnabled: true  // ✅ Changed (Linux property)
     siteConfig: {
-      linuxFxVersion: 'DOTNETCORE|9.0'  // ✅ Added (Linux runtime)
+      linuxFxVersion: 'DOTNETCORE|10.0'  // ✅ Added (Linux runtime)
       alwaysOn: true
       // ... rest of config
     }
@@ -284,7 +284,7 @@ resource webApp 'Microsoft.Web/sites@2024-11-01' = {
 
 ```bicep
 siteConfig: {
-  linuxFxVersion: 'DOTNETCORE|9.0'
+  linuxFxVersion: 'DOTNETCORE|10.0'
   alwaysOn: true
   http20Enabled: true
   minTlsVersion: '1.2'
@@ -389,7 +389,7 @@ siteConfig: {
 
 ## ✅ Application Code Changes
 
-**Good news**: No application code changes required! The ASP.NET Core 9 application is platform-agnostic.
+**Good news**: No application code changes required! The ASP.NET Core 10 application is platform-agnostic.
 
 ### Configuration Notation: `:` vs `__`
 
@@ -428,7 +428,7 @@ Cosmos:Database=chat   # ❌ Shell interprets : as PATH separator
 
 ### Verified Compatible Components
 
-- ✅ **ASP.NET Core 9**: Works identically on both Windows and Linux
+- ✅ **ASP.NET Core 10**: Works identically on both Windows and Linux
 - ✅ **SignalR**: Cross-platform (both in-process and Azure SignalR Service)
 - ✅ **Cosmos DB SDK**: Platform-agnostic
 - ✅ **StackExchange.Redis**: Works on both platforms
@@ -444,13 +444,13 @@ Linux App Service can deploy directly from published output without a Dockerfile
 
 ```dockerfile
 # Optional: Custom Dockerfile for Linux App Service
-FROM mcr.microsoft.com/dotnet/aspnet:9.0-alpine AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-alpine AS runtime
 WORKDIR /app
 COPY publish/ .
 ENTRYPOINT ["dotnet", "Chat.Web.dll"]
 ```
 
-**Note**: The default Linux App Service runtime already provides .NET 9 - no Dockerfile needed.
+**Note**: The default Linux App Service runtime already provides .NET 10 - no Dockerfile needed.
 
 ---
 
@@ -669,7 +669,7 @@ A: No changes required - custom domains, SSL certificates, and DNS remain identi
 A: Yes, temporarily during migration. You could run dev on Linux while staging/prod remain on Windows. This enables gradual rollout.
 
 **Q: What if we need Windows-specific features later?**
-A: Easy to revert - just reverse the Bicep changes. However, ASP.NET Core 9 is fully cross-platform, so this is unlikely.
+A: Easy to revert - just reverse the Bicep changes. However, ASP.NET Core 10 is fully cross-platform, so this is unlikely.
 
 **Q: Do I need to change `Cosmos:Database` to `Cosmos__Database` in Bicep?**
 A: **No!** Keep using `:` (colon) in Bicep and Azure Portal. Azure App Service automatically translates this for Linux containers. Your C# code continues to use `Configuration["Cosmos:Database"]`.

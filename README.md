@@ -1,6 +1,6 @@
 # SignalR Chat (v0.9.5)
 
-A production-ready real-time chat application with **asynchronous AI-powered translation** built using ASP.NET Core 9, SignalR, Azure Cosmos DB, Redis, and Azure AI Translator (Text Translation REST API). Features multi-language chat rooms, dual authentication (Entra ID + OTP), read receipts, presence tracking, and comprehensive observability.
+A production-ready real-time chat application with **asynchronous AI-powered translation** built using ASP.NET Core 10, SignalR, Azure Cosmos DB, Redis, and Azure AI Translator (Text Translation REST API). Features multi-language chat rooms, dual authentication (Entra ID + OTP), read receipts, presence tracking, and comprehensive observability.
 
 > **Status**: Production-ready | **License**: [MIT](LICENSE) | **Tests**: 193 passing ✅
 
@@ -79,7 +79,7 @@ Translation deep-dive: [docs/architecture/translation-architecture.md](docs/arch
 graph TD
     Browser[Browser<br/>Razor Pages + SignalR.js]
     
-    subgraph "ASP.NET Core 9"
+    subgraph "ASP.NET Core 10"
         RazorPages[Razor Pages<br/>Login, UI]
         SignalRHub[SignalR Hub<br/>ChatHub]
         Auth[Cookie Authentication]
@@ -122,7 +122,7 @@ graph TD
 | Layer | Technology | Purpose |
 |-------|------------|---------|
 | **Frontend** | Vanilla JS, Bootstrap 5, SignalR Client | UI, real-time updates |
-| **Backend** | ASP.NET Core 9, SignalR | Web server, WebSocket hub |
+| **Backend** | ASP.NET Core 10, SignalR | Web server, WebSocket hub |
 | **Database** | Azure Cosmos DB (NoSQL) | Messages, rooms, read receipts, translations |
 | **Cache** | Redis | OTP storage, rate limiting, translation job queue |
 | **AI Translation** | Azure AI Translator (Text Translation REST API) | Asynchronous message translation |
@@ -354,5 +354,5 @@ This project is licensed under the MIT License - see [LICENSE](LICENSE) file for
 ---
 
 <p align="center">
-  Made with ❤️ using ASP.NET Core 9 & SignalR
+  Made with ❤️ using ASP.NET Core 10 & SignalR
 </p>

@@ -387,7 +387,7 @@ resource webApp 'Microsoft.Web/sites@2024-11-01' = {
       allTraffic: true
     }
     siteConfig: {
-      linuxFxVersion: 'DOTNETCORE|9.0'
+      linuxFxVersion: 'DOTNETCORE|10.0'
       alwaysOn: true
       http20Enabled: true
       minTlsVersion: '1.2'

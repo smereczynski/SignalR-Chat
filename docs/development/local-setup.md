@@ -6,7 +6,7 @@ This guide covers setting up a complete development environment for SignalR Chat
 
 ### Required
 
-- **[.NET 9.0 SDK](https://dotnet.microsoft.com/download/dotnet/9.0)** - Build and runtime environment
+- **[.NET 10.0 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)** - Build and runtime environment
 - **Git** - Version control
 - **Visual Studio Code** or **Visual Studio 2022** - IDE
 
@@ -153,7 +153,7 @@ Create or update `.vscode/launch.json`:
       "type": "coreclr",
       "request": "launch",
       "preLaunchTask": "dotnet build",
-      "program": "${workspaceFolder}/src/Chat.Web/bin/Debug/net9.0/Chat.Web.dll",
+      "program": "${workspaceFolder}/src/Chat.Web/bin/Debug/net10.0/Chat.Web.dll",
       "args": [],
       "cwd": "${workspaceFolder}/src/Chat.Web",
       "stopAtEntry": false,
@@ -170,7 +170,7 @@ Create or update `.vscode/launch.json`:
       "type": "coreclr",
       "request": "launch",
       "preLaunchTask": "dotnet build",
-      "program": "${workspaceFolder}/src/Chat.Web/bin/Debug/net9.0/Chat.Web.dll",
+      "program": "${workspaceFolder}/src/Chat.Web/bin/Debug/net10.0/Chat.Web.dll",
       "args": [],
       "cwd": "${workspaceFolder}/src/Chat.Web",
       "stopAtEntry": false,
