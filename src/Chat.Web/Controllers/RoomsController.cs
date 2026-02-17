@@ -105,10 +105,13 @@ namespace Chat.Web.Controllers
                 .ToList();
 
             var presence = await _presenceTracker.GetAllUsersAsync();
-            // Presence is online/offline state persisted at connect/disconnect level (independent from current room join timing).
+            var activeHeartbeats = await _presenceTracker.GetActiveHeartbeatsAsync();
+            var activeHeartbeatsSet = new HashSet<string>(activeHeartbeats, System.StringComparer.OrdinalIgnoreCase);
+
             var onlineUsers = new HashSet<string>(
                 presence
-                    .Select(p => p.UserName),
+                    .Select(p => p.UserName)
+                    .Where(u => activeHeartbeatsSet.Contains(u)),
                 System.StringComparer.OrdinalIgnoreCase);
 
             var result = users.Select(u => new
@@ -121,10 +124,11 @@ namespace Chat.Web.Controllers
 
             var onlineCount = result.Count(u => u.isPresent);
             _logger.LogDebug(
-                "Room users presence query: room={RoomName} assigned={AssignedCount} online={OnlineCount}",
+                "Room users presence query: room={RoomName} assigned={AssignedCount} online={OnlineCount} activeHeartbeats={HeartbeatCount}",
                 roomName,
                 result.Count,
-                onlineCount);
+                onlineCount,
+                activeHeartbeats.Count);
 
             var json = JsonSerializer.Serialize(result, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
             return new ContentResult { Content = json, ContentType = "application/json", StatusCode = 200 };

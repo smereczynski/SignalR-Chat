@@ -211,7 +211,10 @@ if(window.__chatAppBooted){
   }
 
   async function sendHeartbeat(){
-    if(!hub || hub.state !== 'Connected') return;
+    if(!hub || hub.state !== 'Connected'){
+      await sendHttpPresencePing('heartbeat.noHub');
+      return;
+    }
     try {
       const response = await hub.invoke('Heartbeat');
       if(response.acknowledged && response.health){
@@ -223,7 +226,45 @@ if(window.__chatAppBooted){
       }
     } catch(err) {
       console.warn('[Heartbeat] Failed:', err);
+      await sendHttpPresencePing('heartbeat.error');
     }
+  }
+
+  let _lastPresencePingAt = 0;
+  async function sendHttpPresencePing(reason){
+    try {
+      if(!state.profile || !state.profile.userName) return;
+      const now = Date.now();
+      if(now - _lastPresencePingAt < 8000) return;
+      _lastPresencePingAt = now;
+      const roomName = state.joinedRoom && state.joinedRoom.name ? state.joinedRoom.name : null;
+      const response = await fetch('/api/presence/ping', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roomName })
+      });
+      if(!response.ok){
+        const msg = `status_${response.status}`;
+        log('warn','presence.ping.failed',{reason, msg});
+        postTelemetry('presence.ping.failed',{reason, msg});
+      }
+    } catch(err){
+      const msg = (err && err.message) || 'unknown';
+      log('warn','presence.ping.error',{reason, msg});
+      postTelemetry('presence.ping.error',{reason, msg: msg.slice(0,160)});
+    }
+  }
+
+  async function sendHttpPresenceLeave(){
+    try {
+      if(!state.profile || !state.profile.userName) return;
+      await fetch('/api/presence/leave', {
+        method: 'POST',
+        credentials: 'include',
+        keepalive: true
+      });
+    } catch(_) { /* ignore */ }
   }
 
   function startHealthAndHeartbeatPolling(){
@@ -237,10 +278,16 @@ if(window.__chatAppBooted){
       await sendHeartbeat();
     }, 30000);
 
+    // Transport-independent fallback presence ping (covers negotiate-success/no-connect cases)
+    setInterval(async () => {
+      await sendHttpPresencePing('presence.interval');
+    }, 20000);
+
     // Initial checks after a short delay (let connection stabilize)
     setTimeout(async () => {
       await checkBackendHealth();
       await sendHeartbeat();
+      await sendHttpPresencePing('presence.initial');
     }, 2000);
   }
 
@@ -946,6 +993,7 @@ if(window.__chatAppBooted){
       }
       
       loadRooms();
+      sendHttpPresencePing('hub.connected');
       postTelemetry('hub.connected',{durationMs: Math.round(performance.now()-startedAt)});
   applyConnectionVisual('connected');
       // Fallback: if we already have a profile (from /api/auth/me) but still showing loading because getProfileInfo hasn't fired, hide loader.
@@ -1153,6 +1201,7 @@ if(window.__chatAppBooted){
           loadRooms();
         }
       } catch(_){ }
+      sendHttpPresencePing('hub.reconnected');
       applyConnectionVisual('connected');
     });
   c.onreconnecting(err => { 
@@ -1308,6 +1357,7 @@ if(window.__chatAppBooted){
           els.joinedRoomTitle.textContent = state._baseRoomTitle;
         }
         loadUsers(); loadMessages(); renderRoomContext(); ensureProfileAvatar();
+        sendHttpPresencePing('room.join.success');
         postTelemetry('room.join.success',{room:roomName, durationMs: Math.round(performance.now()-startedAt), attempts:attempt});
         flushOutbox('join');
       }).catch(err=>{
@@ -1649,7 +1699,7 @@ if(window.__chatAppBooted){
   const timeout=setTimeout(()=>{ log('warn','auth.timeout'); setLoading(false); postTelemetry('auth.probe.timeout',{}); },6000);
     return fetch('/api/auth/me',{credentials:'include'})
       .then(r=> r.ok? r.json(): null)
-  .then(u=>{ clearTimeout(timeout); if(u&&u.userName){ state.profile={userName:u.userName, fullName:u.fullName, avatar:u.avatar}; state.authStatus = AuthStatus.AUTHENTICATED; postTelemetry('auth.probe.success',{durationMs: Math.round(performance.now()-startedAt)}); startHub(); flushOutbox('authProbe'); state.authGraceUntil=null; } else { setLoading(false); state.authStatus = AuthStatus.UNAUTHENTICATED; postTelemetry('auth.probe.unauth',{durationMs: Math.round(performance.now()-startedAt)}); /* allow UI to show unauth after grace */ } renderProfile(); })
+  .then(u=>{ clearTimeout(timeout); if(u&&u.userName){ state.profile={userName:u.userName, fullName:u.fullName, avatar:u.avatar}; state.authStatus = AuthStatus.AUTHENTICATED; postTelemetry('auth.probe.success',{durationMs: Math.round(performance.now()-startedAt)}); sendHttpPresencePing('auth.probe.success'); startHub(); flushOutbox('authProbe'); state.authGraceUntil=null; } else { setLoading(false); state.authStatus = AuthStatus.UNAUTHENTICATED; postTelemetry('auth.probe.unauth',{durationMs: Math.round(performance.now()-startedAt)}); /* allow UI to show unauth after grace */ } renderProfile(); })
       .catch(err=>{ clearTimeout(timeout); setLoading(false); const msg=(err&&err.message)||''; // classify transient errors (networkish or recoverable)
         const transient=/timeout|network|fetch|offline|temporar(?:y|ily)?|dns|refused/i.test(msg); if(transient){ // extend grace and retry once after short delay
         postTelemetry('auth.probe.errorTransient',{durationMs: Math.round(performance.now()-startedAt)});
@@ -1661,7 +1711,7 @@ if(window.__chatAppBooted){
   }
 
   // --------------- UI Wiring ------------
-  function wireUi(){ if(els.messageInput) els.messageInput.addEventListener('keypress',e=>{ if(e.key==='Enter') sendMessage(); }); const sendBtn=document.getElementById('btn-send-message'); if(sendBtn) sendBtn.addEventListener('click',e=>{ e.preventDefault(); sendMessage(); }); if(els.filterInput) els.filterInput.addEventListener('input',()=>{ state.filter=els.filterInput.value; renderUsers(); }); if(els.btnLogout) els.btnLogout.addEventListener('click',()=>{ fetch('/api/auth/logout',{method:'POST',credentials:'include'})
+  function wireUi(){ if(els.messageInput) els.messageInput.addEventListener('keypress',e=>{ if(e.key==='Enter') sendMessage(); }); const sendBtn=document.getElementById('btn-send-message'); if(sendBtn) sendBtn.addEventListener('click',e=>{ e.preventDefault(); sendMessage(); }); if(els.filterInput) els.filterInput.addEventListener('input',()=>{ state.filter=els.filterInput.value; renderUsers(); }); if(els.btnLogout) els.btnLogout.addEventListener('click',()=>{ sendHttpPresenceLeave(); fetch('/api/auth/logout',{method:'POST',credentials:'include'})
     .catch(()=>{/* ignore */})
     .finally(()=>{ try { if(hub && hub.stop) hub.stop(); } catch(_) {} logoutCleanup(); window.location.replace('/login?ReturnUrl=/chat'); }); }); }
 
@@ -1687,6 +1737,7 @@ if(window.__chatAppBooted){
             state.profile = { userName:u.userName, fullName:u.fullName, avatar:u.avatar };
             state.authStatus = AuthStatus.AUTHENTICATED;
             renderProfile();
+            sendHttpPresencePing('auth.retry.success');
             startHub();
             flushOutbox('authRetry');
             if(state.loading) setLoading(false);
@@ -1849,8 +1900,8 @@ if(window.__chatAppBooted){
   }, 5000);
   // Flush when tab becomes visible again (covers background tab timing misses)
   document.addEventListener('visibilitychange', ()=>{ if(!document.hidden){ flushOutbox('visibility'); } });
-  document.addEventListener('visibilitychange', ()=>{ if(!document.hidden){ maybeMarkRead(); scheduleMarkVisibleRead(); ensureConnected(); } });
-  window.addEventListener('focus', ()=>{ maybeMarkRead(); scheduleMarkVisibleRead(); ensureConnected(); });
+  document.addEventListener('visibilitychange', ()=>{ if(!document.hidden){ maybeMarkRead(); scheduleMarkVisibleRead(); ensureConnected(); sendHttpPresencePing('visibility.visible'); } });
+  window.addEventListener('focus', ()=>{ maybeMarkRead(); scheduleMarkVisibleRead(); ensureConnected(); sendHttpPresencePing('window.focus'); });
   document.addEventListener('DOMContentLoaded',()=>{ 
     cacheDom(); 
     // No offline banner popup - connection state is shown via header color only
@@ -1861,6 +1912,7 @@ if(window.__chatAppBooted){
     startConnectionStateLoop();
     startHealthAndHeartbeatPolling();
     installOfflineHandlers();
+    window.addEventListener('pagehide', ()=>{ sendHttpPresenceLeave(); });
     // Capture initial title for blinking restoration
     initTitleBlink();
   });
@@ -1876,7 +1928,7 @@ if(window.__chatAppBooted){
       } else {
         postTelemetry('net.online',{});
         // After coming online try to flush any queued messages (slight delay so hub reconnect can settle)
-        setTimeout(()=>{ ensureConnected(); if(state.outbox.length) flushOutbox('online'); }, 150);
+        setTimeout(()=>{ ensureConnected(); sendHttpPresencePing('network.online'); if(state.outbox.length) flushOutbox('online'); }, 150);
       }
       applyConnectionVisual(computeConnectionState());
     }
