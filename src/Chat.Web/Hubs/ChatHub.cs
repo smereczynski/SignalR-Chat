@@ -153,7 +153,7 @@ namespace Chat.Web.Hubs
                 user.CurrentRoom = roomName;
                 
                 // Update Redis presence (for cross-instance snapshot)
-                await _presenceTracker.SetUserRoomAsync(IdentityName, user.FullName, user.Avatar, roomName);
+                await _presenceTracker.SetUserRoomAsync(user.UserName, user.FullName, user.Avatar, roomName);
                 
                 // Broadcast to the entire group (including the caller)
                 await Clients.Group(roomName).SendAsync("addUser", user);
@@ -242,6 +242,7 @@ namespace Chat.Web.Hubs
                     userViewModel.FullName,
                     userViewModel.Avatar,
                     string.Empty);
+                await _presenceTracker.UpdateHeartbeatAsync(connectionUserKey);
                 
                 _logger.LogInformation("User connected {User}", connectionUserKey);
                 _metrics.IncActiveConnections();
@@ -307,7 +308,7 @@ namespace Chat.Web.Hubs
                 var currentRoom = Context.Items["CurrentRoom"] as string;
                 
                 int remainingConnections = 0;
-                var connectionUserKey = user.UserName ?? IdentityName;
+                var connectionUserKey = user?.UserName ?? IdentityName;
                 // Decrement connection count atomically
                 if (_UserConnectionCounts.TryGetValue(connectionUserKey, out var cnt))
                 {
@@ -640,14 +641,26 @@ namespace Chat.Web.Hubs
         public async Task<object> Heartbeat()
         {
             using var activity = Tracing.ActivitySource.StartActivity("ChatHub.Heartbeat");
-            activity?.SetTag("chat.user", IdentityName);
+            var user = Context.Items["UserProfile"] as UserViewModel;
+            var currentRoom = Context.Items["CurrentRoom"] as string;
+            var connectionUserKey = user?.UserName ?? IdentityName;
+            var connectionFullName = user?.FullName ?? connectionUserKey;
+            var connectionAvatar = user?.Avatar;
+            activity?.SetTag("chat.user", connectionUserKey);
+            activity?.SetTag("chat.room", currentRoom ?? string.Empty);
             
             try
             {
-                // Update last activity timestamp in Redis (2-minute TTL)
-                await _presenceTracker.UpdateHeartbeatAsync(IdentityName);
+                // Refresh presence and heartbeat using canonical profile username.
+                // This self-heals entries after Redis reconnect/failover without requiring a client reconnect.
+                await _presenceTracker.SetUserRoomAsync(
+                    connectionUserKey,
+                    connectionFullName,
+                    connectionAvatar,
+                    currentRoom ?? string.Empty);
+                await _presenceTracker.UpdateHeartbeatAsync(connectionUserKey);
                 
-                _logger.LogDebug("Heartbeat from user {User}", IdentityName);
+                _logger.LogDebug("Heartbeat from user {User} room={Room}", connectionUserKey, currentRoom ?? string.Empty);
                 
                 // Return health status with heartbeat acknowledgment
                 var healthStatus = await GetHealthStatus();
@@ -661,7 +674,7 @@ namespace Chat.Web.Hubs
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Heartbeat failed for user {User}", IdentityName);
+                _logger.LogWarning(ex, "Heartbeat failed for user {User}", connectionUserKey);
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                 
                 return new
