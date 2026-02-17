@@ -8,6 +8,8 @@ using Chat.Web.Hubs;
 using Microsoft.AspNetCore.SignalR;
 using Chat.Web.ViewModels;
 using System.Text.Json;
+using Chat.Web.Services;
+using Microsoft.Extensions.Logging;
 
 namespace Chat.Web.Controllers
 {
@@ -22,12 +24,21 @@ namespace Chat.Web.Controllers
         private readonly IRoomsRepository _rooms;
         private readonly IUsersRepository _users;
         private readonly IHubContext<ChatHub> _hubContext;
+        private readonly IPresenceTracker _presenceTracker;
+        private readonly ILogger<RoomsController> _logger;
 
-        public RoomsController(IRoomsRepository rooms, IUsersRepository users, IHubContext<ChatHub> hubContext)
+        public RoomsController(
+            IRoomsRepository rooms,
+            IUsersRepository users,
+            IHubContext<ChatHub> hubContext,
+            IPresenceTracker presenceTracker,
+            ILogger<RoomsController> logger)
         {
             _rooms = rooms;
             _users = users;
             _hubContext = hubContext;
+            _presenceTracker = presenceTracker;
+            _logger = logger;
         }
 
         /// <summary>
@@ -64,6 +75,59 @@ namespace Chat.Web.Controllers
 
             var vm = new RoomViewModel { Id = room.Id, Name = room.Name, Languages = room.Languages };
             return Ok(vm);
+        }
+
+        /// <summary>
+        /// Returns all users assigned to a room with live presence indicator.
+        /// </summary>
+        [HttpGet("by-name/{roomName}/users")]
+        public async Task<IActionResult> GetAssignedUsersWithPresence(string roomName)
+        {
+            _logger.LogDebug("Room users presence query: room={RoomName}", roomName);
+            if (string.IsNullOrWhiteSpace(roomName))
+            {
+                return BadRequest();
+            }
+
+            var currentUserName = User?.Identity?.Name;
+            var currentProfile = string.IsNullOrWhiteSpace(currentUserName) ? null : await _users.GetByUserNameAsync(currentUserName);
+            var allowed = currentProfile?.FixedRooms ?? new List<string>();
+
+            if (!allowed.Any(r => string.Equals(r, roomName, System.StringComparison.OrdinalIgnoreCase)))
+            {
+                return Forbid();
+            }
+
+            var users = (await _users.GetAllAsync())
+                .Where(u => u.Enabled)
+                .Where(u => u.FixedRooms != null && u.FixedRooms.Any(r => string.Equals(r, roomName, System.StringComparison.OrdinalIgnoreCase)))
+                .OrderBy(u => u.FullName ?? u.UserName)
+                .ToList();
+
+            var presence = await _presenceTracker.GetAllUsersAsync();
+            // Presence is online/offline state persisted at connect/disconnect level (independent from current room join timing).
+            var onlineUsers = new HashSet<string>(
+                presence
+                    .Select(p => p.UserName),
+                System.StringComparer.OrdinalIgnoreCase);
+
+            var result = users.Select(u => new
+            {
+                userName = u.UserName,
+                fullName = string.IsNullOrWhiteSpace(u.FullName) ? u.UserName : u.FullName,
+                avatar = u.Avatar,
+                isPresent = onlineUsers.Contains(u.UserName)
+            }).ToList();
+
+            var onlineCount = result.Count(u => u.isPresent);
+            _logger.LogDebug(
+                "Room users presence query: room={RoomName} assigned={AssignedCount} online={OnlineCount}",
+                roomName,
+                result.Count,
+                onlineCount);
+
+            var json = JsonSerializer.Serialize(result, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+            return new ContentResult { Content = json, ContentType = "application/json", StatusCode = 200 };
         }
     }
 }

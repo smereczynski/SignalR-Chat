@@ -251,11 +251,81 @@ if(window.__chatAppBooted){
     const ch = source.trim().charAt(0).toUpperCase();
     return ch || '?';
   }
+  function resolveDisplayName(userName, fullName){
+    const normalizedUserName = typeof userName === 'string' ? userName.trim() : '';
+    const normalizedFullName = typeof fullName === 'string' ? fullName.trim() : '';
+    if(normalizedFullName && (!normalizedUserName || normalizedFullName.toLowerCase() !== normalizedUserName.toLowerCase())){
+      return normalizedFullName;
+    }
+    if(!normalizedUserName) return '';
+
+    if(state.profile && state.profile.userName && state.profile.userName.toLowerCase() === normalizedUserName.toLowerCase()){
+      if(state.profile.fullName && state.profile.fullName.trim()) return state.profile.fullName.trim();
+    }
+
+    const inUsers = (state.users || []).find(u => (u.userName || '').toLowerCase() === normalizedUserName.toLowerCase());
+    if(inUsers && typeof inUsers.fullName === 'string' && inUsers.fullName.trim()) return inUsers.fullName.trim();
+
+    const inMessages = (state.messages || []).find(m => (m.fromUserName || '').toLowerCase() === normalizedUserName.toLowerCase() && typeof m.fromFullName === 'string' && m.fromFullName.trim());
+    if(inMessages && inMessages.fromFullName) return inMessages.fromFullName.trim();
+
+    return normalizedUserName;
+  }
   function renderRooms(){ if(!els.roomsList) return; els.roomsList.innerHTML=''; state.rooms.forEach(r=>{ const li=document.createElement('li'); const a=document.createElement('a'); a.href='#'; a.textContent=r.name; a.dataset.roomId=r.id; 
     if(state.pendingJoin === r.name && (!state.joinedRoom || state.joinedRoom.name!==r.name)) a.classList.add('joining');
     if(state.joinedRoom && state.joinedRoom.name===r.name) a.classList.add('active');
     a.addEventListener('click',e=>{ e.preventDefault(); joinRoom(r.name); }); li.appendChild(a); els.roomsList.appendChild(li); }); }
-  function renderUsers(){ if(!els.usersList) return; const term=state.filter.toLowerCase(); els.usersList.innerHTML=''; const filtered=state.users.filter(u=>!term|| (u.fullName||u.userName||'').toLowerCase().includes(term)); filtered.forEach(u=>{ const li=document.createElement('li'); li.dataset.username=u.userName; const wrap=document.createElement('div'); wrap.className='user'; if(!u.avatar){ const span=document.createElement('span'); span.className='avatar me-2 text-uppercase'; span.textContent=initialFrom(u.fullName, u.userName); wrap.appendChild(span);} else { const img=document.createElement('img'); img.className='avatar me-2'; img.src='/avatars/'+u.avatar; wrap.appendChild(img);} const info=document.createElement('div'); info.className='user-info'; const nameSpan=document.createElement('span'); nameSpan.className='name'; nameSpan.textContent=u.fullName || u.userName; info.appendChild(nameSpan); const deviceSpan=document.createElement('span'); deviceSpan.className='device'; deviceSpan.textContent=u.device || ''; info.appendChild(deviceSpan); wrap.appendChild(info); li.appendChild(wrap); els.usersList.appendChild(li); }); if(els.usersHeader && window.i18n?.whosHere) { const template = window.i18n.whosHere; els.usersHeader.textContent = template.replace('{0}', filtered.length); } }
+  function renderUsers(){
+    if(!els.usersList) return;
+    const term=state.filter.toLowerCase();
+    els.usersList.innerHTML='';
+    const filtered=state.users.filter(u=>!term|| (u.fullName||u.userName||'').toLowerCase().includes(term));
+    filtered.forEach(u=>{
+      const li=document.createElement('li');
+      li.dataset.username=u.userName;
+      const wrap=document.createElement('div');
+      wrap.className='user';
+
+      if(!u.avatar){
+        const span=document.createElement('span');
+        span.className='avatar me-2 text-uppercase text-white';
+        if(u.isPresent){
+          span.classList.add('bg-success');
+        } else {
+          span.classList.add('bg-danger');
+        }
+        span.textContent=initialFrom(u.fullName, u.userName);
+        wrap.appendChild(span);
+      } else {
+        const img=document.createElement('img');
+        img.className='avatar me-2';
+        img.classList.add('border','border-2');
+        if(u.isPresent){
+          img.classList.add('border-success');
+        } else {
+          img.classList.add('border-danger');
+        }
+        img.src='/avatars/'+u.avatar;
+        wrap.appendChild(img);
+      }
+
+      const info=document.createElement('div');
+      info.className='user-info';
+
+      const nameSpan=document.createElement('span');
+      nameSpan.className='name';
+      nameSpan.textContent = u.fullName || u.userName;
+      info.appendChild(nameSpan);
+
+      wrap.appendChild(info);
+      li.appendChild(wrap);
+      els.usersList.appendChild(li);
+    });
+    if(els.usersHeader && window.i18n?.whosHere) {
+      const template = window.i18n.whosHere;
+      els.usersHeader.textContent = template.replace('{0}', filtered.length);
+    }
+  }
   function formatDateParts(ts){ 
     const date=new Date(ts); 
     const now=new Date(); 
@@ -511,10 +581,11 @@ if(window.__chatAppBooted){
     if(typeof m.id === 'number') li.dataset.id = String(m.id);
     if(m.failed) li.classList.add('failed');
   const wrap=document.createElement('div'); wrap.className='message-item'; if(m.isMine) wrap.classList.add('ismine');
-    if(!m.avatar){ const span=document.createElement('span'); span.className='avatar avatar-lg mx-2 text-uppercase'; span.textContent=initialFrom(m.fromFullName, m.fromUserName); wrap.appendChild(span);} else { const img=document.createElement('img'); img.className='avatar avatar-lg mx-2'; img.src='/avatars/'+m.avatar; wrap.appendChild(img);} 
+    const authorDisplayName = resolveDisplayName(m.fromUserName, m.fromFullName);
+    if(!m.avatar){ const span=document.createElement('span'); span.className='avatar avatar-lg mx-2 text-uppercase'; span.textContent=initialFrom(authorDisplayName, m.fromUserName); wrap.appendChild(span);} else { const img=document.createElement('img'); img.className='avatar avatar-lg mx-2'; img.src='/avatars/'+m.avatar; wrap.appendChild(img);} 
     const content=document.createElement('div'); content.className='message-content';
     const info=document.createElement('div'); info.className='message-info d-flex flex-wrap align-items-center';
-    const author=document.createElement('span'); author.className='author'; author.textContent=m.fromFullName||m.fromUserName; info.appendChild(author);
+    const author=document.createElement('span'); author.className='author'; author.textContent=authorDisplayName; info.appendChild(author);
     const time=document.createElement('span'); time.className='timestamp'; const fp=formatDateParts(m.timestamp); time.textContent=fp.relative; time.dataset.bsTitle=fp.full; time.setAttribute('data-bs-toggle','tooltip'); info.appendChild(time);
     if(m.failed){
       const status=document.createElement('span'); status.className='send-status ms-2 text-danger'; status.textContent=window.i18n.MessageFailed || '(failed)'; info.appendChild(status);
@@ -588,7 +659,8 @@ if(window.__chatAppBooted){
     const selfName = (state.profile && state.profile.userName || '').toLowerCase();
     const others = readers.filter(u => u && u.toLowerCase() !== selfName);
     if(others.length === 0){ rrEl.textContent = window.i18n?.delivered || 'Delivered'; return; }
-    rrEl.textContent = (window.i18n?.readBy || 'Read by') + ' ' + others.join(', ');
+    const otherDisplayNames = others.map(u => resolveDisplayName(u, null));
+    rrEl.textContent = (window.i18n?.readBy || 'Read by') + ' ' + otherDisplayNames.join(', ');
   }
   function finalizeMessageRender(){
     const noInfo=document.querySelector('.no-messages-info'); if(noInfo) noInfo.classList.toggle('d-none', state.messages.length>0);
@@ -927,23 +999,31 @@ if(window.__chatAppBooted){
     });
     setTimeout(()=> startHub().catch(e=> scheduleReconnect(e)), delay);
   }
+  let usersRefreshTimer = null;
+  function scheduleUsersRefresh(delayMs){
+    if(usersRefreshTimer) clearTimeout(usersRefreshTimer);
+    usersRefreshTimer = setTimeout(()=>{
+      usersRefreshTimer = null;
+      if(!state.joinedRoom) return;
+      loadUsers();
+    }, typeof delayMs === 'number' ? delayMs : 250);
+  }
   function wireHub(c){
   c.on('getProfileInfo', u=>{ state.profile={userName:u.userName, fullName:u.fullName, avatar:u.avatar}; state.authStatus = AuthStatus.AUTHENTICATED; setLoading(false); renderProfile(); flushOutbox('profile'); });
     // Full presence snapshot after join (server push) ensures newly joined user and existing members converge
-    c.on('presenceSnapshot', list=> { if(!Array.isArray(list)) return; // Replace users list for current room only
-      const normalized = list.map(u=>({
-        userName: u.userName || u.UserName || u.username || '',
-        fullName: u.fullName || u.FullName || u.name || '',
-        avatar: u.avatar || u.Avatar || '',
-        currentRoom: u.currentRoom || u.CurrentRoom || u.room || null,
-        ...u
-      }));
-      if(state.joinedRoom){
-        state.users = normalized.filter(u=> u.currentRoom === state.joinedRoom.name);
-      } else {
-        state.users = normalized;
-      }
-      renderUsers(); });
+    c.on('presenceSnapshot', list=> {
+      if(!Array.isArray(list)) return;
+      log('debug','presence.snapshot.received',{count: list.length, room: state.joinedRoom && state.joinedRoom.name});
+      postTelemetry('presence.snapshot.received',{count: list.length, room: state.joinedRoom && state.joinedRoom.name});
+      scheduleUsersRefresh(120);
+    });
+    c.on('presenceChanged', evt => {
+      const changedUser = evt && (evt.userName || evt.UserName || evt.username) || '';
+      const present = !!(evt && (evt.isPresent ?? evt.IsPresent));
+      log('debug','presence.changed.received',{user: changedUser, isPresent: present, room: state.joinedRoom && state.joinedRoom.name});
+      postTelemetry('presence.changed.received',{user: changedUser, isPresent: present, room: state.joinedRoom && state.joinedRoom.name});
+      scheduleUsersRefresh(80);
+    });
     c.on('newMessage', m=> {
       const mineUser = state.profile && state.profile.userName;
       // Reconcile by correlationId for own messages regardless of pending ack state
@@ -1115,8 +1195,10 @@ if(window.__chatAppBooted){
     renderUsers();
   });
     // Other hub-driven mutations
-    c.on('addUser', u=> upsertUser(u));
-    c.on('removeUser', u=> removeUser(u.userName));
+    c.on('addUser', u=> { scheduleUsersRefresh(120); });
+    c.on('removeUser', u=> {
+      scheduleUsersRefresh(120);
+    });
     c.on('addChatRoom', r=> upsertRoom(r));
     c.on('updateChatRoom', r=> upsertRoom(r));
     c.on('removeChatRoom', id=>{ state.rooms=state.rooms.filter(x=>x.id!==id); if(state.joinedRoom && state.joinedRoom.id===id){ state.joinedRoom=null; state.messages=[]; } renderAll(); });
@@ -1153,7 +1235,14 @@ if(window.__chatAppBooted){
     if(e) Object.assign(e, normalized); else state.users.push(normalized);
     renderUsers();
   }
-  function removeUser(userName){ state.users=state.users.filter(u=>u.userName!==userName); renderUsers(); }
+  function removeUser(userName){
+    if(!userName){
+      renderUsers();
+      return;
+    }
+    state.users=state.users.filter(u=>u.userName!==userName);
+    renderUsers();
+  }
   /**
    * Appends a message to local state and re-renders.
    * @param {object} m MessageViewModel-like payload
@@ -1258,15 +1347,18 @@ if(window.__chatAppBooted){
       else if(state.rooms.length>0) joinRoom(state.rooms[0].name);
     }).catch(()=>{});
   }
-  function loadUsers(){ if(!state.joinedRoom) return; hub.invoke('GetUsers', state.joinedRoom.name).then(users=>{
+  function loadUsers(){ if(!state.joinedRoom) return; apiGet('/api/Rooms/by-name/'+encodeURIComponent(state.joinedRoom.name)+'/users').then(users=>{
     const normalized = (users||[]).map(u=>({
       userName: u.userName || u.UserName || u.username || '',
       fullName: u.fullName || u.FullName || u.name || '',
       avatar: u.avatar || u.Avatar || '',
-      currentRoom: u.currentRoom || u.CurrentRoom || u.room || null,
+      isPresent: !!(u.isPresent || u.IsPresent),
       ...u
     }));
     state.users=normalized;
+    const onlineCount = normalized.filter(u => u.isPresent).length;
+    log('debug','presence.users.refresh',{room: state.joinedRoom && state.joinedRoom.name, total: normalized.length, online: onlineCount});
+    postTelemetry('presence.users.refresh',{room: state.joinedRoom && state.joinedRoom.name, total: normalized.length, online: onlineCount});
     renderUsers();
   }).catch(err=>{
     log('warn','loadUsers.failed',{msg: err && err.message});
@@ -1749,6 +1841,12 @@ if(window.__chatAppBooted){
       }
     } catch(_){ /* swallow */ }
   }, 1500);
+  // Refresh room assigned-users presence every 5s to keep list consistent across clients.
+  setInterval(()=>{
+    try {
+      if(state.joinedRoom){ loadUsers(); }
+    } catch(_) { /* ignore */ }
+  }, 5000);
   // Flush when tab becomes visible again (covers background tab timing misses)
   document.addEventListener('visibilitychange', ()=>{ if(!document.hidden){ flushOutbox('visibility'); } });
   document.addEventListener('visibilitychange', ()=>{ if(!document.hidden){ maybeMarkRead(); scheduleMarkVisibleRead(); ensureConnected(); } });
