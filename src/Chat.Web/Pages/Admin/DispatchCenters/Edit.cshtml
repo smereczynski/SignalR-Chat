@@ -1,0 +1,62 @@
+@page "{id}"
+@using Microsoft.Extensions.Localization
+@inject IStringLocalizer<Chat.Web.Resources.SharedResources> Localizer
+@model Chat.Web.Pages.Admin.DispatchCenters.DispatchCentersEditModel
+@{
+    ViewData["Title"] = Localizer["EditDispatchCenter"];
+}
+
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <h2 class="mb-4">@Localizer["EditDispatchCenter"]</h2>
+
+        <form method="post">
+            <input type="hidden" asp-for="Id" />
+
+            <div class="mb-3">
+                <label asp-for="Input.Name" class="form-label">@Localizer["Name"]</label>
+                <input asp-for="Input.Name" class="form-control" />
+                <span asp-validation-for="Input.Name" class="text-danger"></span>
+            </div>
+
+            <div class="mb-3">
+                <label asp-for="Input.Country" class="form-label">@Localizer["Country"]</label>
+                <input asp-for="Input.Country" class="form-control" />
+                <span asp-validation-for="Input.Country" class="text-danger"></span>
+            </div>
+
+            <div class="mb-3 form-check">
+                <input asp-for="Input.IfMain" class="form-check-input" />
+                <label asp-for="Input.IfMain" class="form-check-label">@Localizer["MainDispatchCenter"]</label>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">@Localizer["CorrespondingDispatchCenters"]</label>
+                @if (!Model.AllDispatchCenters.Any())
+                {
+                    <div class="text-muted">@Localizer["NoDispatchCentersAvailable"]</div>
+                }
+                else
+                {
+                    @for (int i = 0; i < Model.AllDispatchCenters.Count; i++)
+                    {
+                        var dc = Model.AllDispatchCenters[i];
+                        var isChecked = Model.Input.CorrespondingDispatchCenterIds.Contains(dc.Id, StringComparer.OrdinalIgnoreCase);
+                        <div class="form-check">
+                            <input type="checkbox" name="Input.CorrespondingDispatchCenterIds" value="@dc.Id" class="form-check-input" id="dc-edit-@i" @(isChecked ? "checked" : "") />
+                            <label class="form-check-label" for="dc-edit-@i">@dc.Name (@dc.Country)</label>
+                        </div>
+                    }
+                }
+            </div>
+
+            <div asp-validation-summary="All" class="alert alert-danger" role="alert"></div>
+
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-primary">@Localizer["Save"]</button>
+                <a asp-page="AssignUsers" asp-route-id="@Model.Id" class="btn btn-outline-primary">@Localizer["AssignUsers"]</a>
+                <a asp-page="Index" class="btn btn-secondary">@Localizer["Cancel"]</a>
+            </div>
+        </form>
+    </div>
+</div>

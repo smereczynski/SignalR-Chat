@@ -229,7 +229,7 @@ SignalR Chat includes automated tests (unit, integration, and web/security) cove
 # Run all tests
 dotnet test src/Chat.sln
 # Output includes a summary like:
-# Test summary: total: 197, failed: 0, succeeded: 197, skipped: 0
+# Test summary: total: 202, failed: 0, succeeded: 202, skipped: 0
 ```
 
 **Test coverage**:
@@ -262,7 +262,7 @@ See [Testing Guide: Debugging Tests](../development/testing.md#debugging-tests).
 
 ### What's the test coverage?
 
-**Current**: 197 automated tests (unit + integration + web/security)
+**Current**: 202 automated tests (unit + integration + web/security)
 
 **Target**: >80% coverage on unit tests for pure logic and services
 

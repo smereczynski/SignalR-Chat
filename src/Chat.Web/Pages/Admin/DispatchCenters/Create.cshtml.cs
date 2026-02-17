@@ -1,0 +1,93 @@
+using System;
+using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
+using System.Linq;
+using System.Threading.Tasks;
+using Chat.Web.Models;
+using Chat.Web.Repositories;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.RazorPages;
+
+namespace Chat.Web.Pages.Admin.DispatchCenters;
+
+[Authorize(Policy = "RequireAdminRole")]
+public class DispatchCentersCreateModel : PageModel
+{
+    private readonly IDispatchCentersRepository _dispatchCenters;
+
+    public DispatchCentersCreateModel(IDispatchCentersRepository dispatchCenters)
+    {
+        _dispatchCenters = dispatchCenters;
+    }
+
+    public class InputModel
+    {
+        [Required]
+        public string Name { get; set; } = string.Empty;
+
+        [Required]
+        public string Country { get; set; } = string.Empty;
+
+        public bool IfMain { get; set; }
+
+        public List<string> CorrespondingDispatchCenterIds { get; set; } = new();
+    }
+
+    [BindProperty]
+    public InputModel Input { get; set; } = new();
+
+    public List<DispatchCenter> AllDispatchCenters { get; set; } = new();
+
+    public async Task OnGetAsync()
+    {
+        AllDispatchCenters = (await _dispatchCenters.GetAllAsync()).OrderBy(d => d.Name).ToList();
+    }
+
+    public async Task<IActionResult> OnPostAsync()
+    {
+        AllDispatchCenters = (await _dispatchCenters.GetAllAsync()).OrderBy(d => d.Name).ToList();
+
+        if (!ModelState.IsValid) return Page();
+
+        var existingByName = await _dispatchCenters.GetByNameAsync(Input.Name.Trim());
+        if (existingByName != null)
+        {
+            ModelState.AddModelError(nameof(Input.Name), "Dispatch center with this name already exists.");
+            return Page();
+        }
+
+        var normalizedCorresponding = NormalizeDistinct(Input.CorrespondingDispatchCenterIds);
+        foreach (var correspondingId in normalizedCorresponding)
+        {
+            var existing = await _dispatchCenters.GetByIdAsync(correspondingId);
+            if (existing == null)
+            {
+                ModelState.AddModelError(nameof(Input.CorrespondingDispatchCenterIds), $"Invalid corresponding dispatch center id: {correspondingId}");
+                return Page();
+            }
+        }
+
+        var dispatchCenter = new DispatchCenter
+        {
+            Id = Guid.NewGuid().ToString(),
+            Name = Input.Name.Trim(),
+            Country = Input.Country.Trim(),
+            IfMain = Input.IfMain,
+            CorrespondingDispatchCenterIds = normalizedCorresponding,
+            Users = new List<string>()
+        };
+
+        await _dispatchCenters.UpsertAsync(dispatchCenter);
+        return RedirectToPage("Index");
+    }
+
+    private static List<string> NormalizeDistinct(IEnumerable<string> values)
+    {
+        return (values ?? Enumerable.Empty<string>())
+            .Where(v => !string.IsNullOrWhiteSpace(v))
+            .Select(v => v.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+}

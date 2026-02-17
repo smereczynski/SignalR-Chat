@@ -300,7 +300,7 @@ dotnet test src/Chat.sln --logger "console;verbosity=detailed"
 ### Specific Test Projects
 
 ```bash
-# Run all tests (currently 197)
+# Run all tests (currently 202)
 dotnet test src/Chat.sln
 
 # Run tests from specific project
