@@ -56,6 +56,7 @@ Notifications__UnreadDelaySeconds=60
 # === Cosmos DB Configuration ===
 Cosmos__Database=chat
 Cosmos__MessagesTtlSeconds=2592000
+Cosmos__DispatchCentersContainer=dispatchcenters
 
 # === CORS Configuration (Production) ===
 Cors__AllowedOrigins__0=https://signalrchat-prod-plc.azurewebsites.net
@@ -434,6 +435,21 @@ Cosmos__MessagesTtlSeconds=
 - `null` / empty: TTL disabled
 - `-1`: TTL enabled, messages never expire
 - `> 0`: Messages expire after N seconds
+
+#### Container Names
+
+**Environment Variables**:
+- `Cosmos__UsersContainer` (default: `users`)
+- `Cosmos__RoomsContainer` (default: `rooms`)
+- `Cosmos__MessagesContainer` (default: `messages`)
+- `Cosmos__DispatchCentersContainer` (default: `dispatchcenters`)
+
+```bash
+# Example: custom dispatch centers container name
+Cosmos__DispatchCentersContainer=dispatch-centers
+```
+
+Use defaults unless you have a migration/namespace requirement.
 
 ### Notification Configuration
 

@@ -25,6 +25,7 @@ Learn about specific features and how they work.
 
 - **[Authentication](features/authentication.md)** - Dual authentication (Entra ID + OTP)
 - **[Entra ID Setup](development/entra-id-multi-tenant-setup.md)** - Multi-tenant configuration
+- **Dispatch Centers (organizational structure)** - Admin-only backend API and data model (see [Data Model](architecture/data-model.md))
 - **[Sessions](features/sessions.md)** - Session management
 - **[Presence Tracking](features/presence.md)** - Online/offline status
 - **[Real-time Messaging](features/real-time-messaging.md)** - SignalR implementation

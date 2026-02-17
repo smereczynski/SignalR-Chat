@@ -82,7 +82,7 @@ graph TB
 |-----------|-----------|---------|
 | **Web Server** | ASP.NET Core 10 | HTTP server, Razor Pages, WebSocket handling |
 | **Real-time Engine** | SignalR | WebSocket hub for bidirectional communication |
-| **Database** | Azure Cosmos DB (NoSQL) | Messages, rooms, users, read receipts |
+| **Database** | Azure Cosmos DB (NoSQL) | Messages, rooms, users, dispatch centers, read receipts |
 | **Cache** | Azure Redis | OTP storage, rate limiting, presence tracking |
 | **Authentication** | Cookie-based + OTP | Secure login with Argon2id hashing |
 | **Translation** | Background workers + Redis queue + Azure AI Foundry | Asynchronous message translation with real-time updates |
@@ -343,6 +343,7 @@ graph TD
 | **Headers** | CSP (nonce-based), X-Frame-Options: DENY, X-Content-Type-Options: nosniff |
 | **Authentication** | Cookie-based, OTP with Argon2id hashing, 5-attempt lockout |
 | **Authorization** | Room membership checks, user validation |
+| **Authorization** | Room membership checks, user validation, admin policy (`RequireAdminRole`) for organizational APIs |
 | **Input** | Sanitized logging (CWE-117), parameter validation |
 | **Rate Limiting** | 5 OTP requests/min per user, 20 requests/5s per endpoint |
 | **Network** | Private endpoints, VNet integration, NSGs |
@@ -387,6 +388,7 @@ graph TD
 
 ## See Also
 
+- `Dispatch Centers` backend API: `/api/DispatchCenters` (admin-only, organizational structure management)
 - [Data Model](data-model.md) - Cosmos DB schema and Redis keys
 - [Security Architecture](security.md) - Detailed security design
 - [Architecture Decisions (ADRs)](decisions/) - Key design decisions

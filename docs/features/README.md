@@ -32,6 +32,7 @@ Learn about SignalR Chat's features and how they work.
 | Real-time Messaging | ✅ Production | [real-time-messaging.md](real-time-messaging.md) |
 | Read Receipts | ✅ Production | [read-receipts.md](read-receipts.md) |
 | Presence Tracking | ✅ Production | [presence.md](presence.md) |
+| Dispatch Centers (organizational structure API) | ✅ Backend implemented | [../architecture/data-model.md](../architecture/data-model.md) |
 | Localization (8 languages) | ✅ Production | [localization.md](localization.md) |
 | Rate Limiting | ✅ Production | [rate-limiting.md](rate-limiting.md) |
 | Email/SMS Notifications | ✅ Production | [notifications.md](notifications.md) |
