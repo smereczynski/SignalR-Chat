@@ -83,7 +83,8 @@ namespace Chat.Web.Controllers
         [HttpGet("by-name/{roomName}/users")]
         public async Task<IActionResult> GetAssignedUsersWithPresence(string roomName)
         {
-            _logger.LogDebug("Room users presence query: room={RoomName}", roomName);
+            var safeRoomNameForLog = roomName?.Replace("\r", string.Empty).Replace("\n", string.Empty);
+            _logger.LogDebug("Room users presence query: room={RoomName}", safeRoomNameForLog);
             if (string.IsNullOrWhiteSpace(roomName))
             {
                 return BadRequest();
@@ -125,7 +126,7 @@ namespace Chat.Web.Controllers
             var onlineCount = result.Count(u => u.isPresent);
             _logger.LogDebug(
                 "Room users presence query: room={RoomName} assigned={AssignedCount} online={OnlineCount} activeHeartbeats={HeartbeatCount}",
-                roomName,
+                safeRoomNameForLog,
                 result.Count,
                 onlineCount,
                 activeHeartbeats.Count);
