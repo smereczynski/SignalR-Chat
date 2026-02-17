@@ -211,7 +211,10 @@ if(window.__chatAppBooted){
   }
 
   async function sendHeartbeat(){
-    if(!hub || hub.state !== 'Connected') return;
+    if(!hub || hub.state !== 'Connected'){
+      await sendHttpPresencePing('heartbeat.noHub');
+      return;
+    }
     try {
       const response = await hub.invoke('Heartbeat');
       if(response.acknowledged && response.health){
@@ -223,7 +226,45 @@ if(window.__chatAppBooted){
       }
     } catch(err) {
       console.warn('[Heartbeat] Failed:', err);
+      await sendHttpPresencePing('heartbeat.error');
     }
+  }
+
+  let _lastPresencePingAt = 0;
+  async function sendHttpPresencePing(reason){
+    try {
+      if(!state.profile || !state.profile.userName) return;
+      const now = Date.now();
+      if(now - _lastPresencePingAt < 8000) return;
+      _lastPresencePingAt = now;
+      const roomName = state.joinedRoom && state.joinedRoom.name ? state.joinedRoom.name : null;
+      const response = await fetch('/api/presence/ping', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roomName })
+      });
+      if(!response.ok){
+        const msg = `status_${response.status}`;
+        log('warn','presence.ping.failed',{reason, msg});
+        postTelemetry('presence.ping.failed',{reason, msg});
+      }
+    } catch(err){
+      const msg = (err && err.message) || 'unknown';
+      log('warn','presence.ping.error',{reason, msg});
+      postTelemetry('presence.ping.error',{reason, msg: msg.slice(0,160)});
+    }
+  }
+
+  async function sendHttpPresenceLeave(){
+    try {
+      if(!state.profile || !state.profile.userName) return;
+      await fetch('/api/presence/leave', {
+        method: 'POST',
+        credentials: 'include',
+        keepalive: true
+      });
+    } catch(_) { /* ignore */ }
   }
 
   function startHealthAndHeartbeatPolling(){
@@ -237,10 +278,16 @@ if(window.__chatAppBooted){
       await sendHeartbeat();
     }, 30000);
 
+    // Transport-independent fallback presence ping (covers negotiate-success/no-connect cases)
+    setInterval(async () => {
+      await sendHttpPresencePing('presence.interval');
+    }, 20000);
+
     // Initial checks after a short delay (let connection stabilize)
     setTimeout(async () => {
       await checkBackendHealth();
       await sendHeartbeat();
+      await sendHttpPresencePing('presence.initial');
     }, 2000);
   }
 
@@ -251,11 +298,81 @@ if(window.__chatAppBooted){
     const ch = source.trim().charAt(0).toUpperCase();
     return ch || '?';
   }
+  function resolveDisplayName(userName, fullName){
+    const normalizedUserName = typeof userName === 'string' ? userName.trim() : '';
+    const normalizedFullName = typeof fullName === 'string' ? fullName.trim() : '';
+    if(normalizedFullName && (!normalizedUserName || normalizedFullName.toLowerCase() !== normalizedUserName.toLowerCase())){
+      return normalizedFullName;
+    }
+    if(!normalizedUserName) return '';
+
+    if(state.profile && state.profile.userName && state.profile.userName.toLowerCase() === normalizedUserName.toLowerCase()){
+      if(state.profile.fullName && state.profile.fullName.trim()) return state.profile.fullName.trim();
+    }
+
+    const inUsers = (state.users || []).find(u => (u.userName || '').toLowerCase() === normalizedUserName.toLowerCase());
+    if(inUsers && typeof inUsers.fullName === 'string' && inUsers.fullName.trim()) return inUsers.fullName.trim();
+
+    const inMessages = (state.messages || []).find(m => (m.fromUserName || '').toLowerCase() === normalizedUserName.toLowerCase() && typeof m.fromFullName === 'string' && m.fromFullName.trim());
+    if(inMessages && inMessages.fromFullName) return inMessages.fromFullName.trim();
+
+    return normalizedUserName;
+  }
   function renderRooms(){ if(!els.roomsList) return; els.roomsList.innerHTML=''; state.rooms.forEach(r=>{ const li=document.createElement('li'); const a=document.createElement('a'); a.href='#'; a.textContent=r.name; a.dataset.roomId=r.id; 
     if(state.pendingJoin === r.name && (!state.joinedRoom || state.joinedRoom.name!==r.name)) a.classList.add('joining');
     if(state.joinedRoom && state.joinedRoom.name===r.name) a.classList.add('active');
     a.addEventListener('click',e=>{ e.preventDefault(); joinRoom(r.name); }); li.appendChild(a); els.roomsList.appendChild(li); }); }
-  function renderUsers(){ if(!els.usersList) return; const term=state.filter.toLowerCase(); els.usersList.innerHTML=''; const filtered=state.users.filter(u=>!term|| (u.fullName||u.userName||'').toLowerCase().includes(term)); filtered.forEach(u=>{ const li=document.createElement('li'); li.dataset.username=u.userName; const wrap=document.createElement('div'); wrap.className='user'; if(!u.avatar){ const span=document.createElement('span'); span.className='avatar me-2 text-uppercase'; span.textContent=initialFrom(u.fullName, u.userName); wrap.appendChild(span);} else { const img=document.createElement('img'); img.className='avatar me-2'; img.src='/avatars/'+u.avatar; wrap.appendChild(img);} const info=document.createElement('div'); info.className='user-info'; const nameSpan=document.createElement('span'); nameSpan.className='name'; nameSpan.textContent=u.fullName || u.userName; info.appendChild(nameSpan); const deviceSpan=document.createElement('span'); deviceSpan.className='device'; deviceSpan.textContent=u.device || ''; info.appendChild(deviceSpan); wrap.appendChild(info); li.appendChild(wrap); els.usersList.appendChild(li); }); if(els.usersHeader && window.i18n?.whosHere) { const template = window.i18n.whosHere; els.usersHeader.textContent = template.replace('{0}', filtered.length); } }
+  function renderUsers(){
+    if(!els.usersList) return;
+    const term=state.filter.toLowerCase();
+    els.usersList.innerHTML='';
+    const filtered=state.users.filter(u=>!term|| (u.fullName||u.userName||'').toLowerCase().includes(term));
+    filtered.forEach(u=>{
+      const li=document.createElement('li');
+      li.dataset.username=u.userName;
+      const wrap=document.createElement('div');
+      wrap.className='user';
+
+      if(!u.avatar){
+        const span=document.createElement('span');
+        span.className='avatar me-2 text-uppercase text-white';
+        if(u.isPresent){
+          span.classList.add('bg-success');
+        } else {
+          span.classList.add('bg-danger');
+        }
+        span.textContent=initialFrom(u.fullName, u.userName);
+        wrap.appendChild(span);
+      } else {
+        const img=document.createElement('img');
+        img.className='avatar me-2';
+        img.classList.add('border','border-2');
+        if(u.isPresent){
+          img.classList.add('border-success');
+        } else {
+          img.classList.add('border-danger');
+        }
+        img.src='/avatars/'+u.avatar;
+        wrap.appendChild(img);
+      }
+
+      const info=document.createElement('div');
+      info.className='user-info';
+
+      const nameSpan=document.createElement('span');
+      nameSpan.className='name';
+      nameSpan.textContent = u.fullName || u.userName;
+      info.appendChild(nameSpan);
+
+      wrap.appendChild(info);
+      li.appendChild(wrap);
+      els.usersList.appendChild(li);
+    });
+    if(els.usersHeader && window.i18n?.whosHere) {
+      const template = window.i18n.whosHere;
+      els.usersHeader.textContent = template.replace('{0}', filtered.length);
+    }
+  }
   function formatDateParts(ts){ 
     const date=new Date(ts); 
     const now=new Date(); 
@@ -293,6 +410,217 @@ if(window.__chatAppBooted){
     state.messages.forEach(m=> renderSingleMessage(m, false));
     finalizeMessageRender();
   }
+
+  // Translation UI helpers -------------------------------------------------
+  function getUiLanguageCode(){
+    const culture = (document.documentElement.lang || 'en').toLowerCase();
+    return (culture.split('-')[0] || 'en').trim() || 'en';
+  }
+  function normalizeTranslationStatus(m){
+    return (m && (m.translationStatus || m.TranslationStatus) || 'None');
+  }
+  function normalizeTranslations(m){
+    const t = m && (m.translations || m.Translations);
+    return (t && typeof t === 'object') ? t : {};
+  }
+  function normalizeLanguageCode(value, allowAuto){
+    if(value === null || value === undefined) return null;
+    const trimmed = String(value).trim();
+    if(!trimmed) return null;
+    const lower = trimmed.toLowerCase();
+    if(allowAuto && lower === 'auto') return 'auto';
+    if(lower === 'auto') return null;
+    const normalized = trimmed.replace(/_/g,'-');
+    const dash = normalized.indexOf('-');
+    const lang = (dash > 0 ? normalized.slice(0, dash) : normalized).trim().toLowerCase();
+    return lang || null;
+  }
+  function buildTargetLanguages(roomLanguages, sourceLanguage){
+    const targets = new Set();
+    targets.add('en');
+    if(Array.isArray(roomLanguages)){
+      roomLanguages.forEach(l => {
+        const lang = normalizeLanguageCode(l, /*allowAuto*/ false);
+        if(lang) targets.add(lang);
+      });
+    }
+    targets.delete('auto');
+    const src = normalizeLanguageCode(sourceLanguage, /*allowAuto*/ true);
+    if(src && src !== 'auto'){
+      targets.delete(src);
+      targets.add('en');
+    }
+    return Array.from(targets);
+  }
+  function shouldShowTranslationPanel(m){
+    const status = (normalizeTranslationStatus(m) || '').toLowerCase();
+    const translations = normalizeTranslations(m);
+    const hasTranslations = translations && Object.keys(translations).length > 0;
+    return hasTranslations || status === 'pending' || status === 'inprogress' || status === 'failed';
+  }
+  function getExpectedTranslationLanguages(m){
+    const translations = normalizeTranslations(m);
+    const keys = Object.keys(translations || {});
+    const status = (normalizeTranslationStatus(m) || '').toLowerCase();
+
+    // "Previous version" behavior: once we have translations, show only translated languages.
+    // This avoids showing extra boxes (e.g., EN/UI/source language) that are not part of room targets.
+    if(keys.length && status !== 'pending' && status !== 'inprogress'){
+      return keys;
+    }
+
+    // While translating (or immediately after user-triggered retry), show room target languages.
+    // This supports the "new language added to room" scenario.
+    // Note: message payloads in the client do not reliably include room name/id, and the
+    // message list is already scoped to the joined room. Use joined room languages directly.
+    const roomLangs = state.joinedRoom && Array.isArray(state.joinedRoom.languages) ? state.joinedRoom.languages : null;
+    const sourceLanguage = m && (m.sourceLanguage || m.SourceLanguage);
+    if(roomLangs && roomLangs.length){
+      return buildTargetLanguages(roomLangs, sourceLanguage).map(l => String(l || '').toLowerCase()).filter(Boolean);
+    }
+
+    // Fallback: show whatever we have.
+    return keys;
+  }
+  function getTranslationBoxClass(lang){
+    const code = String(lang || '').toLowerCase();
+    // Use Bootstrap contextual backgrounds (no custom colors) to keep contrast readable.
+    const map = {
+      en: 'text-bg-primary',
+      pl: 'text-bg-success',
+      de: 'text-bg-warning',
+      fr: 'text-bg-info',
+      es: 'text-bg-danger',
+      it: 'text-bg-dark',
+      pt: 'text-bg-secondary',
+      ja: 'text-bg-primary',
+      zh: 'text-bg-success'
+    };
+    return map[code] || 'text-bg-secondary';
+  }
+  function renderTranslationPanel(messageContentEl, m){
+    if(!messageContentEl) return;
+    const existing = messageContentEl.querySelector('.translation-panel');
+    if(existing) existing.remove();
+
+    if(!shouldShowTranslationPanel(m)) return;
+
+    const statusRaw = normalizeTranslationStatus(m);
+    const status = (statusRaw || '').toLowerCase();
+    const translations = normalizeTranslations(m);
+    const errorMessage = m && (m.translationFailureMessage || m.translationErrorMessage || m.translationError || '');
+
+    const panel = document.createElement('div');
+    panel.className = 'translation-panel mt-2 pt-2 border-top';
+
+    const titleRow = document.createElement('div');
+    titleRow.className = 'd-flex align-items-center justify-content-between mb-2';
+    const title = document.createElement('div');
+    title.className = 'small fw-semibold';
+    title.textContent = window.i18n?.translations || 'Translations';
+    titleRow.appendChild(title);
+
+    // Retry/refresh translations (re-runs full translation flow).
+    const rawMessageId = m && (m.id ?? m.Id);
+    const messageId = (typeof rawMessageId === 'number')
+      ? rawMessageId
+      : (typeof rawMessageId === 'string' && rawMessageId.trim() !== '' ? Number(rawMessageId) : NaN);
+    if(Number.isFinite(messageId)){
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'btn btn-link p-0 small text-decoration-none';
+      btn.setAttribute('aria-label', window.i18n?.retryTranslation || 'Retry translation');
+      // Use a Unicode refresh glyph so it renders even without Bootstrap Icons loaded.
+      btn.innerHTML = '<span aria-hidden="true">↻</span>';
+      btn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        try{
+          // Optimistic UI: mark as pending so placeholders/spinner show.
+          m.translationStatus = 'Pending';
+          if(!(typeof updateMessageDom === 'function' && updateMessageDom(m))){
+            renderMessages();
+            finalizeMessageRender();
+          }
+
+          const resp = await fetch(`/api/Messages/${messageId}/retry-translation`, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' }
+          });
+          if(!resp.ok){
+            let errText = '';
+            try{ errText = (await resp.json())?.error || ''; } catch { /* ignore */ }
+            m.translationStatus = 'Failed';
+            m.translationErrorMessage = errText || (window.i18n?.translationRetryFailed || 'Retry failed.');
+            if(!(updateMessageDom(m))){
+              renderMessages();
+              finalizeMessageRender();
+            }
+          }
+        } catch(err){
+          m.translationStatus = 'Failed';
+          m.translationErrorMessage = window.i18n?.translationRetryFailed || 'Retry failed.';
+          if(!(updateMessageDom(m))){
+            renderMessages();
+            finalizeMessageRender();
+          }
+        }
+      });
+      titleRow.appendChild(btn);
+    }
+
+    panel.appendChild(titleRow);
+
+    const boxes = document.createElement('div');
+    boxes.className = 'd-flex flex-column gap-2';
+
+    const langs = getExpectedTranslationLanguages(m);
+    langs.forEach(lang => {
+      const translatedText = translations && (translations[lang] || translations[String(lang).toLowerCase()] || translations[String(lang).toUpperCase()]);
+
+      const box = document.createElement('div');
+      box.className = `${getTranslationBoxClass(lang)} rounded p-2`;
+
+      const header = document.createElement('div');
+      header.className = 'd-flex align-items-center justify-content-between mb-1';
+      const code = document.createElement('span');
+      code.className = 'small fw-semibold';
+      code.textContent = String(lang || '').toUpperCase();
+      header.appendChild(code);
+
+      // No "Translating…" text; language code + animation is enough.
+      if(!translatedText && (status === 'pending' || status === 'inprogress')){
+        const sp = document.createElement('span');
+        sp.className = 'spinner-border spinner-border-sm';
+        sp.setAttribute('role','status');
+        sp.setAttribute('aria-label','Translating');
+        header.appendChild(sp);
+      }
+
+      const text = document.createElement('div');
+      text.className = 'small';
+      if(translatedText){
+        text.textContent = translatedText;
+      } else if(status === 'failed'){
+        text.classList.add('fw-semibold');
+        text.textContent = errorMessage ? errorMessage : (window.i18n?.translationFailed || 'Translation failed.');
+      } else {
+        // Pending / in progress: keep it minimal (spinner in header).
+        text.textContent = window.i18n?.translationPending || '…';
+      }
+
+      box.appendChild(header);
+      box.appendChild(text);
+      boxes.appendChild(box);
+    });
+
+    panel.appendChild(boxes);
+    // Insert translations between message body and read receipts.
+    const rr = messageContentEl.querySelector('.read-receipt');
+    if(rr) rr.before(panel);
+    else messageContentEl.appendChild(panel);
+  }
+
   function renderSingleMessage(m, scrollIntoView){
     if(!els.messagesList) return;
     const li=document.createElement('li');
@@ -300,10 +628,11 @@ if(window.__chatAppBooted){
     if(typeof m.id === 'number') li.dataset.id = String(m.id);
     if(m.failed) li.classList.add('failed');
   const wrap=document.createElement('div'); wrap.className='message-item'; if(m.isMine) wrap.classList.add('ismine');
-    if(!m.avatar){ const span=document.createElement('span'); span.className='avatar avatar-lg mx-2 text-uppercase'; span.textContent=initialFrom(m.fromFullName, m.fromUserName); wrap.appendChild(span);} else { const img=document.createElement('img'); img.className='avatar avatar-lg mx-2'; img.src='/avatars/'+m.avatar; wrap.appendChild(img);} 
+    const authorDisplayName = resolveDisplayName(m.fromUserName, m.fromFullName);
+    if(!m.avatar){ const span=document.createElement('span'); span.className='avatar avatar-lg mx-2 text-uppercase'; span.textContent=initialFrom(authorDisplayName, m.fromUserName); wrap.appendChild(span);} else { const img=document.createElement('img'); img.className='avatar avatar-lg mx-2'; img.src='/avatars/'+m.avatar; wrap.appendChild(img);} 
     const content=document.createElement('div'); content.className='message-content';
     const info=document.createElement('div'); info.className='message-info d-flex flex-wrap align-items-center';
-    const author=document.createElement('span'); author.className='author'; author.textContent=m.fromFullName||m.fromUserName; info.appendChild(author);
+    const author=document.createElement('span'); author.className='author'; author.textContent=authorDisplayName; info.appendChild(author);
     const time=document.createElement('span'); time.className='timestamp'; const fp=formatDateParts(m.timestamp); time.textContent=fp.relative; time.dataset.bsTitle=fp.full; time.setAttribute('data-bs-toggle','tooltip'); info.appendChild(time);
     if(m.failed){
       const status=document.createElement('span'); status.className='send-status ms-2 text-danger'; status.textContent=window.i18n.MessageFailed || '(failed)'; info.appendChild(status);
@@ -313,6 +642,10 @@ if(window.__chatAppBooted){
     }
     content.appendChild(info);
   const body=document.createElement('div'); body.className='content'; body.textContent=m.content; content.appendChild(body);
+
+  // Translation panel (original message always visible; translations below)
+  renderTranslationPanel(content, m);
+
   // Read receipt indicator (compact)
   const rr = document.createElement('div'); rr.className='read-receipt small text-muted';
   updateReadReceiptDom(rr, m);
@@ -357,6 +690,10 @@ if(window.__chatAppBooted){
     let rr = node.querySelector('.read-receipt');
     if(!rr){ rr = document.createElement('div'); rr.className='read-receipt small text-muted'; const content = node.querySelector('.message-content'); if(content) content.appendChild(rr); }
     updateReadReceiptDom(rr, m);
+
+    // Update translation panel
+    const contentEl = node.querySelector('.message-content');
+    renderTranslationPanel(contentEl, m);
     return true;
   }
   function updateReadReceiptDom(rrEl, m){
@@ -369,7 +706,8 @@ if(window.__chatAppBooted){
     const selfName = (state.profile && state.profile.userName || '').toLowerCase();
     const others = readers.filter(u => u && u.toLowerCase() !== selfName);
     if(others.length === 0){ rrEl.textContent = window.i18n?.delivered || 'Delivered'; return; }
-    rrEl.textContent = (window.i18n?.readBy || 'Read by') + ' ' + others.join(', ');
+    const otherDisplayNames = others.map(u => resolveDisplayName(u, null));
+    rrEl.textContent = (window.i18n?.readBy || 'Read by') + ' ' + otherDisplayNames.join(', ');
   }
   function finalizeMessageRender(){
     const noInfo=document.querySelector('.no-messages-info'); if(noInfo) noInfo.classList.toggle('d-none', state.messages.length>0);
@@ -655,6 +993,7 @@ if(window.__chatAppBooted){
       }
       
       loadRooms();
+      sendHttpPresencePing('hub.connected');
       postTelemetry('hub.connected',{durationMs: Math.round(performance.now()-startedAt)});
   applyConnectionVisual('connected');
       // Fallback: if we already have a profile (from /api/auth/me) but still showing loading because getProfileInfo hasn't fired, hide loader.
@@ -708,30 +1047,38 @@ if(window.__chatAppBooted){
     });
     setTimeout(()=> startHub().catch(e=> scheduleReconnect(e)), delay);
   }
+  let usersRefreshTimer = null;
+  function scheduleUsersRefresh(delayMs){
+    if(usersRefreshTimer) clearTimeout(usersRefreshTimer);
+    usersRefreshTimer = setTimeout(()=>{
+      usersRefreshTimer = null;
+      if(!state.joinedRoom) return;
+      loadUsers();
+    }, typeof delayMs === 'number' ? delayMs : 250);
+  }
   function wireHub(c){
   c.on('getProfileInfo', u=>{ state.profile={userName:u.userName, fullName:u.fullName, avatar:u.avatar}; state.authStatus = AuthStatus.AUTHENTICATED; setLoading(false); renderProfile(); flushOutbox('profile'); });
     // Full presence snapshot after join (server push) ensures newly joined user and existing members converge
-    c.on('presenceSnapshot', list=> { if(!Array.isArray(list)) return; // Replace users list for current room only
-      const normalized = list.map(u=>({
-        userName: u.userName || u.UserName || u.username || '',
-        fullName: u.fullName || u.FullName || u.name || '',
-        avatar: u.avatar || u.Avatar || '',
-        currentRoom: u.currentRoom || u.CurrentRoom || u.room || null,
-        ...u
-      }));
-      if(state.joinedRoom){
-        state.users = normalized.filter(u=> u.currentRoom === state.joinedRoom.name);
-      } else {
-        state.users = normalized;
-      }
-      renderUsers(); });
+    c.on('presenceSnapshot', list=> {
+      if(!Array.isArray(list)) return;
+      log('debug','presence.snapshot.received',{count: list.length, room: state.joinedRoom && state.joinedRoom.name});
+      postTelemetry('presence.snapshot.received',{count: list.length, room: state.joinedRoom && state.joinedRoom.name});
+      scheduleUsersRefresh(120);
+    });
+    c.on('presenceChanged', evt => {
+      const changedUser = evt && (evt.userName || evt.UserName || evt.username) || '';
+      const present = !!(evt && (evt.isPresent ?? evt.IsPresent));
+      log('debug','presence.changed.received',{user: changedUser, isPresent: present, room: state.joinedRoom && state.joinedRoom.name});
+      postTelemetry('presence.changed.received',{user: changedUser, isPresent: present, room: state.joinedRoom && state.joinedRoom.name});
+      scheduleUsersRefresh(80);
+    });
     c.on('newMessage', m=> {
       const mineUser = state.profile && state.profile.userName;
       // Reconcile by correlationId for own messages regardless of pending ack state
       if(mineUser && m.correlationId){
         const idx = state.messages.findIndex(x=> x.isMine && x.correlationId===m.correlationId);
         if(idx>=0){
-          state.messages[idx] = {id:m.id,content:m.content,timestamp:m.timestamp,fromUserName:m.fromUserName,fromFullName:m.fromFullName,avatar:m.avatar,isMine:true, correlationId:m.correlationId, readBy: m.readBy||[]};
+          state.messages[idx] = {id:m.id,content:m.content,timestamp:m.timestamp,fromUserName:m.fromUserName,fromFullName:m.fromFullName,avatar:m.avatar,isMine:true, correlationId:m.correlationId, readBy: m.readBy||[], translationStatus: (m.translationStatus||m.TranslationStatus||'None'), sourceLanguage: (m.sourceLanguage||m.SourceLanguage||'auto'), translations: (m.translations||m.Translations||{}), translationErrorMessage: ''};
           // pendingMessages entry may have been removed on invoke ack; ensure cleanup if present
           if(state.pendingMessages[m.correlationId]) delete state.pendingMessages[m.correlationId];
           // Remove any duplicate server entry with the same id that might have been loaded via history
@@ -750,7 +1097,7 @@ if(window.__chatAppBooted){
         const byIdIdx = state.messages.findIndex(x=> x && x.id===m.id);
         if(byIdIdx>=0){
           const isMine = !!(state.profile && state.profile.userName === m.fromUserName);
-          state.messages[byIdIdx] = {id:m.id,content:m.content,timestamp:m.timestamp,fromUserName:m.fromUserName,fromFullName:m.fromFullName,avatar:m.avatar,isMine, correlationId: m.correlationId||state.messages[byIdIdx].correlationId, readBy: m.readBy||state.messages[byIdIdx].readBy||[]};
+          state.messages[byIdIdx] = {id:m.id,content:m.content,timestamp:m.timestamp,fromUserName:m.fromUserName,fromFullName:m.fromFullName,avatar:m.avatar,isMine, correlationId: m.correlationId||state.messages[byIdIdx].correlationId, readBy: m.readBy||state.messages[byIdIdx].readBy||[], translationStatus: (m.translationStatus||m.TranslationStatus||state.messages[byIdIdx].translationStatus||'None'), sourceLanguage: (m.sourceLanguage||m.SourceLanguage||state.messages[byIdIdx].sourceLanguage||'auto'), translations: (m.translations||m.Translations||state.messages[byIdIdx].translations||{}), translationErrorMessage: (state.messages[byIdIdx].translationErrorMessage||'')};
           renderMessages();
           finalizeMessageRender();
           return;
@@ -785,6 +1132,52 @@ if(window.__chatAppBooted){
         }
       } catch(_) { /* ignore */ }
     });
+
+    // Translation updates (emitted by TranslationBackgroundService)
+    c.on('translationCompleted', payload => {
+      try {
+        const id = payload && (payload.messageId || payload.MessageId);
+        const translations = (payload && (payload.translations || payload.Translations)) || {};
+        const idx = state.messages.findIndex(x=> x && x.id===id);
+        if(idx>=0){
+          const msg = state.messages[idx];
+          msg.translationStatus = 'Completed';
+          msg.translations = translations;
+          msg.translationErrorMessage = '';
+          updateMessageDom(msg) || renderMessages();
+          finalizeMessageRender();
+        }
+      } catch(_) { /* ignore */ }
+    });
+    c.on('translationFailed', payload => {
+      try {
+        const id = payload && (payload.messageId || payload.MessageId);
+        const errMsg = (payload && (payload.message || payload.error || payload.Message)) || '';
+        const idx = state.messages.findIndex(x=> x && x.id===id);
+        if(idx>=0){
+          const msg = state.messages[idx];
+          msg.translationStatus = 'Failed';
+          msg.translationErrorMessage = errMsg;
+          msg.translations = msg.translations || {};
+          updateMessageDom(msg) || renderMessages();
+          finalizeMessageRender();
+        }
+      } catch(_) { /* ignore */ }
+    });
+    c.on('translationRetrying', payload => {
+      try {
+        const id = payload && (payload.messageId || payload.MessageId);
+        const idx = state.messages.findIndex(x=> x && x.id===id);
+        if(idx>=0){
+          const msg = state.messages[idx];
+          msg.translationStatus = 'Pending';
+          msg.translationErrorMessage = '';
+          msg.translations = msg.translations || {};
+          updateMessageDom(msg) || renderMessages();
+          finalizeMessageRender();
+        }
+      } catch(_) { /* ignore */ }
+    });
     // Automatic reconnect handlers (withAutomaticReconnect is enabled on builder)
     // On successful re-connect, request a fresh user list for the current room.
     // This compensates for any missed join/leave events during the disconnected interval.
@@ -808,6 +1201,7 @@ if(window.__chatAppBooted){
           loadRooms();
         }
       } catch(_){ }
+      sendHttpPresencePing('hub.reconnected');
       applyConnectionVisual('connected');
     });
   c.onreconnecting(err => { 
@@ -850,8 +1244,10 @@ if(window.__chatAppBooted){
     renderUsers();
   });
     // Other hub-driven mutations
-    c.on('addUser', u=> upsertUser(u));
-    c.on('removeUser', u=> removeUser(u.userName));
+    c.on('addUser', u=> { scheduleUsersRefresh(120); });
+    c.on('removeUser', u=> {
+      scheduleUsersRefresh(120);
+    });
     c.on('addChatRoom', r=> upsertRoom(r));
     c.on('updateChatRoom', r=> upsertRoom(r));
     c.on('removeChatRoom', id=>{ state.rooms=state.rooms.filter(x=>x.id!==id); if(state.joinedRoom && state.joinedRoom.id===id){ state.joinedRoom=null; state.messages=[]; } renderAll(); });
@@ -859,7 +1255,23 @@ if(window.__chatAppBooted){
   }
 
   // --------------- Mutators -------------
-  function upsertRoom(r){ const e=state.rooms.find(x=>x.id===r.id); if(e){ e.name=r.name; e.admin=r.admin; } else state.rooms.push({id:r.id,name:r.name,admin:r.admin}); renderRooms(); }
+  function upsertRoom(r){
+    const normalized = {
+      id: r.id!==undefined? r.id : r.Id,
+      name: r.name!==undefined? r.name : r.Name,
+      admin: r.admin!==undefined? r.admin : r.Admin,
+      languages: r.languages!==undefined? r.languages : r.Languages
+    };
+    const e=state.rooms.find(x=>x.id===normalized.id);
+    if(e){
+      e.name=normalized.name;
+      e.admin=normalized.admin;
+      if(normalized.languages!==undefined) e.languages=normalized.languages;
+    } else {
+      state.rooms.push(normalized);
+    }
+    renderRooms();
+  }
   function upsertUser(u){
     const normalized = {
       userName: u.userName || u.UserName || u.username || '',
@@ -872,7 +1284,14 @@ if(window.__chatAppBooted){
     if(e) Object.assign(e, normalized); else state.users.push(normalized);
     renderUsers();
   }
-  function removeUser(userName){ state.users=state.users.filter(u=>u.userName!==userName); renderUsers(); }
+  function removeUser(userName){
+    if(!userName){
+      renderUsers();
+      return;
+    }
+    state.users=state.users.filter(u=>u.userName!==userName);
+    renderUsers();
+  }
   /**
    * Appends a message to local state and re-renders.
    * @param {object} m MessageViewModel-like payload
@@ -883,7 +1302,7 @@ if(window.__chatAppBooted){
     let existingIdx = -1;
     if(m && m.correlationId){ existingIdx = state.messages.findIndex(x=> x && x.correlationId===m.correlationId); }
     if(existingIdx<0 && m && m.id!==undefined){ existingIdx = state.messages.findIndex(x=> x && x.id===m.id); }
-  const rec={id:m.id,content:m.content,timestamp:m.timestamp,fromUserName:m.fromUserName,fromFullName:m.fromFullName,avatar:m.avatar,isMine, correlationId:m.correlationId, readBy: m.readBy||[]};
+  const rec={id:m.id,content:m.content,timestamp:m.timestamp,fromUserName:m.fromUserName,fromFullName:m.fromFullName,avatar:m.avatar,isMine, correlationId:m.correlationId, readBy: m.readBy||[], translationStatus: (m.translationStatus||m.TranslationStatus||'None'), sourceLanguage: (m.sourceLanguage||m.SourceLanguage||'auto'), translations: (m.translations||m.Translations||{}), translationErrorMessage: (m.translationErrorMessage||m.translationFailureMessage||m.translationError||'')};
     if(existingIdx>=0){
       state.messages[existingIdx] = rec;
       renderMessages();
@@ -938,6 +1357,7 @@ if(window.__chatAppBooted){
           els.joinedRoomTitle.textContent = state._baseRoomTitle;
         }
         loadUsers(); loadMessages(); renderRoomContext(); ensureProfileAvatar();
+        sendHttpPresencePing('room.join.success');
         postTelemetry('room.join.success',{room:roomName, durationMs: Math.round(performance.now()-startedAt), attempts:attempt});
         flushOutbox('join');
       }).catch(err=>{
@@ -968,7 +1388,8 @@ if(window.__chatAppBooted){
       state.rooms = (list||[]).map(r=>({
         id: r.id!==undefined? r.id : r.Id,
         name: r.name!==undefined? r.name : r.Name,
-        admin: r.admin!==undefined? r.admin : r.Admin
+        admin: r.admin!==undefined? r.admin : r.Admin,
+        languages: r.languages!==undefined? r.languages : r.Languages
       }));
       renderRooms();
       const stored=localStorage.getItem('lastRoom');
@@ -976,15 +1397,18 @@ if(window.__chatAppBooted){
       else if(state.rooms.length>0) joinRoom(state.rooms[0].name);
     }).catch(()=>{});
   }
-  function loadUsers(){ if(!state.joinedRoom) return; hub.invoke('GetUsers', state.joinedRoom.name).then(users=>{
+  function loadUsers(){ if(!state.joinedRoom) return; apiGet('/api/Rooms/by-name/'+encodeURIComponent(state.joinedRoom.name)+'/users').then(users=>{
     const normalized = (users||[]).map(u=>({
       userName: u.userName || u.UserName || u.username || '',
       fullName: u.fullName || u.FullName || u.name || '',
       avatar: u.avatar || u.Avatar || '',
-      currentRoom: u.currentRoom || u.CurrentRoom || u.room || null,
+      isPresent: !!(u.isPresent || u.IsPresent),
       ...u
     }));
     state.users=normalized;
+    const onlineCount = normalized.filter(u => u.isPresent).length;
+    log('debug','presence.users.refresh',{room: state.joinedRoom && state.joinedRoom.name, total: normalized.length, online: onlineCount});
+    postTelemetry('presence.users.refresh',{room: state.joinedRoom && state.joinedRoom.name, total: normalized.length, online: onlineCount});
     renderUsers();
   }).catch(err=>{
     log('warn','loadUsers.failed',{msg: err && err.message});
@@ -1000,7 +1424,7 @@ if(window.__chatAppBooted){
     apiGet('/api/Messages/Room/'+encodeURIComponent(state.joinedRoom.name)+'?take='+state.pageSize)
       .then(list=>{
         // Server returns ascending order (repository sorts ascending)
-  state.messages = list.map(m=>({id:m.id,content:m.content,timestamp:m.timestamp,fromUserName:m.fromUserName,fromFullName:m.fromFullName,avatar:m.avatar,isMine: state.profile && state.profile.userName===m.fromUserName, readBy: m.readBy||[]}));
+  state.messages = list.map(m=>({id:m.id,content:m.content,timestamp:m.timestamp,fromUserName:m.fromUserName,fromFullName:m.fromFullName,avatar:m.avatar,isMine: state.profile && state.profile.userName===m.fromUserName, readBy: m.readBy||[], translationStatus: (m.translationStatus||m.TranslationStatus||'None'), sourceLanguage: (m.sourceLanguage||m.SourceLanguage||'auto'), translations: (m.translations||m.Translations||{}), translationErrorMessage: (m.translationErrorMessage||m.translationFailureMessage||m.translationError||'')}));
         // After baseline load, reattach any locally unsent (pending/failed) messages captured for this room
         restoreUnsentForRoom(state.joinedRoom.name);
         if(state.messages.length>0){
@@ -1033,7 +1457,7 @@ if(window.__chatAppBooted){
           return;
         }
         if(!Array.isArray(list) || list.length===0){ state.canLoadMore=false; postTelemetry('messages.page.empty',{token:reqToken}); return; }
-  const mapped=list.map(m=>({id:m.id,content:m.content,timestamp:m.timestamp,fromUserName:m.fromUserName,fromFullName:m.fromFullName,avatar:m.avatar,isMine: state.profile && state.profile.userName===m.fromUserName, readBy: m.readBy||[]}));
+  const mapped=list.map(m=>({id:m.id,content:m.content,timestamp:m.timestamp,fromUserName:m.fromUserName,fromFullName:m.fromFullName,avatar:m.avatar,isMine: state.profile && state.profile.userName===m.fromUserName, readBy: m.readBy||[], translationStatus: (m.translationStatus||m.TranslationStatus||'None'), sourceLanguage: (m.sourceLanguage||m.SourceLanguage||'auto'), translations: (m.translations||m.Translations||{}), translationErrorMessage: (m.translationErrorMessage||m.translationFailureMessage||m.translationError||'')}));
         const mc=document.querySelector('.messages-container'); let prevScrollHeight = mc? mc.scrollHeight:0;
         // Prepend and adjust oldest timestamp verifying monotonicity
         const prevOldest = state.oldestLoaded;
@@ -1275,7 +1699,7 @@ if(window.__chatAppBooted){
   const timeout=setTimeout(()=>{ log('warn','auth.timeout'); setLoading(false); postTelemetry('auth.probe.timeout',{}); },6000);
     return fetch('/api/auth/me',{credentials:'include'})
       .then(r=> r.ok? r.json(): null)
-  .then(u=>{ clearTimeout(timeout); if(u&&u.userName){ state.profile={userName:u.userName, fullName:u.fullName, avatar:u.avatar}; state.authStatus = AuthStatus.AUTHENTICATED; postTelemetry('auth.probe.success',{durationMs: Math.round(performance.now()-startedAt)}); startHub(); flushOutbox('authProbe'); state.authGraceUntil=null; } else { setLoading(false); state.authStatus = AuthStatus.UNAUTHENTICATED; postTelemetry('auth.probe.unauth',{durationMs: Math.round(performance.now()-startedAt)}); /* allow UI to show unauth after grace */ } renderProfile(); })
+  .then(u=>{ clearTimeout(timeout); if(u&&u.userName){ state.profile={userName:u.userName, fullName:u.fullName, avatar:u.avatar}; state.authStatus = AuthStatus.AUTHENTICATED; postTelemetry('auth.probe.success',{durationMs: Math.round(performance.now()-startedAt)}); sendHttpPresencePing('auth.probe.success'); startHub(); flushOutbox('authProbe'); state.authGraceUntil=null; } else { setLoading(false); state.authStatus = AuthStatus.UNAUTHENTICATED; postTelemetry('auth.probe.unauth',{durationMs: Math.round(performance.now()-startedAt)}); /* allow UI to show unauth after grace */ } renderProfile(); })
       .catch(err=>{ clearTimeout(timeout); setLoading(false); const msg=(err&&err.message)||''; // classify transient errors (networkish or recoverable)
         const transient=/timeout|network|fetch|offline|temporar(?:y|ily)?|dns|refused/i.test(msg); if(transient){ // extend grace and retry once after short delay
         postTelemetry('auth.probe.errorTransient',{durationMs: Math.round(performance.now()-startedAt)});
@@ -1287,7 +1711,7 @@ if(window.__chatAppBooted){
   }
 
   // --------------- UI Wiring ------------
-  function wireUi(){ if(els.messageInput) els.messageInput.addEventListener('keypress',e=>{ if(e.key==='Enter') sendMessage(); }); const sendBtn=document.getElementById('btn-send-message'); if(sendBtn) sendBtn.addEventListener('click',e=>{ e.preventDefault(); sendMessage(); }); if(els.filterInput) els.filterInput.addEventListener('input',()=>{ state.filter=els.filterInput.value; renderUsers(); }); if(els.btnLogout) els.btnLogout.addEventListener('click',()=>{ fetch('/api/auth/logout',{method:'POST',credentials:'include'})
+  function wireUi(){ if(els.messageInput) els.messageInput.addEventListener('keypress',e=>{ if(e.key==='Enter') sendMessage(); }); const sendBtn=document.getElementById('btn-send-message'); if(sendBtn) sendBtn.addEventListener('click',e=>{ e.preventDefault(); sendMessage(); }); if(els.filterInput) els.filterInput.addEventListener('input',()=>{ state.filter=els.filterInput.value; renderUsers(); }); if(els.btnLogout) els.btnLogout.addEventListener('click',()=>{ sendHttpPresenceLeave(); fetch('/api/auth/logout',{method:'POST',credentials:'include'})
     .catch(()=>{/* ignore */})
     .finally(()=>{ try { if(hub && hub.stop) hub.stop(); } catch(_) {} logoutCleanup(); window.location.replace('/login?ReturnUrl=/chat'); }); }); }
 
@@ -1313,6 +1737,7 @@ if(window.__chatAppBooted){
             state.profile = { userName:u.userName, fullName:u.fullName, avatar:u.avatar };
             state.authStatus = AuthStatus.AUTHENTICATED;
             renderProfile();
+            sendHttpPresencePing('auth.retry.success');
             startHub();
             flushOutbox('authRetry');
             if(state.loading) setLoading(false);
@@ -1467,10 +1892,16 @@ if(window.__chatAppBooted){
       }
     } catch(_){ /* swallow */ }
   }, 1500);
+  // Refresh room assigned-users presence every 5s to keep list consistent across clients.
+  setInterval(()=>{
+    try {
+      if(state.joinedRoom){ loadUsers(); }
+    } catch(_) { /* ignore */ }
+  }, 5000);
   // Flush when tab becomes visible again (covers background tab timing misses)
   document.addEventListener('visibilitychange', ()=>{ if(!document.hidden){ flushOutbox('visibility'); } });
-  document.addEventListener('visibilitychange', ()=>{ if(!document.hidden){ maybeMarkRead(); scheduleMarkVisibleRead(); ensureConnected(); } });
-  window.addEventListener('focus', ()=>{ maybeMarkRead(); scheduleMarkVisibleRead(); ensureConnected(); });
+  document.addEventListener('visibilitychange', ()=>{ if(!document.hidden){ maybeMarkRead(); scheduleMarkVisibleRead(); ensureConnected(); sendHttpPresencePing('visibility.visible'); } });
+  window.addEventListener('focus', ()=>{ maybeMarkRead(); scheduleMarkVisibleRead(); ensureConnected(); sendHttpPresencePing('window.focus'); });
   document.addEventListener('DOMContentLoaded',()=>{ 
     cacheDom(); 
     // No offline banner popup - connection state is shown via header color only
@@ -1481,6 +1912,7 @@ if(window.__chatAppBooted){
     startConnectionStateLoop();
     startHealthAndHeartbeatPolling();
     installOfflineHandlers();
+    window.addEventListener('pagehide', ()=>{ sendHttpPresenceLeave(); });
     // Capture initial title for blinking restoration
     initTitleBlink();
   });
@@ -1496,7 +1928,7 @@ if(window.__chatAppBooted){
       } else {
         postTelemetry('net.online',{});
         // After coming online try to flush any queued messages (slight delay so hub reconnect can settle)
-        setTimeout(()=>{ ensureConnected(); if(state.outbox.length) flushOutbox('online'); }, 150);
+        setTimeout(()=>{ ensureConnected(); sendHttpPresencePing('network.online'); if(state.outbox.length) flushOutbox('online'); }, 150);
       }
       applyConnectionVisual(computeConnectionState());
     }

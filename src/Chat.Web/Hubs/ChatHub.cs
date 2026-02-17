@@ -153,18 +153,19 @@ namespace Chat.Web.Hubs
                 user.CurrentRoom = roomName;
                 
                 // Update Redis presence (for cross-instance snapshot)
-                await _presenceTracker.SetUserRoomAsync(IdentityName, user.FullName, user.Avatar, roomName);
+                await _presenceTracker.SetUserRoomAsync(user.UserName, user.FullName, user.Avatar, roomName);
                 
                 // Broadcast to the entire group (including the caller)
                 await Clients.Group(roomName).SendAsync("addUser", user);
                 
-                // Send full presence snapshot to caller (get from Redis for cross-instance consistency)
+                // Send full presence snapshot to the entire room (including caller)
+                // to self-heal any missed add/remove events during reconnect/refresh races.
                 var allUsers = await _presenceTracker.GetAllUsersAsync();
                 var presenceSnapshot = allUsers
                     .Where(u => u.CurrentRoom == roomName)
                     .Select(u => new { u.UserName, u.FullName, u.Avatar, u.CurrentRoom })
                     .ToList();
-                await Clients.Caller.SendAsync("presenceSnapshot", presenceSnapshot);
+                await Clients.Group(roomName).SendAsync("presenceSnapshot", presenceSnapshot);
                 
                 _logger.LogInformation("User {User} joined room {Room}", IdentityName, roomName);
                 _metrics.IncRoomsJoined();
@@ -231,8 +232,9 @@ namespace Chat.Web.Hubs
                 Context.Items["UserProfile"] = userViewModel;
                 Context.Items["CurrentRoom"] = string.Empty;
                 
-                // Increment connection count
-                _UserConnectionCounts.AddOrUpdate(IdentityName, 1, (key, oldValue) => oldValue + 1);
+                // Increment connection count (MUST use profile userName to match presence storage key)
+                var connectionUserKey = userViewModel.UserName;
+                _UserConnectionCounts.AddOrUpdate(connectionUserKey, 1, (key, oldValue) => oldValue + 1);
                 
                 // Update Redis presence (for cross-instance snapshot API)
                 await _presenceTracker.SetUserRoomAsync(
@@ -240,11 +242,14 @@ namespace Chat.Web.Hubs
                     userViewModel.FullName,
                     userViewModel.Avatar,
                     string.Empty);
+                await _presenceTracker.UpdateHeartbeatAsync(connectionUserKey);
                 
-                _logger.LogInformation("User connected {User}", IdentityName);
+                _logger.LogInformation("User connected {User}", connectionUserKey);
                 _metrics.IncActiveConnections();
-                _metrics.UserAvailable(IdentityName);
+                _metrics.UserAvailable(connectionUserKey);
                 await Clients.Caller.SendAsync("getProfileInfo", userViewModel);
+                await Clients.All.SendAsync("presenceChanged", new { userName = connectionUserKey, isPresent = true });
+                _logger.LogDebug("PresenceChanged broadcast published: user={User} isPresent=true", connectionUserKey);
 
                 // Auto-join default room logic
                 try
@@ -303,17 +308,18 @@ namespace Chat.Web.Hubs
                 var currentRoom = Context.Items["CurrentRoom"] as string;
                 
                 int remainingConnections = 0;
+                var connectionUserKey = user?.UserName ?? IdentityName;
                 // Decrement connection count atomically
-                if (_UserConnectionCounts.TryGetValue(IdentityName, out var cnt))
+                if (_UserConnectionCounts.TryGetValue(connectionUserKey, out var cnt))
                 {
                     cnt = Math.Max(0, cnt - 1);
                     if (cnt == 0)
                     {
-                        _UserConnectionCounts.TryRemove(IdentityName, out _);
+                        _UserConnectionCounts.TryRemove(connectionUserKey, out _);
                     }
                     else
                     {
-                        _UserConnectionCounts[IdentityName] = cnt;
+                        _UserConnectionCounts[connectionUserKey] = cnt;
                     }
                     remainingConnections = cnt;
                 }
@@ -335,15 +341,29 @@ namespace Chat.Web.Hubs
                     }
                     
                     // Remove from Redis
-                    await _presenceTracker.RemoveUserAsync(IdentityName);
+                    await _presenceTracker.RemoveUserAsync(connectionUserKey);
+
+                    // Broadcast authoritative snapshot after disconnect removal
+                    // to self-heal any missed remove events on connected clients.
+                    if (!string.IsNullOrWhiteSpace(currentRoom))
+                    {
+                        var allUsers = await _presenceTracker.GetAllUsersAsync();
+                        var presenceSnapshot = allUsers
+                            .Where(u => u.CurrentRoom == currentRoom)
+                            .Select(u => new { u.UserName, u.FullName, u.Avatar, u.CurrentRoom })
+                            .ToList();
+                        await Clients.Group(currentRoom).SendAsync("presenceSnapshot", presenceSnapshot);
+                    }
                     
-                    _logger.LogInformation("User disconnected {User}", IdentityName);
+                    _logger.LogInformation("User disconnected {User}", connectionUserKey);
                     _metrics.DecActiveConnections();
-                    _metrics.UserUnavailable(IdentityName);
+                    _metrics.UserUnavailable(connectionUserKey);
+                    await Clients.All.SendAsync("presenceChanged", new { userName = connectionUserKey, isPresent = false });
+                    _logger.LogDebug("PresenceChanged broadcast published: user={User} isPresent=false", connectionUserKey);
                 }
                 else
                 {
-                    _logger.LogDebug("User {User} has {Count} remaining connections; presence retained", IdentityName, remainingConnections);
+                    _logger.LogDebug("User {User} has {Count} remaining connections; presence retained", connectionUserKey, remainingConnections);
                 }
             }
             catch (Exception ex)
@@ -428,11 +448,13 @@ namespace Chat.Web.Hubs
             }
             
             // Enqueue translation if enabled
+            var sourceLanguageForUi = "auto";
             if (_translationOptions.Enabled)
             {
                 try
                 {
                     var sourceLanguage = Chat.Web.Utilities.LanguageCode.NormalizeToLanguageCode(domainUser?.PreferredLanguage) ?? "auto";
+                    sourceLanguageForUi = sourceLanguage;
                     var targets = Chat.Web.Utilities.LanguageCode.BuildTargetLanguages(room.Languages, sourceLanguage);
 
                     var job = new Models.MessageTranslationJob
@@ -482,6 +504,7 @@ namespace Chat.Web.Hubs
                 CorrelationId = correlationId,
                 ReadBy = (msg.ReadBy != null ? msg.ReadBy.ToArray() : Array.Empty<string>()),
                 TranslationStatus = msg.TranslationStatus.ToString(),
+                SourceLanguage = sourceLanguageForUi,
                 Translations = msg.Translations ?? new System.Collections.Generic.Dictionary<string, string>(),
                 IsTranslated = msg.IsTranslated
             };
@@ -618,14 +641,26 @@ namespace Chat.Web.Hubs
         public async Task<object> Heartbeat()
         {
             using var activity = Tracing.ActivitySource.StartActivity("ChatHub.Heartbeat");
-            activity?.SetTag("chat.user", IdentityName);
+            var user = Context.Items["UserProfile"] as UserViewModel;
+            var currentRoom = Context.Items["CurrentRoom"] as string;
+            var connectionUserKey = user?.UserName ?? IdentityName;
+            var connectionFullName = user?.FullName ?? connectionUserKey;
+            var connectionAvatar = user?.Avatar;
+            activity?.SetTag("chat.user", connectionUserKey);
+            activity?.SetTag("chat.room", currentRoom ?? string.Empty);
             
             try
             {
-                // Update last activity timestamp in Redis (2-minute TTL)
-                await _presenceTracker.UpdateHeartbeatAsync(IdentityName);
+                // Refresh presence and heartbeat using canonical profile username.
+                // This self-heals entries after Redis reconnect/failover without requiring a client reconnect.
+                await _presenceTracker.SetUserRoomAsync(
+                    connectionUserKey,
+                    connectionFullName,
+                    connectionAvatar,
+                    currentRoom ?? string.Empty);
+                await _presenceTracker.UpdateHeartbeatAsync(connectionUserKey);
                 
-                _logger.LogDebug("Heartbeat from user {User}", IdentityName);
+                _logger.LogDebug("Heartbeat from user {User} room={Room}", connectionUserKey, currentRoom ?? string.Empty);
                 
                 // Return health status with heartbeat acknowledgment
                 var healthStatus = await GetHealthStatus();
@@ -639,7 +674,7 @@ namespace Chat.Web.Hubs
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Heartbeat failed for user {User}", IdentityName);
+                _logger.LogWarning(ex, "Heartbeat failed for user {User}", connectionUserKey);
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                 
                 return new
@@ -689,9 +724,9 @@ namespace Chat.Web.Hubs
                 return;
             }
             
-            if (message.TranslationStatus != TranslationStatus.Failed)
+            if (message.TranslationStatus is TranslationStatus.Pending or TranslationStatus.InProgress)
             {
-                await Clients.Caller.SendAsync("onError", "Translation is not in failed state");
+                await Clients.Caller.SendAsync("onError", "Translation is already in progress");
                 return;
             }
             
@@ -721,7 +756,7 @@ namespace Chat.Web.Hubs
                 message.Id,
                 new MessageTranslationUpdate(
                     Status: TranslationStatus.Pending,
-                    Translations: new Dictionary<string, string>(),
+                    Translations: message.Translations ?? new Dictionary<string, string>(),
                     JobId: job.JobId));
             
             // Broadcast status update to room

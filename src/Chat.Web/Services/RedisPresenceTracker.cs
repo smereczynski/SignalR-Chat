@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Chat.Web.Utilities;
 using Chat.Web.ViewModels;
 using Microsoft.Extensions.Logging;
 using StackExchange.Redis;
@@ -48,11 +49,15 @@ namespace Chat.Web.Services
                 var json = JsonSerializer.Serialize(user);
                 await db.HashSetAsync(PresenceHashKey, userName, json).ConfigureAwait(false);
                 await db.KeyExpireAsync(PresenceHashKey, TimeSpan.FromSeconds(PresenceTtlSeconds)).ConfigureAwait(false);
-                _logger.LogDebug("Redis: User {User} set to room {Room}", userName, roomName);
+                var sanitizedUserName = LogSanitizer.Sanitize(userName);
+                var sanitizedRoomName = LogSanitizer.Sanitize(roomName);
+                _logger.LogDebug("Redis: User {User} set to room {Room}", sanitizedUserName, sanitizedRoomName);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to set user room in Redis: {User} -> {Room}", userName, roomName);
+                var sanitizedUserName = LogSanitizer.Sanitize(userName);
+                var sanitizedRoomName = LogSanitizer.Sanitize(roomName);
+                _logger.LogError(ex, "Failed to set user room in Redis: {User} -> {Room}", sanitizedUserName, sanitizedRoomName);
             }
         }
 
@@ -73,7 +78,8 @@ namespace Chat.Web.Services
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to get user from Redis: {User}", userName);
+                var sanitizedUserName = LogSanitizer.Sanitize(userName);
+                _logger.LogError(ex, "Failed to get user from Redis: {User}", sanitizedUserName);
                 return null;
             }
         }
@@ -87,11 +93,13 @@ namespace Chat.Web.Services
             {
                 var db = _redis.GetDatabase();
                 await db.HashDeleteAsync(PresenceHashKey, userName).ConfigureAwait(false);
-                _logger.LogDebug("Redis: User {User} removed", userName);
+                var sanitizedUserName = LogSanitizer.Sanitize(userName);
+                _logger.LogDebug("Redis: User {User} removed", sanitizedUserName);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to remove user from Redis: {User}", userName);
+                var sanitizedUserName = LogSanitizer.Sanitize(userName);
+                _logger.LogError(ex, "Failed to remove user from Redis: {User}", sanitizedUserName);
             }
         }
 
@@ -145,11 +153,13 @@ namespace Chat.Web.Services
                 // Set heartbeat key with 2-minute TTL (automatically expires if no updates)
                 await db.StringSetAsync(key, timestamp, TimeSpan.FromSeconds(HeartbeatTtlSeconds)).ConfigureAwait(false);
                 
-                _logger.LogTrace("Heartbeat updated for user {User}", userName);
+                var sanitizedUserName = LogSanitizer.Sanitize(userName);
+                _logger.LogTrace("Heartbeat updated for user {User}", sanitizedUserName);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to update heartbeat in Redis: {User}", userName);
+                var sanitizedUserName = LogSanitizer.Sanitize(userName);
+                _logger.LogError(ex, "Failed to update heartbeat in Redis: {User}", sanitizedUserName);
             }
         }
 

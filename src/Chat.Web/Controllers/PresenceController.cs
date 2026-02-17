@@ -1,8 +1,14 @@
-using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
-using Chat.Web.Services;
+using System;
 using System.Linq;
 using System.Threading.Tasks;
+using Chat.Web.Repositories;
+using Chat.Web.Services;
+using Chat.Web.Utilities;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
+
+#nullable enable
 
 namespace Chat.Web.Controllers
 {
@@ -11,12 +17,21 @@ namespace Chat.Web.Controllers
     [Authorize]
     public class PresenceController : ControllerBase
     {
+        private readonly IUsersRepository _users;
         private readonly IPresenceTracker _presenceTracker;
+        private readonly ILogger<PresenceController> _logger;
 
-        public PresenceController(IPresenceTracker presenceTracker)
+        public PresenceController(
+            IUsersRepository users,
+            IPresenceTracker presenceTracker,
+            ILogger<PresenceController> logger)
         {
+            _users = users;
             _presenceTracker = presenceTracker;
+            _logger = logger;
         }
+
+        public record PresencePingDto(string? RoomName);
 
         /// <summary>
         /// Returns a snapshot of current room presence: roomName -> user count and user list.
@@ -36,6 +51,70 @@ namespace Chat.Web.Controllers
                 .OrderBy(x => x.room)
                 .ToList();
             return Ok(snapshot);
+        }
+
+        [HttpPost("ping")]
+        public async Task<IActionResult> Ping([FromBody] PresencePingDto? dto)
+        {
+            var identityName = User?.Identity?.Name;
+            if (string.IsNullOrWhiteSpace(identityName))
+            {
+                return Unauthorized();
+            }
+
+            var profile = await _users.GetByUserNameAsync(identityName).ConfigureAwait(false);
+            if (profile == null || !profile.Enabled)
+            {
+                return Forbid();
+            }
+
+            var requestedRoom = dto?.RoomName?.Trim();
+            var allowedRooms = profile.FixedRooms ?? [];
+            var resolvedRoom = string.IsNullOrWhiteSpace(requestedRoom)
+                ? string.Empty
+                : (allowedRooms.Any(r => string.Equals(r, requestedRoom, StringComparison.OrdinalIgnoreCase))
+                    ? requestedRoom
+                    : string.Empty);
+
+            var canonicalUserName = string.IsNullOrWhiteSpace(profile.UserName)
+                ? identityName
+                : profile.UserName;
+
+            await _presenceTracker.SetUserRoomAsync(
+                canonicalUserName,
+                string.IsNullOrWhiteSpace(profile.FullName) ? canonicalUserName : profile.FullName,
+                profile.Avatar ?? string.Empty,
+                resolvedRoom).ConfigureAwait(false);
+
+            await _presenceTracker.UpdateHeartbeatAsync(canonicalUserName).ConfigureAwait(false);
+
+            _logger.LogDebug(
+                "Presence ping accepted: user={User} room={Room}",
+                LogSanitizer.Sanitize(canonicalUserName),
+                LogSanitizer.Sanitize(resolvedRoom));
+
+            return Accepted();
+        }
+
+        [HttpPost("leave")]
+        public async Task<IActionResult> Leave()
+        {
+            var identityName = User?.Identity?.Name;
+            if (string.IsNullOrWhiteSpace(identityName))
+            {
+                return Unauthorized();
+            }
+
+            var profile = await _users.GetByUserNameAsync(identityName).ConfigureAwait(false);
+            var canonicalUserName = string.IsNullOrWhiteSpace(profile?.UserName) ? identityName : profile.UserName;
+
+            await _presenceTracker.RemoveUserAsync(canonicalUserName).ConfigureAwait(false);
+
+            _logger.LogDebug(
+                "Presence leave accepted: user={User}",
+                LogSanitizer.Sanitize(canonicalUserName));
+
+            return Accepted();
         }
     }
 }
