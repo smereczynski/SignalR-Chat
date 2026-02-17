@@ -1,0 +1,291 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
+using Chat.Web.Models;
+using Chat.Web.Repositories;
+using Chat.Web.Utilities;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
+
+namespace Chat.Web.Controllers
+{
+    [Authorize(Policy = "RequireAdminRole")]
+    [Route("api/[controller]")]
+    [ApiController]
+    public class DispatchCentersController : ControllerBase
+    {
+        private readonly IDispatchCentersRepository _dispatchCenters;
+        private readonly IUsersRepository _users;
+        private readonly ILogger<DispatchCentersController> _logger;
+
+        public DispatchCentersController(
+            IDispatchCentersRepository dispatchCenters,
+            IUsersRepository users,
+            ILogger<DispatchCentersController> logger)
+        {
+            _dispatchCenters = dispatchCenters;
+            _users = users;
+            _logger = logger;
+        }
+
+        public class UpsertDispatchCenterDto
+        {
+            public string Id { get; set; }
+            public string Name { get; set; }
+            public string Country { get; set; }
+            public bool IfMain { get; set; }
+            public List<string> CorrespondingDispatchCenterIds { get; set; } = new();
+        }
+
+        public class ManageUsersDto
+        {
+            public List<string> UserNames { get; set; } = new();
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> GetAll()
+        {
+            var all = (await _dispatchCenters.GetAllAsync().ConfigureAwait(false))
+                .OrderBy(d => d.Name)
+                .ToList();
+            return Ok(all);
+        }
+
+        [HttpGet("{id}")]
+        public async Task<IActionResult> GetById(string id)
+        {
+            if (string.IsNullOrWhiteSpace(id)) return BadRequest("id is required");
+
+            var dispatchCenter = await _dispatchCenters.GetByIdAsync(id).ConfigureAwait(false);
+            if (dispatchCenter == null) return NotFound();
+
+            return Ok(dispatchCenter);
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> Create([FromBody] UpsertDispatchCenterDto dto)
+        {
+            if (dto == null) return BadRequest("request body is required");
+
+            var id = string.IsNullOrWhiteSpace(dto.Id) ? Guid.NewGuid().ToString() : dto.Id.Trim();
+            var name = dto.Name?.Trim();
+            var country = dto.Country?.Trim();
+
+            if (string.IsNullOrWhiteSpace(name)) return BadRequest("name is required");
+            if (string.IsNullOrWhiteSpace(country)) return BadRequest("country is required");
+
+            var existingByName = await _dispatchCenters.GetByNameAsync(name).ConfigureAwait(false);
+            if (existingByName != null)
+            {
+                return Conflict("dispatch center with the same name already exists");
+            }
+
+            var validationError = await ValidateCorrespondingIdsAsync(id, dto.CorrespondingDispatchCenterIds).ConfigureAwait(false);
+            if (validationError != null) return BadRequest(validationError);
+
+            var entity = new DispatchCenter
+            {
+                Id = id,
+                Name = name,
+                Country = country,
+                IfMain = dto.IfMain,
+                CorrespondingDispatchCenterIds = NormalizeDistinct(dto.CorrespondingDispatchCenterIds),
+                Users = new List<string>()
+            };
+
+            await _dispatchCenters.UpsertAsync(entity).ConfigureAwait(false);
+
+            _logger.LogInformation(
+                "Dispatch center created: id={DispatchCenterId}, name={Name}",
+                LogSanitizer.Sanitize(entity.Id),
+                LogSanitizer.Sanitize(entity.Name));
+
+            return Created($"/api/DispatchCenters/{entity.Id}", entity);
+        }
+
+        [HttpPut("{id}")]
+        public async Task<IActionResult> Update(string id, [FromBody] UpsertDispatchCenterDto dto)
+        {
+            if (string.IsNullOrWhiteSpace(id)) return BadRequest("id is required");
+            if (dto == null) return BadRequest("request body is required");
+
+            var current = await _dispatchCenters.GetByIdAsync(id).ConfigureAwait(false);
+            if (current == null) return NotFound();
+
+            var name = dto.Name?.Trim();
+            var country = dto.Country?.Trim();
+
+            if (string.IsNullOrWhiteSpace(name)) return BadRequest("name is required");
+            if (string.IsNullOrWhiteSpace(country)) return BadRequest("country is required");
+
+            var existingByName = await _dispatchCenters.GetByNameAsync(name).ConfigureAwait(false);
+            if (existingByName != null && !string.Equals(existingByName.Id, id, StringComparison.OrdinalIgnoreCase))
+            {
+                return Conflict("dispatch center with the same name already exists");
+            }
+
+            var validationError = await ValidateCorrespondingIdsAsync(id, dto.CorrespondingDispatchCenterIds).ConfigureAwait(false);
+            if (validationError != null) return BadRequest(validationError);
+
+            current.Name = name;
+            current.Country = country;
+            current.IfMain = dto.IfMain;
+            current.CorrespondingDispatchCenterIds = NormalizeDistinct(dto.CorrespondingDispatchCenterIds);
+
+            await _dispatchCenters.UpsertAsync(current).ConfigureAwait(false);
+
+            _logger.LogInformation(
+                "Dispatch center updated: id={DispatchCenterId}, name={Name}",
+                LogSanitizer.Sanitize(current.Id),
+                LogSanitizer.Sanitize(current.Name));
+
+            return Ok(current);
+        }
+
+        [HttpDelete("{id}")]
+        public async Task<IActionResult> Delete(string id)
+        {
+            if (string.IsNullOrWhiteSpace(id)) return BadRequest("id is required");
+
+            var current = await _dispatchCenters.GetByIdAsync(id).ConfigureAwait(false);
+            if (current == null) return NotFound();
+
+            var users = await _users.GetAllAsync().ConfigureAwait(false);
+            foreach (var user in users)
+            {
+                var set = new HashSet<string>(user.DispatchCenterIds ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
+                if (!set.Remove(id)) continue;
+
+                user.DispatchCenterIds = set.ToList();
+                await _users.UpsertAsync(user).ConfigureAwait(false);
+            }
+
+            var allDispatchCenters = await _dispatchCenters.GetAllAsync().ConfigureAwait(false);
+            foreach (var dc in allDispatchCenters)
+            {
+                if (string.Equals(dc.Id, id, StringComparison.OrdinalIgnoreCase)) continue;
+
+                var set = new HashSet<string>(dc.CorrespondingDispatchCenterIds ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
+                if (!set.Remove(id)) continue;
+
+                dc.CorrespondingDispatchCenterIds = set.ToList();
+                await _dispatchCenters.UpsertAsync(dc).ConfigureAwait(false);
+            }
+
+            await _dispatchCenters.DeleteAsync(id).ConfigureAwait(false);
+
+            _logger.LogInformation("Dispatch center deleted: id={DispatchCenterId}", LogSanitizer.Sanitize(id));
+
+            return NoContent();
+        }
+
+        [HttpPost("{id}/users/assign")]
+        public async Task<IActionResult> AssignUsers(string id, [FromBody] ManageUsersDto dto)
+        {
+            if (string.IsNullOrWhiteSpace(id)) return BadRequest("id is required");
+            if (dto == null) return BadRequest("request body is required");
+
+            var dispatchCenter = await _dispatchCenters.GetByIdAsync(id).ConfigureAwait(false);
+            if (dispatchCenter == null) return NotFound();
+
+            var targetUsers = NormalizeDistinct(dto.UserNames);
+            foreach (var userName in targetUsers)
+            {
+                var user = await _users.GetByUserNameAsync(userName).ConfigureAwait(false);
+                if (user == null)
+                {
+                    return BadRequest($"user not found: {userName}");
+                }
+
+                var set = new HashSet<string>(user.DispatchCenterIds ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
+                if (set.Add(id))
+                {
+                    user.DispatchCenterIds = set.ToList();
+                    await _users.UpsertAsync(user).ConfigureAwait(false);
+                }
+
+                await _dispatchCenters.AssignUserAsync(id, userName).ConfigureAwait(false);
+            }
+
+            return Ok(await _dispatchCenters.GetByIdAsync(id).ConfigureAwait(false));
+        }
+
+        [HttpPost("{id}/users/unassign")]
+        public async Task<IActionResult> UnassignUsers(string id, [FromBody] ManageUsersDto dto)
+        {
+            if (string.IsNullOrWhiteSpace(id)) return BadRequest("id is required");
+            if (dto == null) return BadRequest("request body is required");
+
+            var dispatchCenter = await _dispatchCenters.GetByIdAsync(id).ConfigureAwait(false);
+            if (dispatchCenter == null) return NotFound();
+
+            var targetUsers = NormalizeDistinct(dto.UserNames);
+            foreach (var userName in targetUsers)
+            {
+                var user = await _users.GetByUserNameAsync(userName).ConfigureAwait(false);
+                if (user != null)
+                {
+                    var set = new HashSet<string>(user.DispatchCenterIds ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
+                    if (set.Remove(id))
+                    {
+                        user.DispatchCenterIds = set.ToList();
+                        await _users.UpsertAsync(user).ConfigureAwait(false);
+                    }
+                }
+
+                await _dispatchCenters.UnassignUserAsync(id, userName).ConfigureAwait(false);
+            }
+
+            return Ok(await _dispatchCenters.GetByIdAsync(id).ConfigureAwait(false));
+        }
+
+        [HttpPut("{id}/corresponding")]
+        public async Task<IActionResult> ReplaceCorresponding(string id, [FromBody] List<string> correspondingIds)
+        {
+            if (string.IsNullOrWhiteSpace(id)) return BadRequest("id is required");
+
+            var dispatchCenter = await _dispatchCenters.GetByIdAsync(id).ConfigureAwait(false);
+            if (dispatchCenter == null) return NotFound();
+
+            var validationError = await ValidateCorrespondingIdsAsync(id, correspondingIds).ConfigureAwait(false);
+            if (validationError != null) return BadRequest(validationError);
+
+            dispatchCenter.CorrespondingDispatchCenterIds = NormalizeDistinct(correspondingIds);
+            await _dispatchCenters.UpsertAsync(dispatchCenter).ConfigureAwait(false);
+
+            return Ok(dispatchCenter);
+        }
+
+        private async Task<string> ValidateCorrespondingIdsAsync(string dispatchCenterId, IEnumerable<string> correspondingIds)
+        {
+            var normalized = NormalizeDistinct(correspondingIds);
+
+            if (normalized.Any(x => string.Equals(x, dispatchCenterId, StringComparison.OrdinalIgnoreCase)))
+            {
+                return "self-reference is not allowed in correspondingDispatchCenterIds";
+            }
+
+            foreach (var id in normalized)
+            {
+                var existing = await _dispatchCenters.GetByIdAsync(id).ConfigureAwait(false);
+                if (existing == null)
+                {
+                    return $"invalid corresponding dispatch center id: {id}";
+                }
+            }
+
+            return null;
+        }
+
+        private static List<string> NormalizeDistinct(IEnumerable<string> values)
+        {
+            return (values ?? Enumerable.Empty<string>())
+                .Where(v => !string.IsNullOrWhiteSpace(v))
+                .Select(v => v.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+    }
+}

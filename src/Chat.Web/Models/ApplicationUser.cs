@@ -70,6 +70,11 @@ namespace Chat.Web.Models
         public ICollection<string> FixedRooms { get; set; } = new List<string>();
 
         /// <summary>
+        /// List of dispatch center IDs this user belongs to.
+        /// </summary>
+        public ICollection<string> DispatchCenterIds { get; set; } = new List<string>();
+
+        /// <summary>
         /// Preferred starting room. If user has more than one FixedRoom this selects which to auto-join.
         /// If null/empty and only one FixedRoom exists that one is auto-selected; otherwise first FixedRoom alphabetically.
         /// </summary>
