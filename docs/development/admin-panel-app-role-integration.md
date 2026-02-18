@@ -88,8 +88,11 @@ User without Admin.ReadWrite role
 ### Dispatch Centers Status (Issue #163)
 
 - Backend API is implemented at `/api/DispatchCenters/*` (admin-only): CRUD, corresponding center linkage, user assignment/unassignment.
-- Dispatch Center admin UI pages are planned separately and are not yet available in `/Admin/*`.
-- Dispatch Centers are not auto-seeded during deployment/startup; create them explicitly via admin/API flows.
+- Admin UI is implemented under `/Admin/DispatchCenters/*`:
+    - list/index, create, edit, and user-assignment pages,
+    - related dispatch centers are shown as `Name (Country)` in the table (not raw IDs).
+- Business rule enforced on create: only one **Main** dispatch office is allowed per country.
+- Dispatch centers are not auto-seeded during deployment/startup; create them explicitly via admin/API flows.
 
 ---
 

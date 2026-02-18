@@ -388,7 +388,8 @@ graph TD
 
 ## See Also
 
-- `Dispatch Centers` backend API: `/api/DispatchCenters` (admin-only, organizational structure management)
+- `Dispatch Offices` admin feature: `/Admin/DispatchCenters` + `/api/DispatchCenters` (admin-only organizational structure management)
+- Create validation enforces one `ifMain=true` dispatch office per country
 - [Data Model](data-model.md) - Cosmos DB schema and Redis keys
 - [Security Architecture](security.md) - Detailed security design
 - [Architecture Decisions (ADRs)](decisions/) - Key design decisions

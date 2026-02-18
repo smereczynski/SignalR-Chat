@@ -198,7 +198,7 @@ See [Local Setup Guide](../development/local-setup.md#full-setup-azure-mode) for
 
 ### How do I add a dispatch center?
 
-Use the admin-only Dispatch Centers API (preferred) rather than direct manual inserts:
+Use the admin UI at `/Admin/DispatchCenters` (preferred) or the admin-only Dispatch Centers API:
 
 ```http
 POST /api/DispatchCenters
@@ -215,7 +215,15 @@ Content-Type: application/json
 
 Notes:
 - Dispatch centers are not auto-seeded during deployment.
-- API validates no self-reference, no duplicate references, and existing corresponding IDs.
+- API/UI validate no self-reference, no duplicate references, and existing corresponding IDs.
+- Business rule: only one main dispatch center (`ifMain=true`) is allowed per country.
+
+### Why is creating a second main dispatch center for the same country rejected?
+
+This is enforced by design: one country can have only one main dispatch center.
+
+- Applies in both admin create UI and `POST /api/DispatchCenters`.
+- Country matching is case-insensitive (for example, `PL` and `pl` are treated the same country).
 
 ---
 
