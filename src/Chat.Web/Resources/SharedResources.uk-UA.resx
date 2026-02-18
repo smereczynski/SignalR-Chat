@@ -276,4 +276,49 @@
   <data name="UserNameAndCodeRequired" xml:space="preserve">
     <value>Ім'я користувача і код обов'язкові</value>
   </data>
+  <data name="DispatchCenters" xml:space="preserve">
+    <value>Диспетчерські пункти</value>
+  </data>
+  <data name="ManageDispatchCentersAndAssignments" xml:space="preserve">
+    <value>Керуйте диспетчерськими пунктами та призначеннями.</value>
+  </data>
+  <data name="ManageDispatchCenters" xml:space="preserve">
+    <value>Керувати диспетчерськими пунктами</value>
+  </data>
+  <data name="CreateDispatchCenter" xml:space="preserve">
+    <value>Створити диспетчерський пункт</value>
+  </data>
+  <data name="Country" xml:space="preserve">
+    <value>Країна</value>
+  </data>
+  <data name="Main" xml:space="preserve">
+    <value>Головний</value>
+  </data>
+  <data name="CorrespondingDispatchCenters" xml:space="preserve">
+    <value>Пов’язані диспетчерські пункти</value>
+  </data>
+  <data name="AssignedUsers" xml:space="preserve">
+    <value>Призначені користувачі</value>
+  </data>
+  <data name="AssignUsers" xml:space="preserve">
+    <value>Призначити користувачів</value>
+  </data>
+  <data name="EditDispatchCenter" xml:space="preserve">
+    <value>Редагувати диспетчерський пункт</value>
+  </data>
+  <data name="MainDispatchCenter" xml:space="preserve">
+    <value>Головний диспетчерський пункт</value>
+  </data>
+  <data name="NoDispatchCentersAvailable" xml:space="preserve">
+    <value>Немає доступних диспетчерських пунктів.</value>
+  </data>
+  <data name="AssignUsersToDispatchCenter" xml:space="preserve">
+    <value>Призначити користувачів до диспетчерського пункту {0}</value>
+  </data>
+  <data name="Delete" xml:space="preserve">
+    <value>Видалити</value>
+  </data>
+  <data name="Edit" xml:space="preserve">
+    <value>Редагувати</value>
+  </data>
 </root>

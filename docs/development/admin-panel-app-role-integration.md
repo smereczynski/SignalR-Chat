@@ -6,7 +6,7 @@ This document explains how to integrate the Admin Panel into the main SignalR Ch
 
 ## Overview
 
-The Admin Panel provides administrative capabilities for managing users and rooms in SignalR Chat. Access is controlled via the `Admin.ReadWrite` app role assigned in the Entra ID app registration.
+The Admin Panel provides administrative capabilities for managing users, rooms, and organizational structures (Dispatch Centers) in SignalR Chat. Access is controlled via the `Admin.ReadWrite` app role assigned in the Entra ID app registration.
 
 **⚠️ Important Security Constraint**: Admin access is **restricted to home tenant users only**. External tenant users (multi-tenant SSO users) cannot be granted admin privileges, even if assigned the `Admin.ReadWrite` role.
 
@@ -82,8 +82,17 @@ User without Admin.ReadWrite role
 |-----------|---------|--------------|
 | **Admin Pages** | `/Admin/Users`, `/Admin/Rooms`, `/Admin/Users/AssignRooms` | Requires `Admin.ReadWrite` role **+ home tenant** |
 | **Admin UI (Cog Icon)** | Navigation link in chat interface | Only visible if user has `Admin.ReadWrite` role **+ home tenant** |
-| **Admin API Endpoints** | `/api/admin/*` (optional REST endpoints) | Requires `Admin.ReadWrite` role **+ home tenant** |
+| **Admin API Endpoints** | `/api/admin/*` and `/api/DispatchCenters/*` | Requires `Admin.ReadWrite` role **+ home tenant** |
 | **Chat Pages** | `/`, `/chat`, `/login` | No admin role required (any tenant) |
+
+### Dispatch Centers Status (Issue #163)
+
+- Backend API is implemented at `/api/DispatchCenters/*` (admin-only): CRUD, corresponding center linkage, user assignment/unassignment.
+- Admin UI is implemented under `/Admin/DispatchCenters/*`:
+    - list/index, create, edit, and user-assignment pages,
+    - related dispatch centers are shown as `Name (Country)` in the table (not raw IDs).
+- Business rule enforced on create: only one **Main** dispatch office is allowed per country.
+- Dispatch centers are not auto-seeded during deployment/startup; create them explicitly via admin/API flows.
 
 ---
 

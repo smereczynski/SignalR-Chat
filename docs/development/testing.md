@@ -288,7 +288,7 @@ Azure SignalR Flow:
 ```bash
 # Load .env.local with Azure connection strings
 bash -lc "set -a; source .env.local; dotnet test src/Chat.sln"
-# Output: 179/179 passed ✅
+# Output: 202/202 passed ✅
 ```
 
 **Option 2**: Run tests without SignalR failures
@@ -301,7 +301,7 @@ dotnet test --filter "FullyQualifiedName!~RoomJoinPositiveTests"
 **Option 3**: Accept failures as expected
 ```bash
 dotnet test src/Chat.sln
-# Output: 168/179 passed (11 expected failures) ⚠️
+# Output: 191/202 passed (11 expected failures) ⚠️
 ```
 
 **Why Not Fixed?**:

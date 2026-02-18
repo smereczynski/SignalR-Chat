@@ -1,0 +1,20 @@
+@model Chat.Web.Pages.Admin.DispatchCenters.DispatchCenterInputModel
+@using Microsoft.Extensions.Localization
+@inject IStringLocalizer<Chat.Web.Resources.SharedResources> Localizer
+
+<div class="mb-3">
+    <label asp-for="Name" class="form-label">@Localizer["Name"]</label>
+    <input asp-for="Name" class="form-control" />
+    <span asp-validation-for="Name" class="text-danger"></span>
+</div>
+
+<div class="mb-3">
+    <label asp-for="Country" class="form-label">@Localizer["Country"]</label>
+    <input asp-for="Country" class="form-control" />
+    <span asp-validation-for="Country" class="text-danger"></span>
+</div>
+
+<div class="mb-3 form-check">
+    <input asp-for="IfMain" class="form-check-input" />
+    <label asp-for="IfMain" class="form-check-label">@Localizer["MainDispatchCenter"]</label>
+</div>

@@ -277,4 +277,49 @@
   <data name="UserNameAndCodeRequired" xml:space="preserve">
     <value>Uživatelské jméno a kód jsou povinné</value>
   </data>
+  <data name="DispatchCenters" xml:space="preserve">
+    <value>Železniční dispečinky</value>
+  </data>
+  <data name="ManageDispatchCentersAndAssignments" xml:space="preserve">
+    <value>Spravujte železniční dispečinky a přiřazení.</value>
+  </data>
+  <data name="ManageDispatchCenters" xml:space="preserve">
+    <value>Spravovat železniční dispečinky</value>
+  </data>
+  <data name="CreateDispatchCenter" xml:space="preserve">
+    <value>Vytvořit dispečink</value>
+  </data>
+  <data name="Country" xml:space="preserve">
+    <value>Země</value>
+  </data>
+  <data name="Main" xml:space="preserve">
+    <value>Hlavní</value>
+  </data>
+  <data name="CorrespondingDispatchCenters" xml:space="preserve">
+    <value>Související dispečinky</value>
+  </data>
+  <data name="AssignedUsers" xml:space="preserve">
+    <value>Přiřazení uživatelé</value>
+  </data>
+  <data name="AssignUsers" xml:space="preserve">
+    <value>Přiřadit uživatele</value>
+  </data>
+  <data name="EditDispatchCenter" xml:space="preserve">
+    <value>Upravit dispečink</value>
+  </data>
+  <data name="MainDispatchCenter" xml:space="preserve">
+    <value>Hlavní dispečink</value>
+  </data>
+  <data name="NoDispatchCentersAvailable" xml:space="preserve">
+    <value>Nejsou dostupné žádné dispečinky.</value>
+  </data>
+  <data name="AssignUsersToDispatchCenter" xml:space="preserve">
+    <value>Přiřadit uživatele k dispečinku {0}</value>
+  </data>
+  <data name="Delete" xml:space="preserve">
+    <value>Odstranit</value>
+  </data>
+  <data name="Edit" xml:space="preserve">
+    <value>Upravit</value>
+  </data>
 </root>

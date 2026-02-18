@@ -307,6 +307,7 @@ namespace Chat.Web
                 services.AddSingleton<IUsersRepository, InMemoryUsersRepository>();
                 services.AddSingleton<IRoomsRepository, InMemoryRoomsRepository>();
                 services.AddSingleton<IMessagesRepository, InMemoryMessagesRepository>();
+                services.AddSingleton<IDispatchCentersRepository, InMemoryDispatchCentersRepository>();
                 services.AddSingleton<IOtpStore, InMemoryOtpStore>();
                 services.AddSingleton<Services.IPresenceTracker, Services.InMemoryPresenceTracker>();
             }
@@ -326,6 +327,7 @@ namespace Chat.Web
                     MessagesContainer = Configuration["Cosmos:MessagesContainer"] ?? "messages",
                     UsersContainer = Configuration["Cosmos:UsersContainer"] ?? "users",
                     RoomsContainer = Configuration["Cosmos:RoomsContainer"] ?? "rooms",
+                    DispatchCentersContainer = Configuration["Cosmos:DispatchCentersContainer"] ?? "dispatchcenters",
                 };
                 // Configure messages TTL: set to a number (seconds), -1 to enable TTL with no expiry, or null/empty to disable TTL entirely
                 var ttlRaw = Configuration["Cosmos:MessagesTtlSeconds"];
@@ -354,6 +356,7 @@ namespace Chat.Web
                 services.AddSingleton<IUsersRepository, CosmosUsersRepository>();
                 services.AddSingleton<IRoomsRepository, CosmosRoomsRepository>();
                 services.AddSingleton<IMessagesRepository, CosmosMessagesRepository>();
+                services.AddSingleton<IDispatchCentersRepository, CosmosDispatchCentersRepository>();
 
                 // Data seeder service (seeds initial data in background if database is empty)
                 services.AddHostedService<Services.DataSeederService>();

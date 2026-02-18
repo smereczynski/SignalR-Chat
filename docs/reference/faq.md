@@ -66,7 +66,7 @@ SignalR Chat is a production-ready, real-time chat application built with ASP.NE
 - SignalR JavaScript client
 
 **Data**:
-- Azure Cosmos DB (NoSQL) - messages, rooms, users
+- Azure Cosmos DB (NoSQL) - messages, rooms, users, dispatch centers
 - Azure Cache for Redis - OTP storage, rate limiting
 - In-memory fallback for development
 
@@ -196,6 +196,35 @@ See [Local Setup Guide](../development/local-setup.md#full-setup-azure-mode) for
 }
 ```
 
+### How do I add a dispatch center?
+
+Use the admin UI at `/Admin/DispatchCenters` (preferred) or the admin-only Dispatch Centers API:
+
+```http
+POST /api/DispatchCenters
+Content-Type: application/json
+
+{
+  "id": "dc-pl-main",
+  "name": "Poland Main Dispatch",
+  "country": "PL",
+  "ifMain": true,
+  "correspondingDispatchCenterIds": []
+}
+```
+
+Notes:
+- Dispatch centers are not auto-seeded during deployment.
+- API/UI validate no self-reference, no duplicate references, and existing corresponding IDs.
+- Business rule: only one main dispatch center (`ifMain=true`) is allowed per country.
+
+### Why is creating a second main dispatch center for the same country rejected?
+
+This is enforced by design: one country can have only one main dispatch center.
+
+- Applies in both admin create UI and `POST /api/DispatchCenters`.
+- Country matching is case-insensitive (for example, `PL` and `pl` are treated the same country).
+
 ---
 
 ## Testing
@@ -208,7 +237,7 @@ SignalR Chat includes automated tests (unit, integration, and web/security) cove
 # Run all tests
 dotnet test src/Chat.sln
 # Output includes a summary like:
-# Test summary: total: 179, failed: 0, succeeded: 179, skipped: 0
+# Test summary: total: 202, failed: 0, succeeded: 202, skipped: 0
 ```
 
 **Test coverage**:
@@ -241,7 +270,7 @@ See [Testing Guide: Debugging Tests](../development/testing.md#debugging-tests).
 
 ### What's the test coverage?
 
-**Current**: 135+ unit tests covering core business logic
+**Current**: 202 automated tests (unit + integration + web/security)
 
 **Target**: >80% coverage on unit tests for pure logic and services
 
@@ -257,7 +286,7 @@ dotnet test src/Chat.sln /p:CollectCoverage=true
 ### What Azure resources are required?
 
 **Required** (for full functionality):
-- Azure Cosmos DB (NoSQL) - messages, rooms, users
+- Azure Cosmos DB (NoSQL) - messages, rooms, users, dispatch centers
 - Azure Cache for Redis - OTP storage, rate limiting
 - Azure SignalR Service - load-balanced real-time connections
 - Azure App Service (Linux) - web hosting

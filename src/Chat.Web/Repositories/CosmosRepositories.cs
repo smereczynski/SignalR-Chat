@@ -22,14 +22,16 @@ namespace Chat.Web.Repositories
         public Container Users { get; }
         public Container Rooms { get; }
         public Container Messages { get; }
+        public Container DispatchCenters { get; }
 
-        private CosmosClients(CosmosClient client, Database database, Container users, Container rooms, Container messages)
+        private CosmosClients(CosmosClient client, Database database, Container users, Container rooms, Container messages, Container dispatchCenters)
         {
             Client = client;
             Database = database;
             Users = users;
             Rooms = rooms;
             Messages = messages;
+            DispatchCenters = dispatchCenters;
         }
 
         public static async Task<CosmosClients> CreateAsync(CosmosOptions options)
@@ -43,7 +45,7 @@ namespace Chat.Web.Repositories
             
             var client = new CosmosClient(options.ConnectionString, clientOptions);
             Database database;
-            Container users, rooms, messages;
+            Container users, rooms, messages, dispatchCenters;
 
             if (options.AutoCreate)
             {
@@ -51,6 +53,7 @@ namespace Chat.Web.Repositories
                 users = await CreateContainerIfNotExistsAsync(database, options.UsersContainer, "/userName", 400).ConfigureAwait(false);
                 rooms = await CreateContainerIfNotExistsAsync(database, options.RoomsContainer, "/name", 400).ConfigureAwait(false);
                 messages = await CreateContainerIfNotExistsAsync(database, options.MessagesContainer, "/roomName", 400, options.MessagesTtlSeconds).ConfigureAwait(false);
+                dispatchCenters = await CreateContainerIfNotExistsAsync(database, options.DispatchCentersContainer, "/id", 400).ConfigureAwait(false);
             }
             else
             {
@@ -58,9 +61,10 @@ namespace Chat.Web.Repositories
                 users = database.GetContainer(options.UsersContainer);
                 rooms = database.GetContainer(options.RoomsContainer);
                 messages = database.GetContainer(options.MessagesContainer);
+                dispatchCenters = database.GetContainer(options.DispatchCentersContainer);
             }
 
-            return new CosmosClients(client, database, users, rooms, messages);
+            return new CosmosClients(client, database, users, rooms, messages, dispatchCenters);
         }
 
         private static async Task<Container> CreateContainerIfNotExistsAsync(Database database, string name, string partitionKey, int? throughput, int? defaultTtlSeconds = null)
@@ -112,9 +116,19 @@ namespace Chat.Web.Repositories
         public string country { get; set; }
         public string region { get; set; }
         public string[] fixedRooms { get; set; } 
+        public string[] dispatchCenterIds { get; set; }
         public string defaultRoom { get; set; } 
     }
     internal class RoomDoc { public string id { get; set; } public string name { get; set; } public string admin { get; set; } public string[] users { get; set; } public string[] languages { get; set; } }
+    internal class DispatchCenterDoc
+    {
+        public string id { get; set; }
+        public string name { get; set; }
+        public string country { get; set; }
+        public bool ifMain { get; set; }
+        public string[] correspondingDispatchCenterIds { get; set; }
+        public string[] users { get; set; }
+    }
     internal class MessageDoc 
     { 
         public string id { get; set; } 
@@ -221,6 +235,9 @@ namespace Chat.Web.Repositories
         {
             var rooms = d.fixedRooms;
             var fixedRooms = rooms != null ? new System.Collections.Generic.List<string>(rooms) : new System.Collections.Generic.List<string>();
+            var dispatchCenterIds = d.dispatchCenterIds != null
+                ? new System.Collections.Generic.List<string>(d.dispatchCenterIds)
+                : new System.Collections.Generic.List<string>();
             var def = !string.IsNullOrWhiteSpace(d.defaultRoom) ? d.defaultRoom : (fixedRooms.Count > 0 ? fixedRooms[0] : null);
             return new ApplicationUser
             {
@@ -237,6 +254,7 @@ namespace Chat.Web.Repositories
                 Country = d.country,
                 Region = d.region,
                 FixedRooms = fixedRooms,
+                DispatchCenterIds = dispatchCenterIds,
                 DefaultRoom = def
             };
         }
@@ -309,6 +327,7 @@ namespace Chat.Web.Repositories
                 country = user.Country,
                 region = user.Region,
                 fixedRooms = user.FixedRooms != null ? System.Linq.Enumerable.ToArray(user.FixedRooms) : null, 
+                dispatchCenterIds = user.DispatchCenterIds != null ? System.Linq.Enumerable.ToArray(user.DispatchCenterIds) : null,
                 defaultRoom = user.DefaultRoom 
             };
             try
@@ -726,6 +745,162 @@ namespace Chat.Web.Repositories
             }
             
             return MapMessage(d);
+        }
+    }
+
+    public class CosmosDispatchCentersRepository : IDispatchCentersRepository
+    {
+        private readonly Container _dispatchCenters;
+        private readonly ILogger<CosmosDispatchCentersRepository> _logger;
+
+        public CosmosDispatchCentersRepository(CosmosClients clients, ILogger<CosmosDispatchCentersRepository> logger)
+        {
+            _dispatchCenters = clients.DispatchCenters;
+            _logger = logger;
+        }
+
+        private static DispatchCenter MapDispatchCenter(DispatchCenterDoc d)
+        {
+            return new DispatchCenter
+            {
+                Id = d.id,
+                Name = d.name,
+                Country = d.country,
+                IfMain = d.ifMain,
+                CorrespondingDispatchCenterIds = d.correspondingDispatchCenterIds != null ? new List<string>(d.correspondingDispatchCenterIds) : new List<string>(),
+                Users = d.users != null ? new List<string>(d.users) : new List<string>()
+            };
+        }
+
+        public async Task<IEnumerable<DispatchCenter>> GetAllAsync()
+        {
+            using var activity = Tracing.ActivitySource.StartActivity("cosmos.dispatchcenters.getall", ActivityKind.Client);
+            var q = _dispatchCenters.GetItemQueryIterator<DispatchCenterDoc>(new QueryDefinition("SELECT * FROM c ORDER BY c.name"));
+            return await CosmosQueryHelper.ExecutePaginatedQueryAsync(q, MapDispatchCenter, activity, _logger, "cosmos.dispatchcenters.getall").ConfigureAwait(false);
+        }
+
+        public async Task<DispatchCenter> GetByIdAsync(string id)
+        {
+            if (string.IsNullOrWhiteSpace(id)) return null;
+
+            using var activity = Tracing.ActivitySource.StartActivity("cosmos.dispatchcenters.getbyid", ActivityKind.Client);
+            activity?.SetTag("app.dispatchcenter.id", id);
+
+            try
+            {
+                var item = await Resilience.RetryHelper.ExecuteAsync(
+                    _ => _dispatchCenters.ReadItemAsync<DispatchCenterDoc>(id, new PartitionKey(id)),
+                    Transient.IsCosmosTransient,
+                    _logger,
+                    "cosmos.dispatchcenters.getbyid").ConfigureAwait(false);
+                return MapDispatchCenter(item.Resource);
+            }
+            catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+            {
+                return null;
+            }
+        }
+
+        public async Task<DispatchCenter> GetByNameAsync(string name)
+        {
+            if (string.IsNullOrWhiteSpace(name)) return null;
+
+            using var activity = Tracing.ActivitySource.StartActivity("cosmos.dispatchcenters.getbyname", ActivityKind.Client);
+            activity?.SetTag("app.dispatchcenter.name", name);
+            var q = _dispatchCenters.GetItemQueryIterator<DispatchCenterDoc>(
+                new QueryDefinition("SELECT * FROM c WHERE c.name = @n").WithParameter("@n", name));
+            return await CosmosQueryHelper.ExecuteSingleResultQueryAsync(q, MapDispatchCenter, activity, _logger, "cosmos.dispatchcenters.getbyname").ConfigureAwait(false);
+        }
+
+        public async Task UpsertAsync(DispatchCenter dispatchCenter)
+        {
+            if (dispatchCenter == null) return;
+
+            dispatchCenter.Id ??= Guid.NewGuid().ToString();
+
+            using var activity = Tracing.ActivitySource.StartActivity("cosmos.dispatchcenters.upsert", ActivityKind.Client);
+            activity?.SetTag("app.dispatchcenter.id", dispatchCenter.Id);
+
+            var doc = new DispatchCenterDoc
+            {
+                id = dispatchCenter.Id,
+                name = dispatchCenter.Name,
+                country = dispatchCenter.Country,
+                ifMain = dispatchCenter.IfMain,
+                correspondingDispatchCenterIds = dispatchCenter.CorrespondingDispatchCenterIds?.ToArray() ?? Array.Empty<string>(),
+                users = dispatchCenter.Users?.ToArray() ?? Array.Empty<string>()
+            };
+
+            try
+            {
+                var resp = await Resilience.RetryHelper.ExecuteAsync(
+                    _ => _dispatchCenters.UpsertItemAsync(doc, new PartitionKey(doc.id)),
+                    Transient.IsCosmosTransient,
+                    _logger,
+                    "cosmos.dispatchcenters.upsert").ConfigureAwait(false);
+                activity?.SetTag("db.status_code", (int)resp.StatusCode);
+            }
+            catch (CosmosException ex)
+            {
+                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+                _logger.LogError(ex, "Cosmos dispatch center upsert failed {DispatchCenterId}", LogSanitizer.Sanitize(dispatchCenter.Id));
+                throw;
+            }
+        }
+
+        public async Task DeleteAsync(string id)
+        {
+            if (string.IsNullOrWhiteSpace(id)) return;
+
+            using var activity = Tracing.ActivitySource.StartActivity("cosmos.dispatchcenters.delete", ActivityKind.Client);
+            activity?.SetTag("app.dispatchcenter.id", id);
+
+            try
+            {
+                var resp = await Resilience.RetryHelper.ExecuteAsync(
+                    _ => _dispatchCenters.DeleteItemAsync<DispatchCenterDoc>(id, new PartitionKey(id)),
+                    Transient.IsCosmosTransient,
+                    _logger,
+                    "cosmos.dispatchcenters.delete").ConfigureAwait(false);
+                activity?.SetTag("db.status_code", (int)resp.StatusCode);
+            }
+            catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+            {
+            }
+            catch (CosmosException ex)
+            {
+                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+                _logger.LogError(ex, "Cosmos dispatch center delete failed {DispatchCenterId}", LogSanitizer.Sanitize(id));
+                throw;
+            }
+        }
+
+        public async Task AssignUserAsync(string dispatchCenterId, string userName)
+        {
+            if (string.IsNullOrWhiteSpace(dispatchCenterId) || string.IsNullOrWhiteSpace(userName)) return;
+
+            var dispatchCenter = await GetByIdAsync(dispatchCenterId).ConfigureAwait(false);
+            if (dispatchCenter == null) return;
+
+            var set = new HashSet<string>(dispatchCenter.Users ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
+            if (!set.Add(userName)) return;
+
+            dispatchCenter.Users = set.ToList();
+            await UpsertAsync(dispatchCenter).ConfigureAwait(false);
+        }
+
+        public async Task UnassignUserAsync(string dispatchCenterId, string userName)
+        {
+            if (string.IsNullOrWhiteSpace(dispatchCenterId) || string.IsNullOrWhiteSpace(userName)) return;
+
+            var dispatchCenter = await GetByIdAsync(dispatchCenterId).ConfigureAwait(false);
+            if (dispatchCenter == null) return;
+
+            var set = new HashSet<string>(dispatchCenter.Users ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
+            if (!set.Remove(userName)) return;
+
+            dispatchCenter.Users = set.ToList();
+            await UpsertAsync(dispatchCenter).ConfigureAwait(false);
         }
     }
 }

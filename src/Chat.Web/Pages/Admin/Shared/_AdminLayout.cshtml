@@ -26,6 +26,11 @@
                             <i class="bi bi-chat-dots"></i> @Localizer["Rooms"]
                         </a>
                     </li>
+                    <li class="nav-item">
+                        <a class="nav-link @(ViewContext.RouteData.Values["Page"]?.ToString()?.Contains("/Admin/DispatchCenters") == true ? "active" : "")" href="/Admin/DispatchCenters">
+                            <i class="bi bi-diagram-3"></i> @Localizer["DispatchCenters"]
+                        </a>
+                    </li>
                 </ul>
                 
                 <hr class="my-3">

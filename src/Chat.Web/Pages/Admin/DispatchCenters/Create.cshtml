@@ -1,0 +1,29 @@
+@page
+@using Microsoft.Extensions.Localization
+@inject IStringLocalizer<Chat.Web.Resources.SharedResources> Localizer
+@model Chat.Web.Pages.Admin.DispatchCenters.DispatchCentersCreateModel
+@{
+    ViewData["Title"] = Localizer["CreateDispatchCenter"];
+}
+
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <h2 class="mb-4">@Localizer["CreateDispatchCenter"]</h2>
+
+        <form method="post">
+            <partial name="_DispatchCenterBasicFields" model="Model.Input" />
+
+            <partial
+                name="_CorrespondingDispatchCentersChecklist"
+                model="Model.AllDispatchCenters"
+                view-data='new ViewDataDictionary(ViewData) { ["SelectedIds"] = new HashSet<string>(StringComparer.OrdinalIgnoreCase), ["IdPrefix"] = "dc-create" }' />
+
+            <div asp-validation-summary="All" class="alert alert-danger" role="alert"></div>
+
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-primary">@Localizer["Create"]</button>
+                <a asp-page="Index" class="btn btn-secondary">@Localizer["Cancel"]</a>
+            </div>
+        </form>
+    </div>
+</div>

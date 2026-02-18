@@ -9,6 +9,65 @@ using System.Threading.Tasks;
 
 namespace Chat.Web.Repositories
 {
+    public class InMemoryDispatchCentersRepository : IDispatchCentersRepository
+    {
+        private readonly ConcurrentDictionary<string, DispatchCenter> _dispatchCenters = new(StringComparer.OrdinalIgnoreCase);
+
+        public Task<IEnumerable<DispatchCenter>> GetAllAsync() => Task.FromResult<IEnumerable<DispatchCenter>>(_dispatchCenters.Values);
+
+        public Task<DispatchCenter> GetByIdAsync(string id)
+        {
+            if (string.IsNullOrWhiteSpace(id)) return Task.FromResult<DispatchCenter>(null);
+            return Task.FromResult(_dispatchCenters.TryGetValue(id, out var dc) ? dc : null);
+        }
+
+        public Task<DispatchCenter> GetByNameAsync(string name)
+        {
+            if (string.IsNullOrWhiteSpace(name)) return Task.FromResult<DispatchCenter>(null);
+            var match = _dispatchCenters.Values.FirstOrDefault(d => string.Equals(d.Name, name, StringComparison.OrdinalIgnoreCase));
+            return Task.FromResult(match);
+        }
+
+        public Task UpsertAsync(DispatchCenter dispatchCenter)
+        {
+            if (dispatchCenter == null) return Task.CompletedTask;
+
+            dispatchCenter.Id ??= Guid.NewGuid().ToString();
+            dispatchCenter.CorrespondingDispatchCenterIds ??= new List<string>();
+            dispatchCenter.Users ??= new List<string>();
+
+            _dispatchCenters[dispatchCenter.Id] = dispatchCenter;
+            return Task.CompletedTask;
+        }
+
+        public Task DeleteAsync(string id)
+        {
+            if (string.IsNullOrWhiteSpace(id)) return Task.CompletedTask;
+            _dispatchCenters.TryRemove(id, out _);
+            return Task.CompletedTask;
+        }
+
+        public Task AssignUserAsync(string dispatchCenterId, string userName)
+        {
+            if (string.IsNullOrWhiteSpace(dispatchCenterId) || string.IsNullOrWhiteSpace(userName)) return Task.CompletedTask;
+            if (!_dispatchCenters.TryGetValue(dispatchCenterId, out var dc)) return Task.CompletedTask;
+
+            var set = new HashSet<string>(dc.Users ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
+            if (set.Add(userName)) dc.Users = set.ToList();
+            return Task.CompletedTask;
+        }
+
+        public Task UnassignUserAsync(string dispatchCenterId, string userName)
+        {
+            if (string.IsNullOrWhiteSpace(dispatchCenterId) || string.IsNullOrWhiteSpace(userName)) return Task.CompletedTask;
+            if (!_dispatchCenters.TryGetValue(dispatchCenterId, out var dc)) return Task.CompletedTask;
+
+            var set = new HashSet<string>(dc.Users ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
+            if (set.Remove(userName)) dc.Users = set.ToList();
+            return Task.CompletedTask;
+        }
+    }
+
     public class InMemoryUsersRepository : IUsersRepository
     {
         private readonly ConcurrentDictionary<string, ApplicationUser> _users = new();

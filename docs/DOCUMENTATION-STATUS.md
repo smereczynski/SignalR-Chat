@@ -139,7 +139,7 @@ P2:
    - ✅ Added Entra ID requirements note (HTTPS + app registration)
 
 2. ✅ **`docs/development/testing.md`** - COMPLETED (Nov 21, 2025)
-   - ✅ 526 lines covering 179 tests
+   - ✅ 526 lines covering 202 tests
    - ✅ Issue #113 fully explained (SignalR test failures)
    - ✅ Test structure breakdown (unit, integration, web)
    - ✅ Running tests in in-memory and Azure modes

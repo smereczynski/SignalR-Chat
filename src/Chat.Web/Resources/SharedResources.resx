@@ -449,4 +449,49 @@
   <data name="EnabledQuestion" xml:space="preserve">
     <value>Enabled?</value>
   </data>
+  <data name="DispatchCenters" xml:space="preserve">
+    <value>Rail Dispatch Offices</value>
+  </data>
+  <data name="ManageDispatchCentersAndAssignments" xml:space="preserve">
+    <value>Manage rail dispatch offices and assignments.</value>
+  </data>
+  <data name="ManageDispatchCenters" xml:space="preserve">
+    <value>Manage Rail Dispatch Offices</value>
+  </data>
+  <data name="CreateDispatchCenter" xml:space="preserve">
+    <value>Create Rail Dispatch Office</value>
+  </data>
+  <data name="Country" xml:space="preserve">
+    <value>Country</value>
+  </data>
+  <data name="Main" xml:space="preserve">
+    <value>Main</value>
+  </data>
+  <data name="CorrespondingDispatchCenters" xml:space="preserve">
+    <value>Related Dispatch Offices</value>
+  </data>
+  <data name="AssignedUsers" xml:space="preserve">
+    <value>Assigned Users</value>
+  </data>
+  <data name="AssignUsers" xml:space="preserve">
+    <value>Assign Users</value>
+  </data>
+  <data name="EditDispatchCenter" xml:space="preserve">
+    <value>Edit Dispatch Office</value>
+  </data>
+  <data name="MainDispatchCenter" xml:space="preserve">
+    <value>Main Dispatch Office</value>
+  </data>
+  <data name="NoDispatchCentersAvailable" xml:space="preserve">
+    <value>No dispatch offices available.</value>
+  </data>
+  <data name="AssignUsersToDispatchCenter" xml:space="preserve">
+    <value>Assign Users to Dispatch Office {0}</value>
+  </data>
+  <data name="Delete" xml:space="preserve">
+    <value>Delete</value>
+  </data>
+  <data name="Edit" xml:space="preserve">
+    <value>Edit</value>
+  </data>
 </root>
