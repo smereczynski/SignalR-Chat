@@ -18,7 +18,7 @@ public class DispatchCentersAdminPageTests
         var dispatchRepo = new InMemoryDispatchCentersRepository();
         var page = new DispatchCentersCreateModel(dispatchRepo)
         {
-            Input = new DispatchCentersCreateModel.InputModel
+            Input = new DispatchCenterInputModel
             {
                 Name = "Main DC",
                 Country = "PL",
@@ -55,7 +55,7 @@ public class DispatchCentersAdminPageTests
         var page = new DispatchCentersEditModel(dispatchRepo)
         {
             Id = "dc-1",
-            Input = new DispatchCentersEditModel.InputModel
+            Input = new DispatchCenterInputModel
             {
                 Name = "Main",
                 Country = "PL",
@@ -86,7 +86,7 @@ public class DispatchCentersAdminPageTests
 
         var page = new DispatchCentersCreateModel(dispatchRepo)
         {
-            Input = new DispatchCentersCreateModel.InputModel
+            Input = new DispatchCenterInputModel
             {
                 Name = "Krakow Main",
                 Country = "pl",

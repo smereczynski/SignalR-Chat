@@ -13,22 +13,7 @@
         <form method="post">
             <input type="hidden" asp-for="Id" />
 
-            <div class="mb-3">
-                <label asp-for="Input.Name" class="form-label">@Localizer["Name"]</label>
-                <input asp-for="Input.Name" class="form-control" />
-                <span asp-validation-for="Input.Name" class="text-danger"></span>
-            </div>
-
-            <div class="mb-3">
-                <label asp-for="Input.Country" class="form-label">@Localizer["Country"]</label>
-                <input asp-for="Input.Country" class="form-control" />
-                <span asp-validation-for="Input.Country" class="text-danger"></span>
-            </div>
-
-            <div class="mb-3 form-check">
-                <input asp-for="Input.IfMain" class="form-check-input" />
-                <label asp-for="Input.IfMain" class="form-check-label">@Localizer["MainDispatchCenter"]</label>
-            </div>
+            <partial name="_DispatchCenterBasicFields" model="Model.Input" />
 
             <partial
                 name="_CorrespondingDispatchCentersChecklist"

@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.ComponentModel.DataAnnotations;
 using System.Linq;
 using System.Threading.Tasks;
 using Chat.Web.Models;
@@ -24,21 +23,8 @@ public class DispatchCentersEditModel : PageModel
     [BindProperty(SupportsGet = true)]
     public string Id { get; set; } = string.Empty;
 
-    public class InputModel
-    {
-        [Required]
-        public string Name { get; set; } = string.Empty;
-
-        [Required]
-        public string Country { get; set; } = string.Empty;
-
-        public bool IfMain { get; set; }
-
-        public List<string> CorrespondingDispatchCenterIds { get; set; } = new();
-    }
-
     [BindProperty]
-    public InputModel Input { get; set; } = new();
+    public DispatchCenterInputModel Input { get; set; } = new();
 
     public List<DispatchCenter> AllDispatchCenters { get; set; } = new();
 
@@ -49,7 +35,7 @@ public class DispatchCentersEditModel : PageModel
         var current = await _dispatchCenters.GetByIdAsync(Id);
         if (current == null) return RedirectToPage("Index");
 
-        Input = new InputModel
+        Input = new DispatchCenterInputModel
         {
             Name = current.Name,
             Country = current.Country,
