@@ -277,4 +277,49 @@
   <data name="UserNameAndCodeRequired" xml:space="preserve">
     <value>Používateľské meno a kód sú povinné</value>
   </data>
+  <data name="DispatchCenters" xml:space="preserve">
+    <value>Železničné dispečingy</value>
+  </data>
+  <data name="ManageDispatchCentersAndAssignments" xml:space="preserve">
+    <value>Spravujte železničné dispečingy a priradenia.</value>
+  </data>
+  <data name="ManageDispatchCenters" xml:space="preserve">
+    <value>Spravovať železničné dispečingy</value>
+  </data>
+  <data name="CreateDispatchCenter" xml:space="preserve">
+    <value>Vytvoriť dispečing</value>
+  </data>
+  <data name="Country" xml:space="preserve">
+    <value>Krajina</value>
+  </data>
+  <data name="Main" xml:space="preserve">
+    <value>Hlavné</value>
+  </data>
+  <data name="CorrespondingDispatchCenters" xml:space="preserve">
+    <value>Súvisiace dispečingy</value>
+  </data>
+  <data name="AssignedUsers" xml:space="preserve">
+    <value>Priradení používatelia</value>
+  </data>
+  <data name="AssignUsers" xml:space="preserve">
+    <value>Priradiť používateľov</value>
+  </data>
+  <data name="EditDispatchCenter" xml:space="preserve">
+    <value>Upraviť dispečing</value>
+  </data>
+  <data name="MainDispatchCenter" xml:space="preserve">
+    <value>Hlavný dispečing</value>
+  </data>
+  <data name="NoDispatchCentersAvailable" xml:space="preserve">
+    <value>Nie sú dostupné žiadne dispečingy.</value>
+  </data>
+  <data name="AssignUsersToDispatchCenter" xml:space="preserve">
+    <value>Priradiť používateľov k dispečingu {0}</value>
+  </data>
+  <data name="Delete" xml:space="preserve">
+    <value>Odstrániť</value>
+  </data>
+  <data name="Edit" xml:space="preserve">
+    <value>Upraviť</value>
+  </data>
 </root>

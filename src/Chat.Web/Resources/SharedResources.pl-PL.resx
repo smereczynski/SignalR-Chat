@@ -461,4 +461,49 @@
   <data name="EnabledQuestion" xml:space="preserve">
     <value>Włączony?</value>
   </data>
+    <data name="DispatchCenters" xml:space="preserve">
+      <value>Dyspozytury</value>
+    </data>
+    <data name="ManageDispatchCentersAndAssignments" xml:space="preserve">
+      <value>Zarządzaj dyspozyturami i przypisaniami.</value>
+    </data>
+    <data name="ManageDispatchCenters" xml:space="preserve">
+      <value>Zarządzaj dyspozyturami</value>
+    </data>
+    <data name="CreateDispatchCenter" xml:space="preserve">
+      <value>Utwórz dyspozyturę</value>
+    </data>
+    <data name="Country" xml:space="preserve">
+      <value>Kraj</value>
+    </data>
+    <data name="Main" xml:space="preserve">
+      <value>Główne</value>
+    </data>
+    <data name="CorrespondingDispatchCenters" xml:space="preserve">
+      <value>Powiązane dyspozytury</value>
+    </data>
+    <data name="AssignedUsers" xml:space="preserve">
+      <value>Przypisani użytkownicy</value>
+    </data>
+    <data name="AssignUsers" xml:space="preserve">
+      <value>Przypisz użytkowników</value>
+    </data>
+    <data name="EditDispatchCenter" xml:space="preserve">
+      <value>Edytuj dyspozyturę</value>
+    </data>
+    <data name="MainDispatchCenter" xml:space="preserve">
+      <value>Główna dyspozytura</value>
+    </data>
+    <data name="NoDispatchCentersAvailable" xml:space="preserve">
+      <value>Brak dostępnych dyspozytur.</value>
+    </data>
+    <data name="AssignUsersToDispatchCenter" xml:space="preserve">
+      <value>Przypisz użytkowników do dyspozytury {0}</value>
+    </data>
+    <data name="Delete" xml:space="preserve">
+      <value>Usuń</value>
+    </data>
+    <data name="Edit" xml:space="preserve">
+      <value>Edytuj</value>
+    </data>
 </root>

@@ -276,4 +276,49 @@
   <data name="UserNameAndCodeRequired" xml:space="preserve">
     <value>Vartotojo vardas ir kodas privalomi</value>
   </data>
+  <data name="DispatchCenters" xml:space="preserve">
+    <value>Geležinkelio dispečerinės</value>
+  </data>
+  <data name="ManageDispatchCentersAndAssignments" xml:space="preserve">
+    <value>Tvarkykite geležinkelio dispečerines ir priskyrimus.</value>
+  </data>
+  <data name="ManageDispatchCenters" xml:space="preserve">
+    <value>Tvarkyti geležinkelio dispečerines</value>
+  </data>
+  <data name="CreateDispatchCenter" xml:space="preserve">
+    <value>Sukurti dispečerinę</value>
+  </data>
+  <data name="Country" xml:space="preserve">
+    <value>Šalis</value>
+  </data>
+  <data name="Main" xml:space="preserve">
+    <value>Pagrindinis</value>
+  </data>
+  <data name="CorrespondingDispatchCenters" xml:space="preserve">
+    <value>Susijusios dispečerinės</value>
+  </data>
+  <data name="AssignedUsers" xml:space="preserve">
+    <value>Priskirti naudotojai</value>
+  </data>
+  <data name="AssignUsers" xml:space="preserve">
+    <value>Priskirti naudotojus</value>
+  </data>
+  <data name="EditDispatchCenter" xml:space="preserve">
+    <value>Redaguoti dispečerinę</value>
+  </data>
+  <data name="MainDispatchCenter" xml:space="preserve">
+    <value>Pagrindinė dispečerinė</value>
+  </data>
+  <data name="NoDispatchCentersAvailable" xml:space="preserve">
+    <value>Nėra dispečerinių.</value>
+  </data>
+  <data name="AssignUsersToDispatchCenter" xml:space="preserve">
+    <value>Priskirti naudotojus dispečerinei {0}</value>
+  </data>
+  <data name="Delete" xml:space="preserve">
+    <value>Ištrinti</value>
+  </data>
+  <data name="Edit" xml:space="preserve">
+    <value>Redaguoti</value>
+  </data>
 </root>
