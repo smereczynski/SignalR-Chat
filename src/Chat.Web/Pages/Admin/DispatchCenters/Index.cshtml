@@ -38,7 +38,7 @@
                             <span class="badge bg-secondary">@Localizer["No"]</span>
                         }
                     </td>
-                    <td class="text-muted">@string.Join(", ", dc.CorrespondingDispatchCenterIds ?? new List<string>())</td>
+                    <td class="text-muted">@Model.FormatCorrespondingDispatchCenters(dc.CorrespondingDispatchCenterIds)</td>
                     <td>@((dc.Users ?? new List<string>()).Count)</td>
                     <td class="d-flex gap-1">
                         <a asp-page="Edit" asp-route-id="@dc.Id" class="btn btn-sm btn-outline-primary">@Localizer["Edit"]</a>
