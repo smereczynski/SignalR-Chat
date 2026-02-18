@@ -98,6 +98,35 @@ public class DispatchCentersFeatureTests
     }
 
     [Fact]
+    public async Task Create_WithDuplicateMainPerCountry_ReturnsConflict()
+    {
+        var dispatchRepo = new InMemoryDispatchCentersRepository();
+        var usersRepo = new InMemoryUsersRepository();
+        var controller = CreateController(dispatchRepo, usersRepo);
+
+        await dispatchRepo.UpsertAsync(new DispatchCenter
+        {
+            Id = "dc-main-pl-1",
+            Name = "Warsaw Main",
+            Country = "PL",
+            IfMain = true
+        });
+
+        var dto = new DispatchCentersController.UpsertDispatchCenterDto
+        {
+            Id = "dc-main-pl-2",
+            Name = "Krakow Main",
+            Country = "pl",
+            IfMain = true
+        };
+
+        var result = await controller.Create(dto);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result);
+        Assert.Contains("main dispatch center for this country already exists", conflict.Value?.ToString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task AssignUsers_UpdatesDispatchCenterAndUserMembership()
     {
         var dispatchRepo = new InMemoryDispatchCentersRepository();

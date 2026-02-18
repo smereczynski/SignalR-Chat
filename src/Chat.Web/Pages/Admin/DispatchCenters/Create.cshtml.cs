@@ -57,6 +57,20 @@ public class DispatchCentersCreateModel : PageModel
             return Page();
         }
 
+        var normalizedCountry = Input.Country.Trim();
+        if (Input.IfMain)
+        {
+            var mainForCountryExists = AllDispatchCenters.Any(d =>
+                d.IfMain &&
+                string.Equals(d.Country?.Trim(), normalizedCountry, StringComparison.OrdinalIgnoreCase));
+
+            if (mainForCountryExists)
+            {
+                ModelState.AddModelError(nameof(Input.Country), "Main dispatch center for this country already exists.");
+                return Page();
+            }
+        }
+
         var normalizedCorresponding = NormalizeDistinct(Input.CorrespondingDispatchCenterIds);
         foreach (var correspondingId in normalizedCorresponding)
         {
@@ -72,7 +86,7 @@ public class DispatchCentersCreateModel : PageModel
         {
             Id = Guid.NewGuid().ToString(),
             Name = Input.Name.Trim(),
-            Country = Input.Country.Trim(),
+            Country = normalizedCountry,
             IfMain = Input.IfMain,
             CorrespondingDispatchCenterIds = normalizedCorresponding,
             Users = new List<string>()

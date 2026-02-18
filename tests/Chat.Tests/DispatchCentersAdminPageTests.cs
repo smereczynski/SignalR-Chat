@@ -72,6 +72,39 @@ public class DispatchCentersAdminPageTests
     }
 
     [Fact]
+    public async Task CreatePage_OnPost_DuplicateMainPerCountry_ReturnsPageWithModelError()
+    {
+        var dispatchRepo = new InMemoryDispatchCentersRepository();
+
+        await dispatchRepo.UpsertAsync(new DispatchCenter
+        {
+            Id = "dc-main-pl-1",
+            Name = "Warsaw Main",
+            Country = "PL",
+            IfMain = true
+        });
+
+        var page = new DispatchCentersCreateModel(dispatchRepo)
+        {
+            Input = new DispatchCentersCreateModel.InputModel
+            {
+                Name = "Krakow Main",
+                Country = "pl",
+                IfMain = true,
+                CorrespondingDispatchCenterIds = new List<string>()
+            }
+        };
+
+        var result = await page.OnPostAsync();
+
+        Assert.IsType<PageResult>(result);
+        Assert.False(page.ModelState.IsValid);
+        Assert.Contains(
+            page.ModelState.Values.SelectMany(v => v.Errors),
+            e => e.ErrorMessage.Contains("Main dispatch center for this country already exists."));
+    }
+
+    [Fact]
     public async Task AssignUsersPage_OnPost_SynchronizesUserMemberships()
     {
         var dispatchRepo = new InMemoryDispatchCentersRepository();

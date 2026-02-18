@@ -82,6 +82,19 @@ namespace Chat.Web.Controllers
                 return Conflict("dispatch center with the same name already exists");
             }
 
+            if (dto.IfMain)
+            {
+                var allDispatchCenters = await _dispatchCenters.GetAllAsync().ConfigureAwait(false);
+                var mainForCountryExists = allDispatchCenters.Any(d =>
+                    d.IfMain &&
+                    string.Equals(d.Country?.Trim(), country, StringComparison.OrdinalIgnoreCase));
+
+                if (mainForCountryExists)
+                {
+                    return Conflict("main dispatch center for this country already exists");
+                }
+            }
+
             var validationError = await ValidateCorrespondingIdsAsync(id, dto.CorrespondingDispatchCenterIds).ConfigureAwait(false);
             if (validationError != null) return BadRequest(validationError);
 
