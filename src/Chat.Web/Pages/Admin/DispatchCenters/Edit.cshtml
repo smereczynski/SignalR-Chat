@@ -30,25 +30,10 @@
                 <label asp-for="Input.IfMain" class="form-check-label">@Localizer["MainDispatchCenter"]</label>
             </div>
 
-            <div class="mb-3">
-                <label class="form-label">@Localizer["CorrespondingDispatchCenters"]</label>
-                @if (!Model.AllDispatchCenters.Any())
-                {
-                    <div class="text-muted">@Localizer["NoDispatchCentersAvailable"]</div>
-                }
-                else
-                {
-                    @for (int i = 0; i < Model.AllDispatchCenters.Count; i++)
-                    {
-                        var dc = Model.AllDispatchCenters[i];
-                        var isChecked = Model.Input.CorrespondingDispatchCenterIds.Contains(dc.Id, StringComparer.OrdinalIgnoreCase);
-                        <div class="form-check">
-                            <input type="checkbox" name="Input.CorrespondingDispatchCenterIds" value="@dc.Id" class="form-check-input" id="dc-edit-@i" @(isChecked ? "checked" : "") />
-                            <label class="form-check-label" for="dc-edit-@i">@dc.Name (@dc.Country)</label>
-                        </div>
-                    }
-                }
-            </div>
+            <partial
+                name="_CorrespondingDispatchCentersChecklist"
+                model="Model.AllDispatchCenters"
+                view-data='new ViewDataDictionary(ViewData) { ["SelectedIds"] = new HashSet<string>(Model.Input.CorrespondingDispatchCenterIds ?? new List<string>(), StringComparer.OrdinalIgnoreCase), ["IdPrefix"] = "dc-edit" }' />
 
             <div asp-validation-summary="All" class="alert alert-danger" role="alert"></div>
 
