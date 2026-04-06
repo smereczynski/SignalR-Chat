@@ -14,10 +14,14 @@ namespace Chat.Web.Pages.Admin.DispatchCenters;
 public class DispatchCentersEditModel : PageModel
 {
     private readonly IDispatchCentersRepository _dispatchCenters;
+    private readonly IUsersRepository _users;
+    private readonly Services.DispatchCenterTopologyService _topology;
 
-    public DispatchCentersEditModel(IDispatchCentersRepository dispatchCenters)
+    public DispatchCentersEditModel(IDispatchCentersRepository dispatchCenters, IUsersRepository users, Services.DispatchCenterTopologyService topology)
     {
         _dispatchCenters = dispatchCenters;
+        _users = users;
+        _topology = topology;
     }
 
     [BindProperty(SupportsGet = true)]
@@ -40,6 +44,7 @@ public class DispatchCentersEditModel : PageModel
             Name = current.Name,
             Country = current.Country,
             IfMain = current.IfMain,
+            OfficerUserName = current.OfficerUserName,
             CorrespondingDispatchCenterIds = current.CorrespondingDispatchCenterIds?.ToList() ?? new List<string>()
         };
 
@@ -89,12 +94,20 @@ public class DispatchCentersEditModel : PageModel
             }
         }
 
+        var officer = await _users.GetByUserNameAsync(Input.OfficerUserName.Trim());
+        if (officer == null)
+        {
+            ModelState.AddModelError(nameof(Input.OfficerUserName), "Officer user was not found.");
+            return Page();
+        }
+
         current.Name = Input.Name.Trim();
         current.Country = Input.Country.Trim();
         current.IfMain = Input.IfMain;
+        current.OfficerUserName = Input.OfficerUserName.Trim();
         current.CorrespondingDispatchCenterIds = normalizedCorresponding;
 
-        await _dispatchCenters.UpsertAsync(current);
+        await _topology.SaveDispatchCenterAsync(current, current.CorrespondingDispatchCenterIds);
         return RedirectToPage("Index");
     }
 

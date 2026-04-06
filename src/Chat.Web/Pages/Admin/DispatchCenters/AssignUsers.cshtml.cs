@@ -15,11 +15,13 @@ public class DispatchCentersAssignUsersModel : PageModel
 {
     private readonly IDispatchCentersRepository _dispatchCenters;
     private readonly IUsersRepository _users;
+    private readonly Services.DispatchCenterTopologyService _topology;
 
-    public DispatchCentersAssignUsersModel(IDispatchCentersRepository dispatchCenters, IUsersRepository users)
+    public DispatchCentersAssignUsersModel(IDispatchCentersRepository dispatchCenters, IUsersRepository users, Services.DispatchCenterTopologyService topology)
     {
         _dispatchCenters = dispatchCenters;
         _users = users;
+        _topology = topology;
     }
 
     [BindProperty(SupportsGet = true)]
@@ -64,12 +66,7 @@ public class DispatchCentersAssignUsersModel : PageModel
             var user = allUsers.FirstOrDefault(u => string.Equals(u.UserName, userName, StringComparison.OrdinalIgnoreCase));
             if (user == null) continue;
 
-            var memberships = new HashSet<string>(user.DispatchCenterIds ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
-            if (memberships.Add(Id))
-            {
-                user.DispatchCenterIds = memberships.ToList();
-                await _users.UpsertAsync(user);
-            }
+            await _topology.AssignUserAsync(Id, userName);
         }
 
         foreach (var userName in currentSet.Except(selectedSet))
@@ -79,12 +76,7 @@ public class DispatchCentersAssignUsersModel : PageModel
             var user = allUsers.FirstOrDefault(u => string.Equals(u.UserName, userName, StringComparison.OrdinalIgnoreCase));
             if (user == null) continue;
 
-            var memberships = new HashSet<string>(user.DispatchCenterIds ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
-            if (memberships.Remove(Id))
-            {
-                user.DispatchCenterIds = memberships.ToList();
-                await _users.UpsertAsync(user);
-            }
+            await _topology.RemoveUserFromDispatchCenterAsync(Id, userName);
         }
 
         return RedirectToPage("Edit", new { id = Id });

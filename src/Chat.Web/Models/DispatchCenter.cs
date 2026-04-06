@@ -21,5 +21,10 @@ namespace Chat.Web.Models
         /// Denormalized list of usernames assigned to this dispatch center.
         /// </summary>
         public ICollection<string> Users { get; set; } = new List<string>();
+
+        /// <summary>
+        /// User responsible for escalations targeting this dispatch center.
+        /// </summary>
+        public string OfficerUserName { get; set; }
     }
 }

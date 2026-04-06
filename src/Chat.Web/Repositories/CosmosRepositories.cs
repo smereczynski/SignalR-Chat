@@ -23,8 +23,9 @@ namespace Chat.Web.Repositories
         public Container Rooms { get; }
         public Container Messages { get; }
         public Container DispatchCenters { get; }
+        public Container Escalations { get; }
 
-        private CosmosClients(CosmosClient client, Database database, Container users, Container rooms, Container messages, Container dispatchCenters)
+        private CosmosClients(CosmosClient client, Database database, Container users, Container rooms, Container messages, Container dispatchCenters, Container escalations)
         {
             Client = client;
             Database = database;
@@ -32,6 +33,7 @@ namespace Chat.Web.Repositories
             Rooms = rooms;
             Messages = messages;
             DispatchCenters = dispatchCenters;
+            Escalations = escalations;
         }
 
         public static async Task<CosmosClients> CreateAsync(CosmosOptions options)
@@ -45,7 +47,7 @@ namespace Chat.Web.Repositories
             
             var client = new CosmosClient(options.ConnectionString, clientOptions);
             Database database;
-            Container users, rooms, messages, dispatchCenters;
+            Container users, rooms, messages, dispatchCenters, escalations;
 
             if (options.AutoCreate)
             {
@@ -54,6 +56,7 @@ namespace Chat.Web.Repositories
                 rooms = await CreateContainerIfNotExistsAsync(database, options.RoomsContainer, "/name", 400).ConfigureAwait(false);
                 messages = await CreateContainerIfNotExistsAsync(database, options.MessagesContainer, "/roomName", 400, options.MessagesTtlSeconds).ConfigureAwait(false);
                 dispatchCenters = await CreateContainerIfNotExistsAsync(database, options.DispatchCentersContainer, "/id", 400).ConfigureAwait(false);
+                escalations = await CreateContainerIfNotExistsAsync(database, options.EscalationsContainer, "/roomName", 400).ConfigureAwait(false);
             }
             else
             {
@@ -62,9 +65,10 @@ namespace Chat.Web.Repositories
                 rooms = database.GetContainer(options.RoomsContainer);
                 messages = database.GetContainer(options.MessagesContainer);
                 dispatchCenters = database.GetContainer(options.DispatchCentersContainer);
+                escalations = database.GetContainer(options.EscalationsContainer);
             }
 
-            return new CosmosClients(client, database, users, rooms, messages, dispatchCenters);
+            return new CosmosClients(client, database, users, rooms, messages, dispatchCenters, escalations);
         }
 
         private static async Task<Container> CreateContainerIfNotExistsAsync(Database database, string name, string partitionKey, int? throughput, int? defaultTtlSeconds = null)
@@ -117,9 +121,23 @@ namespace Chat.Web.Repositories
         public string region { get; set; }
         public string[] fixedRooms { get; set; } 
         public string[] dispatchCenterIds { get; set; }
+        public string dispatchCenterId { get; set; }
         public string defaultRoom { get; set; } 
     }
-    internal class RoomDoc { public string id { get; set; } public string name { get; set; } public string admin { get; set; } public string[] users { get; set; } public string[] languages { get; set; } }
+    internal class RoomDoc
+    {
+        public string id { get; set; }
+        public string name { get; set; }
+        public string displayName { get; set; }
+        public string admin { get; set; }
+        public string roomType { get; set; }
+        public string pairKey { get; set; }
+        public string dispatchCenterAId { get; set; }
+        public string dispatchCenterBId { get; set; }
+        public bool? isActive { get; set; }
+        public string[] users { get; set; }
+        public string[] languages { get; set; }
+    }
     internal class DispatchCenterDoc
     {
         public string id { get; set; }
@@ -128,6 +146,7 @@ namespace Chat.Web.Repositories
         public bool ifMain { get; set; }
         public string[] correspondingDispatchCenterIds { get; set; }
         public string[] users { get; set; }
+        public string officerUserName { get; set; }
     }
     internal class MessageDoc 
     { 
@@ -144,6 +163,37 @@ namespace Chat.Web.Repositories
         public string translationFailureCategory { get; set; }
         public string translationFailureCode { get; set; }
         public string translationFailureMessage { get; set; }
+        public string fromDispatchCenterId { get; set; }
+        public string[] readByDispatchCenterIds { get; set; }
+        public string escalationStatus { get; set; }
+        public string openEscalationId { get; set; }
+    }
+    internal class EscalationMessageSnapshotDoc
+    {
+        public int messageId { get; set; }
+        public string content { get; set; }
+        public DateTime timestamp { get; set; }
+        public string fromUserName { get; set; }
+        public string fromDispatchCenterId { get; set; }
+    }
+    internal class EscalationDoc
+    {
+        public string id { get; set; }
+        public string roomName { get; set; }
+        public string pairKey { get; set; }
+        public string sourceDispatchCenterId { get; set; }
+        public string targetDispatchCenterId { get; set; }
+        public string targetOfficerUserName { get; set; }
+        public string triggerType { get; set; }
+        public string status { get; set; }
+        public DateTime createdAt { get; set; }
+        public DateTime dueAt { get; set; }
+        public DateTime? escalatedAt { get; set; }
+        public DateTime? resolvedAt { get; set; }
+        public DateTime? cancelledAt { get; set; }
+        public string createdByUserName { get; set; }
+        public int[] messageIds { get; set; }
+        public EscalationMessageSnapshotDoc[] messageSnapshots { get; set; }
     }
 
     /// <summary>
@@ -255,6 +305,7 @@ namespace Chat.Web.Repositories
                 Region = d.region,
                 FixedRooms = fixedRooms,
                 DispatchCenterIds = dispatchCenterIds,
+                DispatchCenterId = d.dispatchCenterId,
                 DefaultRoom = def
             };
         }
@@ -264,6 +315,16 @@ namespace Chat.Web.Repositories
             using var activity = Tracing.ActivitySource.StartActivity("cosmos.users.getall", ActivityKind.Client);
             var q = _users.GetItemQueryIterator<UserDoc>(new QueryDefinition("SELECT * FROM c"));
             return await CosmosQueryHelper.ExecutePaginatedQueryAsync(q, MapUser, activity, _logger, "cosmos.users.getall").ConfigureAwait(false);
+        }
+
+        public async Task<IEnumerable<ApplicationUser>> GetByDispatchCenterIdAsync(string dispatchCenterId)
+        {
+            using var activity = Tracing.ActivitySource.StartActivity("cosmos.users.getbydispatchcenter", ActivityKind.Client);
+            activity?.SetTag("app.dispatchCenterId", dispatchCenterId);
+            var q = _users.GetItemQueryIterator<UserDoc>(
+                new QueryDefinition("SELECT * FROM c WHERE c.dispatchCenterId = @dispatchCenterId")
+                    .WithParameter("@dispatchCenterId", dispatchCenterId));
+            return await CosmosQueryHelper.ExecutePaginatedQueryAsync(q, MapUser, activity, _logger, "cosmos.users.getbydispatchcenter").ConfigureAwait(false);
         }
 
         private async Task<string> GetDocumentIdAsync(string userName)
@@ -328,6 +389,7 @@ namespace Chat.Web.Repositories
                 region = user.Region,
                 fixedRooms = user.FixedRooms != null ? System.Linq.Enumerable.ToArray(user.FixedRooms) : null, 
                 dispatchCenterIds = user.DispatchCenterIds != null ? System.Linq.Enumerable.ToArray(user.DispatchCenterIds) : null,
+                dispatchCenterId = user.DispatchCenterId,
                 defaultRoom = user.DefaultRoom 
             };
             try
@@ -359,13 +421,30 @@ namespace Chat.Web.Repositories
             _logger = logger;
         }
 
+        private static Room MapRoom(RoomDoc d)
+        {
+            return new Room
+            {
+                Id = DocIdUtil.TryParseRoomId(d.id),
+                Name = d.name,
+                DisplayName = d.displayName,
+                RoomType = Enum.TryParse<RoomType>(d.roomType, out var roomType) ? roomType : RoomType.General,
+                PairKey = d.pairKey,
+                DispatchCenterAId = d.dispatchCenterAId,
+                DispatchCenterBId = d.dispatchCenterBId,
+                IsActive = d.isActive ?? true,
+                Users = d.users != null ? new List<string>(d.users) : new List<string>(),
+                Languages = d.languages != null ? new List<string>(d.languages) : new List<string>()
+            };
+        }
+
         public async Task<IEnumerable<Room>> GetAllAsync()
         {
             using var activity = Tracing.ActivitySource.StartActivity("cosmos.rooms.getall", ActivityKind.Client);
             var q = _rooms.GetItemQueryIterator<RoomDoc>(new QueryDefinition("SELECT * FROM c ORDER BY c.name"));
             var list = await CosmosQueryHelper.ExecutePaginatedQueryAsync(
                 q,
-                d => new Room { Id = DocIdUtil.TryParseRoomId(d.id), Name = d.name, Users = d.users != null ? new List<string>(d.users) : new List<string>(), Languages = d.languages != null ? new List<string>(d.languages) : new List<string>() },
+                MapRoom,
                 activity,
                 _logger,
                 "cosmos.rooms.getall");
@@ -379,7 +458,7 @@ namespace Chat.Web.Repositories
             var q = _rooms.GetItemQueryIterator<RoomDoc>(new QueryDefinition("SELECT * FROM c WHERE c.id = @id").WithParameter("@id", id.ToString()));
             return await CosmosQueryHelper.ExecuteSingleResultQueryAsync(
                 q,
-                d => new Room { Id = DocIdUtil.TryParseRoomId(d.id), Name = d.name, Users = d.users != null ? new List<string>(d.users) : new List<string>(), Languages = d.languages != null ? new List<string>(d.languages) : new List<string>() },
+                MapRoom,
                 activity,
                 _logger,
                 "cosmos.rooms.getbyid");
@@ -392,10 +471,54 @@ namespace Chat.Web.Repositories
             var q = _rooms.GetItemQueryIterator<RoomDoc>(new QueryDefinition("SELECT * FROM c WHERE c.name = @n").WithParameter("@n", name));
             return await CosmosQueryHelper.ExecuteSingleResultQueryAsync(
                 q,
-                d => new Room { Id = DocIdUtil.TryParseRoomId(d.id), Name = d.name, Users = d.users != null ? new List<string>(d.users) : new List<string>(), Languages = d.languages != null ? new List<string>(d.languages) : new List<string>() },
+                MapRoom,
                 activity,
                 _logger,
                 "cosmos.rooms.getbyname");
+        }
+
+        public async Task<Room> GetByPairKeyAsync(string pairKey)
+        {
+            using var activity = Tracing.ActivitySource.StartActivity("cosmos.rooms.getbypairkey", ActivityKind.Client);
+            activity?.SetTag("app.pairKey", pairKey);
+            var q = _rooms.GetItemQueryIterator<RoomDoc>(new QueryDefinition("SELECT * FROM c WHERE c.pairKey = @pairKey").WithParameter("@pairKey", pairKey));
+            return await CosmosQueryHelper.ExecuteSingleResultQueryAsync(q, MapRoom, activity, _logger, "cosmos.rooms.getbypairkey").ConfigureAwait(false);
+        }
+
+        public async Task<IEnumerable<Room>> GetByDispatchCenterIdAsync(string dispatchCenterId)
+        {
+            using var activity = Tracing.ActivitySource.StartActivity("cosmos.rooms.getbydispatchcenter", ActivityKind.Client);
+            activity?.SetTag("app.dispatchCenterId", dispatchCenterId);
+            var q = _rooms.GetItemQueryIterator<RoomDoc>(
+                new QueryDefinition("SELECT * FROM c WHERE c.isActive = true AND (c.dispatchCenterAId = @dispatchCenterId OR c.dispatchCenterBId = @dispatchCenterId)")
+                    .WithParameter("@dispatchCenterId", dispatchCenterId));
+            return await CosmosQueryHelper.ExecutePaginatedQueryAsync(q, MapRoom, activity, _logger, "cosmos.rooms.getbydispatchcenter").ConfigureAwait(false);
+        }
+
+        public async Task UpsertAsync(Room room)
+        {
+            if (room == null) return;
+
+            if (room.Id == 0)
+            {
+                room.Id = DocIdUtil.TryParseRoomId(room.Name ?? Guid.NewGuid().ToString("N"));
+            }
+
+            var doc = new RoomDoc
+            {
+                id = room.Id.ToString(),
+                name = room.Name,
+                displayName = room.DisplayName,
+                roomType = room.RoomType.ToString(),
+                pairKey = room.PairKey,
+                dispatchCenterAId = room.DispatchCenterAId,
+                dispatchCenterBId = room.DispatchCenterBId,
+                isActive = room.IsActive,
+                users = room.Users?.ToArray() ?? Array.Empty<string>(),
+                languages = room.Languages?.ToArray() ?? Array.Empty<string>()
+            };
+
+            await _rooms.UpsertItemAsync(doc, new PartitionKey(doc.name)).ConfigureAwait(false);
         }
 
         public async Task AddUserToRoomAsync(string roomName, string userName)
@@ -531,7 +654,11 @@ namespace Chat.Web.Repositories
                 ToRoom = new Room { Name = d.roomName },
                 ToRoomId = 0,
                 FromUser = new ApplicationUser { UserName = d.fromUser },
+                FromDispatchCenterId = d.fromDispatchCenterId,
                 ReadBy = d.readBy != null ? new List<string>(d.readBy) : new List<string>(),
+                ReadByDispatchCenterIds = d.readByDispatchCenterIds != null ? new List<string>(d.readByDispatchCenterIds) : new List<string>(),
+                EscalationStatus = Enum.TryParse<MessageEscalationStatus>(d.escalationStatus, out var escalationStatus) ? escalationStatus : MessageEscalationStatus.None,
+                OpenEscalationId = d.openEscalationId,
                 TranslationStatus = Enum.TryParse<TranslationStatus>(d.translationStatus, out var status) ? status : TranslationStatus.None,
                 Translations = d.translations ?? new Dictionary<string, string>(),
                 TranslationJobId = d.translationJobId,
@@ -554,8 +681,12 @@ namespace Chat.Web.Repositories
                 roomName = pk, 
                 content = message.Content, 
                 fromUser = message.FromUser?.UserName, 
+                fromDispatchCenterId = message.FromDispatchCenterId,
                 timestamp = message.Timestamp, 
                 readBy = (message.ReadBy != null ? message.ReadBy.ToArray() : Array.Empty<string>()),
+                readByDispatchCenterIds = message.ReadByDispatchCenterIds != null ? message.ReadByDispatchCenterIds.ToArray() : Array.Empty<string>(),
+                escalationStatus = message.EscalationStatus.ToString(),
+                openEscalationId = message.OpenEscalationId,
                 translationStatus = message.TranslationStatus.ToString(),
                 translations = message.Translations,
                 translationJobId = message.TranslationJobId,
@@ -641,7 +772,7 @@ namespace Chat.Web.Repositories
             return list.OrderByDescending(m => m.Timestamp).Take(take).OrderBy(m => m.Timestamp).ToList();
         }
 
-        public async Task<Message> MarkReadAsync(int id, string userName)
+        public async Task<Message> MarkReadAsync(int id, string userName, string dispatchCenterId)
         {
             using var activity = Tracing.ActivitySource.StartActivity("cosmos.messages.markread", ActivityKind.Client);
             activity?.SetTag("app.message.id", id);
@@ -660,9 +791,16 @@ namespace Chat.Web.Repositories
             if (d == null) return null;
             var pk = d.roomName;
             var set = new HashSet<string>(d.readBy ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
-            if (set.Add(userName))
+            var readByDispatchCenters = new HashSet<string>(d.readByDispatchCenterIds ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
+            var changed = set.Add(userName);
+            if (!string.IsNullOrWhiteSpace(dispatchCenterId))
+            {
+                changed = readByDispatchCenters.Add(dispatchCenterId) || changed;
+            }
+            if (changed)
             {
                 d.readBy = set.ToArray();
+                d.readByDispatchCenterIds = readByDispatchCenters.ToArray();
                 try
                 {
                     var resp = await Resilience.RetryHelper.ExecuteAsync(
@@ -746,6 +884,30 @@ namespace Chat.Web.Repositories
             
             return MapMessage(d);
         }
+
+        public async Task<Message> UpdateEscalationAsync(int id, MessageEscalationStatus status, string escalationId)
+        {
+            using var activity = Tracing.ActivitySource.StartActivity("cosmos.messages.updateescalation", ActivityKind.Client);
+            activity?.SetTag("app.message.id", id);
+            var q = _messages.GetItemQueryIterator<MessageDoc>(new QueryDefinition("SELECT TOP 1 * FROM c WHERE c.id = @id").WithParameter("@id", id.ToString()));
+            MessageDoc d = null;
+            while (q.HasMoreResults && d == null)
+            {
+                var page = await Resilience.RetryHelper.ExecuteAsync(
+                    _ => q.ReadNextAsync(),
+                    Transient.IsCosmosTransient,
+                    _logger,
+                    "cosmos.messages.updateescalation.lookup").ConfigureAwait(false);
+                d = page.FirstOrDefault();
+            }
+
+            if (d == null) return null;
+
+            d.escalationStatus = status.ToString();
+            d.openEscalationId = escalationId;
+            await _messages.UpsertItemAsync(d, new PartitionKey(d.roomName)).ConfigureAwait(false);
+            return MapMessage(d);
+        }
     }
 
     public class CosmosDispatchCentersRepository : IDispatchCentersRepository
@@ -768,7 +930,8 @@ namespace Chat.Web.Repositories
                 Country = d.country,
                 IfMain = d.ifMain,
                 CorrespondingDispatchCenterIds = d.correspondingDispatchCenterIds != null ? new List<string>(d.correspondingDispatchCenterIds) : new List<string>(),
-                Users = d.users != null ? new List<string>(d.users) : new List<string>()
+                Users = d.users != null ? new List<string>(d.users) : new List<string>(),
+                OfficerUserName = d.officerUserName
             };
         }
 
@@ -828,7 +991,8 @@ namespace Chat.Web.Repositories
                 country = dispatchCenter.Country,
                 ifMain = dispatchCenter.IfMain,
                 correspondingDispatchCenterIds = dispatchCenter.CorrespondingDispatchCenterIds?.ToArray() ?? Array.Empty<string>(),
-                users = dispatchCenter.Users?.ToArray() ?? Array.Empty<string>()
+                users = dispatchCenter.Users?.ToArray() ?? Array.Empty<string>(),
+                officerUserName = dispatchCenter.OfficerUserName
             };
 
             try
@@ -901,6 +1065,140 @@ namespace Chat.Web.Repositories
 
             dispatchCenter.Users = set.ToList();
             await UpsertAsync(dispatchCenter).ConfigureAwait(false);
+        }
+    }
+
+    public class CosmosEscalationsRepository : IEscalationsRepository
+    {
+        private readonly Container _escalations;
+        private readonly ILogger<CosmosEscalationsRepository> _logger;
+
+        public CosmosEscalationsRepository(CosmosClients clients, ILogger<CosmosEscalationsRepository> logger)
+        {
+            _escalations = clients.Escalations;
+            _logger = logger;
+        }
+
+        private static Escalation MapEscalation(EscalationDoc d)
+        {
+            return new Escalation
+            {
+                Id = d.id,
+                RoomName = d.roomName,
+                PairKey = d.pairKey,
+                SourceDispatchCenterId = d.sourceDispatchCenterId,
+                TargetDispatchCenterId = d.targetDispatchCenterId,
+                TargetOfficerUserName = d.targetOfficerUserName,
+                TriggerType = Enum.TryParse<EscalationTriggerType>(d.triggerType, out var triggerType) ? triggerType : EscalationTriggerType.Automatic,
+                Status = Enum.TryParse<Models.EscalationStatus>(d.status, out var status) ? status : Models.EscalationStatus.Scheduled,
+                CreatedAt = d.createdAt,
+                DueAt = d.dueAt,
+                EscalatedAt = d.escalatedAt,
+                ResolvedAt = d.resolvedAt,
+                CancelledAt = d.cancelledAt,
+                CreatedByUserName = d.createdByUserName,
+                MessageIds = d.messageIds != null ? new List<int>(d.messageIds) : new List<int>(),
+                MessageSnapshots = d.messageSnapshots != null
+                    ? d.messageSnapshots.Select(x => new EscalationMessageSnapshot
+                    {
+                        MessageId = x.messageId,
+                        Content = x.content,
+                        Timestamp = x.timestamp,
+                        FromUserName = x.fromUserName,
+                        FromDispatchCenterId = x.fromDispatchCenterId
+                    }).ToList()
+                    : new List<EscalationMessageSnapshot>()
+            };
+        }
+
+        private static EscalationDoc MapEscalationDoc(Escalation escalation)
+        {
+            return new EscalationDoc
+            {
+                id = escalation.Id,
+                roomName = escalation.RoomName,
+                pairKey = escalation.PairKey,
+                sourceDispatchCenterId = escalation.SourceDispatchCenterId,
+                targetDispatchCenterId = escalation.TargetDispatchCenterId,
+                targetOfficerUserName = escalation.TargetOfficerUserName,
+                triggerType = escalation.TriggerType.ToString(),
+                status = escalation.Status.ToString(),
+                createdAt = escalation.CreatedAt,
+                dueAt = escalation.DueAt,
+                escalatedAt = escalation.EscalatedAt,
+                resolvedAt = escalation.ResolvedAt,
+                cancelledAt = escalation.CancelledAt,
+                createdByUserName = escalation.CreatedByUserName,
+                messageIds = escalation.MessageIds?.ToArray() ?? Array.Empty<int>(),
+                messageSnapshots = escalation.MessageSnapshots?.Select(x => new EscalationMessageSnapshotDoc
+                {
+                    messageId = x.MessageId,
+                    content = x.Content,
+                    timestamp = x.Timestamp,
+                    fromUserName = x.FromUserName,
+                    fromDispatchCenterId = x.FromDispatchCenterId
+                }).ToArray() ?? Array.Empty<EscalationMessageSnapshotDoc>()
+            };
+        }
+
+        public async Task<Escalation> CreateAsync(Escalation escalation)
+        {
+            escalation.Id ??= Guid.NewGuid().ToString();
+            var doc = MapEscalationDoc(escalation);
+            await _escalations.UpsertItemAsync(doc, new PartitionKey(doc.roomName)).ConfigureAwait(false);
+            return escalation;
+        }
+
+        public async Task<Escalation> GetByIdAsync(string id, string roomName)
+        {
+            if (string.IsNullOrWhiteSpace(id) || string.IsNullOrWhiteSpace(roomName)) return null;
+            try
+            {
+                var response = await _escalations.ReadItemAsync<EscalationDoc>(id, new PartitionKey(roomName)).ConfigureAwait(false);
+                return MapEscalation(response.Resource);
+            }
+            catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+            {
+                return null;
+            }
+        }
+
+        public async Task<IEnumerable<Escalation>> GetByRoomAsync(string roomName, int take = 50)
+        {
+            using var activity = Tracing.ActivitySource.StartActivity("cosmos.escalations.byroom", ActivityKind.Client);
+            var q = _escalations.GetItemQueryIterator<EscalationDoc>(
+                new QueryDefinition($"SELECT TOP {take} * FROM c WHERE c.roomName = @roomName ORDER BY c.createdAt DESC")
+                    .WithParameter("@roomName", roomName),
+                requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey(roomName) });
+            return await CosmosQueryHelper.ExecutePaginatedQueryAsync(q, MapEscalation, activity, _logger, "cosmos.escalations.byroom").ConfigureAwait(false);
+        }
+
+        public async Task<IEnumerable<Escalation>> GetDueScheduledAsync(DateTime dueBeforeUtc, int take = 100)
+        {
+            using var activity = Tracing.ActivitySource.StartActivity("cosmos.escalations.duescheduled", ActivityKind.Client);
+            var q = _escalations.GetItemQueryIterator<EscalationDoc>(
+                new QueryDefinition($"SELECT TOP {take} * FROM c WHERE c.status = @status AND c.dueAt <= @dueBeforeUtc ORDER BY c.dueAt ASC")
+                    .WithParameter("@status", Models.EscalationStatus.Scheduled.ToString())
+                    .WithParameter("@dueBeforeUtc", dueBeforeUtc));
+            return await CosmosQueryHelper.ExecutePaginatedQueryAsync(q, MapEscalation, activity, _logger, "cosmos.escalations.duescheduled").ConfigureAwait(false);
+        }
+
+        public async Task<Escalation> GetOpenByMessageIdAsync(int messageId)
+        {
+            using var activity = Tracing.ActivitySource.StartActivity("cosmos.escalations.openbymessage", ActivityKind.Client);
+            var q = _escalations.GetItemQueryIterator<EscalationDoc>(
+                new QueryDefinition("SELECT TOP 1 * FROM c WHERE ARRAY_CONTAINS(c.messageIds, @messageId) AND (c.status = @scheduled OR c.status = @escalated)")
+                    .WithParameter("@messageId", messageId)
+                    .WithParameter("@scheduled", Models.EscalationStatus.Scheduled.ToString())
+                    .WithParameter("@escalated", Models.EscalationStatus.Escalated.ToString()));
+            return await CosmosQueryHelper.ExecuteSingleResultQueryAsync(q, MapEscalation, activity, _logger, "cosmos.escalations.openbymessage").ConfigureAwait(false);
+        }
+
+        public async Task UpsertAsync(Escalation escalation)
+        {
+            if (escalation == null) return;
+            var doc = MapEscalationDoc(escalation);
+            await _escalations.UpsertItemAsync(doc, new PartitionKey(doc.roomName)).ConfigureAwait(false);
         }
     }
 }

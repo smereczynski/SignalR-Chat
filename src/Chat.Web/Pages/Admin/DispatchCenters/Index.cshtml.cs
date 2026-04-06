@@ -14,10 +14,12 @@ namespace Chat.Web.Pages.Admin.DispatchCenters;
 public class DispatchCentersIndexModel : PageModel
 {
     private readonly IDispatchCentersRepository _dispatchCenters;
+    private readonly Services.DispatchCenterTopologyService _topology;
 
-    public DispatchCentersIndexModel(IDispatchCentersRepository dispatchCenters)
+    public DispatchCentersIndexModel(IDispatchCentersRepository dispatchCenters, Services.DispatchCenterTopologyService topology)
     {
         _dispatchCenters = dispatchCenters;
+        _topology = topology;
     }
 
     public IEnumerable<DispatchCenter> DispatchCenters { get; set; } = Enumerable.Empty<DispatchCenter>();
@@ -53,7 +55,7 @@ public class DispatchCentersIndexModel : PageModel
     {
         if (string.IsNullOrWhiteSpace(id)) return RedirectToPage();
 
-        await _dispatchCenters.DeleteAsync(id);
+        await _topology.DeleteDispatchCenterAsync(id);
         return RedirectToPage();
     }
 }

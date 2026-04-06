@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
@@ -42,17 +43,31 @@ namespace Chat.Web.Controllers
         }
 
         /// <summary>
-        /// Returns rooms the authenticated user is authorized to see (intersection with user FixedRooms whitelist).
+        /// Returns rooms the authenticated user is authorized to see based on dispatch-center pair rooms.
         /// </summary>
         [HttpGet]
         public async Task<ActionResult<IEnumerable<RoomViewModel>>> Get()
         {
             var userName = User?.Identity?.Name;
             var profile = string.IsNullOrWhiteSpace(userName) ? null : await _users.GetByUserNameAsync(userName);
-            var allowed = profile?.FixedRooms ?? [];
-            var rooms = (await _rooms.GetAllAsync())
-                .Where(r => allowed.Contains(r.Name))
-                .Select(r => new RoomViewModel { Id = r.Id, Name = r.Name, Languages = r.Languages })
+            if (profile == null || string.IsNullOrWhiteSpace(profile.DispatchCenterId))
+            {
+                return Ok(Array.Empty<RoomViewModel>());
+            }
+
+            var rooms = (await _rooms.GetByDispatchCenterIdAsync(profile.DispatchCenterId))
+                .Where(r => r.IsActive)
+                .Select(r => new RoomViewModel
+                {
+                    Id = r.Id,
+                    Name = r.Name,
+                    DisplayName = r.DisplayName,
+                    PairKey = r.PairKey,
+                    DispatchCenterAId = r.DispatchCenterAId,
+                    DispatchCenterBId = r.DispatchCenterBId,
+                    IsActive = r.IsActive,
+                    Languages = r.Languages
+                })
                 .ToList();
 
             var json = JsonSerializer.Serialize(rooms, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
@@ -67,13 +82,21 @@ namespace Chat.Web.Controllers
         {
             var userName = User?.Identity?.Name;
             var profile = string.IsNullOrWhiteSpace(userName) ? null : await _users.GetByUserNameAsync(userName);
-            var allowed = profile?.FixedRooms ?? new List<string>();
-
             var room = await _rooms.GetByIdAsync(id);
-            if (room == null || !allowed.Contains(room.Name))
+            if (profile == null || string.IsNullOrWhiteSpace(profile.DispatchCenterId) || room == null || !room.IsActive || !DispatchCenterPairing.IncludesDispatchCenter(room, profile.DispatchCenterId))
                 return NotFound();
 
-            var vm = new RoomViewModel { Id = room.Id, Name = room.Name, Languages = room.Languages };
+            var vm = new RoomViewModel
+            {
+                Id = room.Id,
+                Name = room.Name,
+                DisplayName = room.DisplayName,
+                PairKey = room.PairKey,
+                DispatchCenterAId = room.DispatchCenterAId,
+                DispatchCenterBId = room.DispatchCenterBId,
+                IsActive = room.IsActive,
+                Languages = room.Languages
+            };
             return Ok(vm);
         }
 
@@ -92,16 +115,17 @@ namespace Chat.Web.Controllers
 
             var currentUserName = User?.Identity?.Name;
             var currentProfile = string.IsNullOrWhiteSpace(currentUserName) ? null : await _users.GetByUserNameAsync(currentUserName);
-            var allowed = currentProfile?.FixedRooms ?? new List<string>();
-
-            if (!allowed.Any(r => string.Equals(r, roomName, System.StringComparison.OrdinalIgnoreCase)))
+            var room = await _rooms.GetByNameAsync(roomName);
+            if (currentProfile == null || string.IsNullOrWhiteSpace(currentProfile.DispatchCenterId) || room == null || !room.IsActive || !DispatchCenterPairing.IncludesDispatchCenter(room, currentProfile.DispatchCenterId))
             {
                 return Forbid();
             }
 
             var users = (await _users.GetAllAsync())
                 .Where(u => u.Enabled)
-                .Where(u => u.FixedRooms != null && u.FixedRooms.Any(r => string.Equals(r, roomName, System.StringComparison.OrdinalIgnoreCase)))
+                .Where(u =>
+                    string.Equals(u.DispatchCenterId, room.DispatchCenterAId, System.StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(u.DispatchCenterId, room.DispatchCenterBId, System.StringComparison.OrdinalIgnoreCase))
                 .OrderBy(u => u.FullName ?? u.UserName)
                 .ToList();
 

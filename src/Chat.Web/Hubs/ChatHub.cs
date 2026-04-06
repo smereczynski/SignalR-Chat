@@ -38,6 +38,7 @@ namespace Chat.Web.Hubs
         private readonly HealthCheckService _healthCheckService;
         private readonly Services.ITranslationJobQueue _translationQueue;
         private readonly Options.TranslationOptions _translationOptions;
+        private readonly Services.EscalationService _escalations;
 
         /// <summary>
         /// Creates a new Hub instance.
@@ -53,6 +54,7 @@ namespace Chat.Web.Hubs
             HealthCheckService healthCheckService,
             Services.ITranslationJobQueue translationQueue,
             Microsoft.Extensions.Options.IOptions<Options.TranslationOptions> translationOptions,
+            Services.EscalationService escalations,
             Services.UnreadNotificationScheduler unreadScheduler = null)
         {
             _users = users;
@@ -67,6 +69,7 @@ namespace Chat.Web.Hubs
             _healthCheckService = healthCheckService;
             _translationQueue = translationQueue;
             _translationOptions = translationOptions.Value;
+            _escalations = escalations;
         }
 
         /// <summary>
@@ -88,18 +91,10 @@ namespace Chat.Web.Hubs
             try
             {
                 var profile = await _users.GetByUserNameAsync(IdentityName);
-                bool hasFixed = profile?.FixedRooms != null;
-                bool hasAny = hasFixed && profile.FixedRooms.Any();
-                if (!hasAny)
+                var room = await _rooms.GetByNameAsync(roomName);
+                if (profile == null || string.IsNullOrWhiteSpace(profile.DispatchCenterId) || room == null || !room.IsActive || !Services.DispatchCenterPairing.IncludesDispatchCenter(room, profile.DispatchCenterId))
                 {
-                    _logger.LogWarning("Unauthorized room join attempt (no fixed rooms) {User} => {Room} correlation={CorrelationId}", IdentityName, roomName, Context.ConnectionId);
-                    await Clients.Caller.SendAsync("onError", _localizer["ErrorNotAuthorizedRoom"].Value);
-                    activity?.SetStatus(ActivityStatusCode.Error, "room unauthorized none");
-                    return;
-                }
-                if (!profile.FixedRooms.Contains(roomName))
-                {
-                    _logger.LogWarning("Unauthorized room join attempt (not in fixed list) {User} => {Room} allowed={AllowedRooms} correlation={CorrelationId}", IdentityName, roomName, string.Join(',', profile.FixedRooms), Context.ConnectionId);
+                    _logger.LogWarning("Unauthorized room join attempt {User} => {Room} correlation={CorrelationId}", IdentityName, roomName, Context.ConnectionId);
                     await Clients.Caller.SendAsync("onError", _localizer["ErrorNotAuthorizedRoom"].Value);
                     activity?.SetStatus(ActivityStatusCode.Error, "room unauthorized");
                     return;
@@ -225,7 +220,8 @@ namespace Chat.Web.Hubs
                     UserName = user?.UserName ?? IdentityName,
                     FullName = user?.FullName ?? IdentityName,
                     Avatar = user?.Avatar,
-                    CurrentRoom = string.Empty
+                    CurrentRoom = string.Empty,
+                    DispatchCenterId = user?.DispatchCenterId
                 };
                 
                 // Store user profile in Context.Items for fast access (per-connection state)
@@ -254,24 +250,26 @@ namespace Chat.Web.Hubs
                 // Auto-join default room logic
                 try
                 {
-                    var fixedRooms = user?.FixedRooms ?? new System.Collections.Generic.List<string>();
-                    if (fixedRooms.Any())
+                    var accessibleRooms = string.IsNullOrWhiteSpace(user?.DispatchCenterId)
+                        ? new System.Collections.Generic.List<Models.Room>()
+                        : (await _rooms.GetByDispatchCenterIdAsync(user.DispatchCenterId)).Where(r => r.IsActive).OrderBy(r => r.DisplayName ?? r.Name).ToList();
+                    if (accessibleRooms.Any())
                     {
                         string target = null;
                         string strategy = null;
-                        if (!string.IsNullOrWhiteSpace(user?.DefaultRoom) && fixedRooms.Contains(user.DefaultRoom))
+                        if (!string.IsNullOrWhiteSpace(user?.DefaultRoom) && accessibleRooms.Any(r => string.Equals(r.Name, user.DefaultRoom, StringComparison.OrdinalIgnoreCase)))
                         {
                             target = user.DefaultRoom;
                             strategy = "autoJoin.default";
                         }
-                        else if (fixedRooms.Count == 1)
+                        else if (accessibleRooms.Count == 1)
                         {
-                            target = fixedRooms.First();
+                            target = accessibleRooms.First().Name;
                             strategy = "autoJoin.single";
                         }
                         else
                         {
-                            target = fixedRooms.OrderBy(r => r).First();
+                            target = accessibleRooms.OrderBy(r => r.DisplayName ?? r.Name).First().Name;
                             strategy = "autoJoin.firstAlphabetical";
                         }
                         if (!string.IsNullOrEmpty(target))
@@ -409,7 +407,7 @@ namespace Chat.Web.Hubs
             }
             
             var domainUser = await _users.GetByUserNameAsync(IdentityName);
-            if (domainUser?.FixedRooms != null && domainUser.FixedRooms.Any() && !domainUser.FixedRooms.Contains(currentRoom))
+            if (domainUser == null || string.IsNullOrWhiteSpace(domainUser.DispatchCenterId))
             {
                 _logger.LogWarning("SendMessage unauthorized user={User} room={Room}", IdentityName, currentRoom);
                 activity?.SetStatus(ActivityStatusCode.Error, "unauthorized");
@@ -417,7 +415,7 @@ namespace Chat.Web.Hubs
                 return;
             }
             var room = await _rooms.GetByNameAsync(currentRoom);
-            if (room == null)
+            if (room == null || !room.IsActive || !Services.DispatchCenterPairing.IncludesDispatchCenter(room, domainUser.DispatchCenterId))
             {
                 _logger.LogWarning("SendMessage room missing user={User} room={Room}", IdentityName, currentRoom);
                 activity?.SetStatus(ActivityStatusCode.Error, "room_missing");
@@ -432,6 +430,7 @@ namespace Chat.Web.Hubs
             {
                 Content = sanitized,
                 FromUser = domainUser,
+                FromDispatchCenterId = domainUser.DispatchCenterId,
                 ToRoom = room,
                 Timestamp = System.DateTime.UtcNow
             };
@@ -492,6 +491,8 @@ namespace Chat.Web.Hubs
                 }
             }
             
+            await _escalations.ScheduleAutomaticAsync(msg);
+
             var vm = new ViewModels.MessageViewModel
             {
                 Id = msg.Id,
@@ -499,10 +500,14 @@ namespace Chat.Web.Hubs
                 FromUserName = msg.FromUser?.UserName,
                 FromFullName = msg.FromUser?.FullName,
                 Avatar = msg.FromUser?.Avatar,
+                FromDispatchCenterId = msg.FromDispatchCenterId,
                 Room = room.Name,
                 Timestamp = msg.Timestamp,
                 CorrelationId = correlationId,
                 ReadBy = (msg.ReadBy != null ? msg.ReadBy.ToArray() : Array.Empty<string>()),
+                ReadByDispatchCenterIds = (msg.ReadByDispatchCenterIds != null ? msg.ReadByDispatchCenterIds.ToArray() : Array.Empty<string>()),
+                EscalationStatus = msg.EscalationStatus.ToString(),
+                OpenEscalationId = msg.OpenEscalationId,
                 TranslationStatus = msg.TranslationStatus.ToString(),
                 SourceLanguage = sourceLanguageForUi,
                 Translations = msg.Translations ?? new System.Collections.Generic.Dictionary<string, string>(),
@@ -546,8 +551,22 @@ namespace Chat.Web.Hubs
             
             if (user == null || string.IsNullOrEmpty(currentRoom)) return;
             
-            var updated = await _messages.MarkReadAsync(messageId, IdentityName);
+            var profile = await _users.GetByUserNameAsync(IdentityName);
+            if (profile == null || string.IsNullOrWhiteSpace(profile.DispatchCenterId))
+            {
+                return;
+            }
+
+            var message = await _messages.GetByIdAsync(messageId);
+            var room = await _rooms.GetByNameAsync(message?.ToRoom?.Name);
+            if (message == null || room == null || !room.IsActive || !Services.DispatchCenterPairing.IncludesDispatchCenter(room, profile.DispatchCenterId))
+            {
+                return;
+            }
+
+            var updated = await _messages.MarkReadAsync(messageId, IdentityName, profile.DispatchCenterId);
             if (updated == null) return;
+            await _escalations.ResolveIfAcknowledgedAsync(updated, profile);
             
             // Cancel any pending unread notification for this message since someone has read it
             try
@@ -565,7 +584,12 @@ namespace Chat.Web.Hubs
             // Optionally, guard if the message's room does not match the user's current room
             try
             {
-                await Clients.Group(messageRoom).SendAsync("messageRead", new { id = messageId, readers = updated.ReadBy?.ToArray() ?? Array.Empty<string>() });
+                await Clients.Group(messageRoom).SendAsync("messageRead", new
+                {
+                    id = messageId,
+                    readers = updated.ReadBy?.ToArray() ?? Array.Empty<string>(),
+                    readByDispatchCenterIds = updated.ReadByDispatchCenterIds?.ToArray() ?? Array.Empty<string>()
+                });
             }
             catch { /* ignore broadcast errors */ }
         }

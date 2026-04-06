@@ -78,6 +78,9 @@ namespace Chat.Web.Repositories
             _rooms = rooms;
         }
         public Task<IEnumerable<ApplicationUser>> GetAllAsync() => Task.FromResult<IEnumerable<ApplicationUser>>(_users.Values);
+        public Task<IEnumerable<ApplicationUser>> GetByDispatchCenterIdAsync(string dispatchCenterId)
+            => Task.FromResult<IEnumerable<ApplicationUser>>(
+                _users.Values.Where(u => string.Equals(u.DispatchCenterId, dispatchCenterId, StringComparison.OrdinalIgnoreCase)).ToList());
         public Task<ApplicationUser> GetByUserNameAsync(string userName) => Task.FromResult(_users.TryGetValue(userName, out var user) ? user : null);
         public Task<ApplicationUser> GetByUpnAsync(string upn) => Task.FromResult(_users.Values.FirstOrDefault(u => u.Upn == upn));
         public Task UpsertAsync(ApplicationUser user)
@@ -101,12 +104,46 @@ namespace Chat.Web.Repositories
         public InMemoryRoomsRepository()
         {
             // Pre-initialize static rooms for testing (deterministic IDs 1..n)
-            var rooms = new[]{"general","ops","random"};
-            int id=1; foreach(var r in rooms){ var room=new Room{Id=id++, Name=r, Users = new List<string>(), Languages = new List<string>()}; _roomsById[room.Id]=room; _roomsByName[room.Name]=room; }
+            var rooms = new[] { ("general", "General"), ("ops", "Ops"), ("random", "Random") };
+            int id = 1;
+            foreach (var r in rooms)
+            {
+                var room = new Room
+                {
+                    Id = id++,
+                    Name = r.Item1,
+                    DisplayName = r.Item2,
+                    Users = new List<string>(),
+                    Languages = new List<string>()
+                };
+                _roomsById[room.Id] = room;
+                _roomsByName[room.Name] = room;
+            }
         }
         public Task<IEnumerable<Room>> GetAllAsync() => Task.FromResult<IEnumerable<Room>>(_roomsById.Values);
         public Task<Room> GetByIdAsync(int id) => Task.FromResult(_roomsById.TryGetValue(id, out var r) ? r : null);
         public Task<Room> GetByNameAsync(string name) => Task.FromResult(_roomsByName.TryGetValue(name, out var r) ? r : null);
+        public Task<Room> GetByPairKeyAsync(string pairKey)
+            => Task.FromResult(_roomsById.Values.FirstOrDefault(r => string.Equals(r.PairKey, pairKey, StringComparison.OrdinalIgnoreCase)));
+        public Task<IEnumerable<Room>> GetByDispatchCenterIdAsync(string dispatchCenterId)
+            => Task.FromResult<IEnumerable<Room>>(
+                _roomsById.Values.Where(r => r.IsActive && DispatchCenterPairing.IncludesDispatchCenter(r, dispatchCenterId)).ToList());
+        public Task UpsertAsync(Room room)
+        {
+            if (room == null) return Task.CompletedTask;
+            if (room.Id == 0)
+            {
+                room.Id = _roomsById.Keys.DefaultIfEmpty(0).Max() + 1;
+            }
+
+            _roomsById[room.Id] = room;
+            if (!string.IsNullOrWhiteSpace(room.Name))
+            {
+                _roomsByName[room.Name] = room;
+            }
+
+            return Task.CompletedTask;
+        }
         public Task AddUserToRoomAsync(string roomName, string userName)
         {
             if (_roomsByName.TryGetValue(roomName, out var room))
@@ -157,11 +194,16 @@ namespace Chat.Web.Repositories
         public Task<Message> GetByIdAsync(int id) => Task.FromResult(_messages.TryGetValue(id, out var m) ? m : null);
         public Task<IEnumerable<Message>> GetBeforeByRoomAsync(string roomName, DateTime before, int take = 20) => GetRecentByRoomAsync(roomName, take);
         public Task<IEnumerable<Message>> GetRecentByRoomAsync(string roomName, int take = 20) => Task.FromResult<IEnumerable<Message>>(_messages.Values.Where(m => m.ToRoom != null && m.ToRoom.Name == roomName).OrderByDescending(m => m.Timestamp).Take(take));
-        public Task<Message> MarkReadAsync(int id, string userName)
+        public Task<Message> MarkReadAsync(int id, string userName, string dispatchCenterId)
         {
             if (!_messages.TryGetValue(id, out var m) || string.IsNullOrWhiteSpace(userName)) return Task.FromResult<Message>(null);
             var set = new HashSet<string>(m.ReadBy ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
             if (set.Add(userName)) m.ReadBy = set.ToList();
+            if (!string.IsNullOrWhiteSpace(dispatchCenterId))
+            {
+                var readByDispatchCenters = new HashSet<string>(m.ReadByDispatchCenterIds ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
+                if (readByDispatchCenters.Add(dispatchCenterId)) m.ReadByDispatchCenterIds = readByDispatchCenters.ToList();
+            }
             return Task.FromResult(m);
         }
         
@@ -188,6 +230,69 @@ namespace Chat.Web.Repositories
                 m.TranslationFailureMessage = null;
             }
             return Task.FromResult(m);
+        }
+
+        public Task<Message> UpdateEscalationAsync(int id, MessageEscalationStatus status, string escalationId)
+        {
+            if (!_messages.TryGetValue(id, out var m)) return Task.FromResult<Message>(null);
+            m.EscalationStatus = status;
+            m.OpenEscalationId = escalationId;
+            return Task.FromResult(m);
+        }
+    }
+
+    public class InMemoryEscalationsRepository : IEscalationsRepository
+    {
+        private readonly ConcurrentDictionary<string, Escalation> _escalations = new(StringComparer.OrdinalIgnoreCase);
+
+        public Task<Escalation> CreateAsync(Escalation escalation)
+        {
+            escalation.Id ??= Guid.NewGuid().ToString();
+            _escalations[escalation.Id] = escalation;
+            return Task.FromResult(escalation);
+        }
+
+        public Task<Escalation> GetByIdAsync(string id, string roomName)
+        {
+            if (string.IsNullOrWhiteSpace(id)) return Task.FromResult<Escalation>(null);
+            return Task.FromResult(_escalations.TryGetValue(id, out var escalation) ? escalation : null);
+        }
+
+        public Task<IEnumerable<Escalation>> GetByRoomAsync(string roomName, int take = 50)
+        {
+            var items = _escalations.Values
+                .Where(x => string.Equals(x.RoomName, roomName, StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(x => x.CreatedAt)
+                .Take(take)
+                .ToList();
+            return Task.FromResult<IEnumerable<Escalation>>(items);
+        }
+
+        public Task<IEnumerable<Escalation>> GetDueScheduledAsync(DateTime dueBeforeUtc, int take = 100)
+        {
+            var items = _escalations.Values
+                .Where(x => x.Status == Models.EscalationStatus.Scheduled && x.DueAt <= dueBeforeUtc)
+                .OrderBy(x => x.DueAt)
+                .Take(take)
+                .ToList();
+            return Task.FromResult<IEnumerable<Escalation>>(items);
+        }
+
+        public Task<Escalation> GetOpenByMessageIdAsync(int messageId)
+        {
+            var escalation = _escalations.Values
+                .FirstOrDefault(x =>
+                    (x.Status == Models.EscalationStatus.Scheduled || x.Status == Models.EscalationStatus.Escalated) &&
+                    (x.MessageIds?.Contains(messageId) ?? false));
+            return Task.FromResult(escalation);
+        }
+
+        public Task UpsertAsync(Escalation escalation)
+        {
+            if (escalation == null) return Task.CompletedTask;
+            escalation.Id ??= Guid.NewGuid().ToString();
+            _escalations[escalation.Id] = escalation;
+            return Task.CompletedTask;
         }
     }
 

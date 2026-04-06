@@ -19,9 +19,16 @@ public class DispatchCentersFeatureTests
         IDispatchCentersRepository dispatchCenters,
         IUsersRepository users)
     {
+        var rooms = new InMemoryRoomsRepository();
+        var topology = new Chat.Web.Services.DispatchCenterTopologyService(
+            dispatchCenters,
+            users,
+            rooms,
+            NullLogger<Chat.Web.Services.DispatchCenterTopologyService>.Instance);
         var controller = new DispatchCentersController(
             dispatchCenters,
             users,
+            topology,
             NullLogger<DispatchCentersController>.Instance);
 
         var identity = new ClaimsIdentity(
@@ -48,6 +55,7 @@ public class DispatchCentersFeatureTests
         var dispatchRepo = new InMemoryDispatchCentersRepository();
         var usersRepo = new InMemoryUsersRepository();
         var controller = CreateController(dispatchRepo, usersRepo);
+        await usersRepo.UpsertAsync(new ApplicationUser { UserName = "officer-main" });
 
         var dto = new DispatchCentersController.UpsertDispatchCenterDto
         {
@@ -55,6 +63,7 @@ public class DispatchCentersFeatureTests
             Name = "Main DC",
             Country = "PL",
             IfMain = true,
+            OfficerUserName = "officer-main",
             CorrespondingDispatchCenterIds = ["dc-main"]
         };
 
@@ -70,6 +79,7 @@ public class DispatchCentersFeatureTests
         var dispatchRepo = new InMemoryDispatchCentersRepository();
         var usersRepo = new InMemoryUsersRepository();
         var controller = CreateController(dispatchRepo, usersRepo);
+        await usersRepo.UpsertAsync(new ApplicationUser { UserName = "officer-south" });
 
         await dispatchRepo.UpsertAsync(new DispatchCenter
         {
@@ -85,6 +95,7 @@ public class DispatchCentersFeatureTests
             Name = "South",
             Country = "DE",
             IfMain = false,
+            OfficerUserName = "officer-south",
             CorrespondingDispatchCenterIds = ["dc-1", "dc-1"]
         };
 
@@ -103,6 +114,7 @@ public class DispatchCentersFeatureTests
         var dispatchRepo = new InMemoryDispatchCentersRepository();
         var usersRepo = new InMemoryUsersRepository();
         var controller = CreateController(dispatchRepo, usersRepo);
+        await usersRepo.UpsertAsync(new ApplicationUser { UserName = "officer-krakow" });
 
         await dispatchRepo.UpsertAsync(new DispatchCenter
         {
@@ -117,7 +129,8 @@ public class DispatchCentersFeatureTests
             Id = "dc-main-pl-2",
             Name = "Krakow Main",
             Country = "pl",
-            IfMain = true
+            IfMain = true,
+            OfficerUserName = "officer-krakow"
         };
 
         var result = await controller.Create(dto);
@@ -132,16 +145,18 @@ public class DispatchCentersFeatureTests
         var dispatchRepo = new InMemoryDispatchCentersRepository();
         var usersRepo = new InMemoryUsersRepository();
         var controller = CreateController(dispatchRepo, usersRepo);
+        await usersRepo.UpsertAsync(new ApplicationUser { UserName = "officer-ops" });
 
         await dispatchRepo.UpsertAsync(new DispatchCenter
         {
             Id = "dc-ops",
             Name = "Ops",
             Country = "PL",
-            IfMain = true
+            IfMain = true,
+            OfficerUserName = "officer-ops"
         });
 
-        await usersRepo.UpsertAsync(new ApplicationUser { UserName = "alice", FullName = "Alice", DispatchCenterIds = new List<string>() });
+        await usersRepo.UpsertAsync(new ApplicationUser { UserName = "alice", FullName = "Alice" });
 
         var result = await controller.AssignUsers("dc-ops", new DispatchCentersController.ManageUsersDto
         {
@@ -155,8 +170,7 @@ public class DispatchCentersFeatureTests
 
         var alice = await usersRepo.GetByUserNameAsync("alice");
         Assert.NotNull(alice);
-        Assert.Single(alice.DispatchCenterIds);
-        Assert.Contains("dc-ops", alice.DispatchCenterIds);
+        Assert.Equal("dc-ops", alice.DispatchCenterId);
     }
 
     [Fact]
@@ -188,7 +202,7 @@ public class DispatchCentersFeatureTests
         {
             UserName = "bob",
             FullName = "Bob",
-            DispatchCenterIds = ["dc-b", "dc-a"]
+            DispatchCenterId = "dc-b"
         });
 
         var result = await controller.Delete("dc-b");
@@ -204,7 +218,6 @@ public class DispatchCentersFeatureTests
 
         var bob = await usersRepo.GetByUserNameAsync("bob");
         Assert.NotNull(bob);
-        Assert.DoesNotContain("dc-b", bob.DispatchCenterIds, StringComparer.OrdinalIgnoreCase);
-        Assert.Contains("dc-a", bob.DispatchCenterIds);
+        Assert.Null(bob.DispatchCenterId);
     }
 }

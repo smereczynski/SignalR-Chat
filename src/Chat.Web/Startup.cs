@@ -308,6 +308,7 @@ namespace Chat.Web
                 services.AddSingleton<IRoomsRepository, InMemoryRoomsRepository>();
                 services.AddSingleton<IMessagesRepository, InMemoryMessagesRepository>();
                 services.AddSingleton<IDispatchCentersRepository, InMemoryDispatchCentersRepository>();
+                services.AddSingleton<IEscalationsRepository, InMemoryEscalationsRepository>();
                 services.AddSingleton<IOtpStore, InMemoryOtpStore>();
                 services.AddSingleton<Services.IPresenceTracker, Services.InMemoryPresenceTracker>();
             }
@@ -328,6 +329,7 @@ namespace Chat.Web
                     UsersContainer = Configuration["Cosmos:UsersContainer"] ?? "users",
                     RoomsContainer = Configuration["Cosmos:RoomsContainer"] ?? "rooms",
                     DispatchCentersContainer = Configuration["Cosmos:DispatchCentersContainer"] ?? "dispatchcenters",
+                    EscalationsContainer = Configuration["Cosmos:EscalationsContainer"] ?? "escalations",
                 };
                 // Configure messages TTL: set to a number (seconds), -1 to enable TTL with no expiry, or null/empty to disable TTL entirely
                 var ttlRaw = Configuration["Cosmos:MessagesTtlSeconds"];
@@ -357,6 +359,7 @@ namespace Chat.Web
                 services.AddSingleton<IRoomsRepository, CosmosRoomsRepository>();
                 services.AddSingleton<IMessagesRepository, CosmosMessagesRepository>();
                 services.AddSingleton<IDispatchCentersRepository, CosmosDispatchCentersRepository>();
+                services.AddSingleton<IEscalationsRepository, CosmosEscalationsRepository>();
 
                 // Data seeder service (seeds initial data in background if database is empty)
                 services.AddHostedService<Services.DataSeederService>();
@@ -578,6 +581,9 @@ namespace Chat.Web
             
             // Notification plumbing
             services.AddSingleton<Services.INotificationSender, Services.NotificationSender>();
+            services.AddSingleton<Services.DispatchCenterTopologyService>();
+            services.AddSingleton<Services.EscalationService>();
+            services.AddHostedService<Services.EscalationBackgroundService>();
             
             // Rate limiting: protect auth endpoints (OTP request / verify) - configurable for tests vs prod
             services.AddRateLimiter(options =>

@@ -26,6 +26,8 @@ namespace Chat.Web.Services
         
         private IUsersRepository? _usersRepo;
         private IRoomsRepository? _roomsRepo;
+        private IDispatchCentersRepository? _dispatchCentersRepo;
+        private DispatchCenterTopologyService? _topology;
         private CosmosClients? _cosmosClients;
 
         public DataSeederService(
@@ -41,6 +43,8 @@ namespace Chat.Web.Services
             // Resolve dependencies lazily to avoid CosmosClients initialization timing issue
             _usersRepo = _serviceProvider.GetRequiredService<IUsersRepository>();
             _roomsRepo = _serviceProvider.GetRequiredService<IRoomsRepository>();
+            _dispatchCentersRepo = _serviceProvider.GetRequiredService<IDispatchCentersRepository>();
+            _topology = _serviceProvider.GetRequiredService<DispatchCenterTopologyService>();
             _cosmosClients = _serviceProvider.GetRequiredService<CosmosClients>();
             
             // Run seeding once at startup
@@ -64,18 +68,22 @@ namespace Chat.Web.Services
                 var existingUsers = (await _usersRepo!.GetAllAsync().ConfigureAwait(false))?.ToList();
                 var hasUsers = existingUsers != null && existingUsers.Any();
 
-                if (hasRooms && hasUsers)
+                var existingDispatchCenters = (await _dispatchCentersRepo!.GetAllAsync().ConfigureAwait(false))?.ToList();
+                var hasDispatchCenters = existingDispatchCenters != null && existingDispatchCenters.Any();
+
+                if (hasRooms && hasUsers && hasDispatchCenters)
                 {
-                    _logger.LogInformation("Database already contains data (Rooms: {RoomCount}, Users: {UserCount}) - skipping seed",
+                    _logger.LogInformation("Database already contains data (Rooms: {RoomCount}, Users: {UserCount}, DispatchCenters: {DispatchCenterCount}) - skipping seed",
                         existingRooms!.Count,
-                        existingUsers!.Count);
+                        existingUsers!.Count,
+                        existingDispatchCenters!.Count);
                     return;
                 }
 
-                if (!hasRooms)
+                if (!hasDispatchCenters)
                 {
-                    _logger.LogInformation("Rooms dataset empty - seeding default rooms");
-                    await SeedRoomsAsync().ConfigureAwait(false);
+                    _logger.LogInformation("Dispatch centers dataset empty - seeding default dispatch centers");
+                    await SeedDispatchCentersAsync().ConfigureAwait(false);
                 }
 
                 if (!hasUsers)
@@ -84,8 +92,10 @@ namespace Chat.Web.Services
                     await SeedUsersAsync().ConfigureAwait(false);
                 }
 
-                _logger.LogInformation("✓ Database seeding completed successfully (RoomsSeeded: {RoomsSeeded}, UsersSeeded: {UsersSeeded})",
-                    !hasRooms,
+                await _topology!.SyncRoomsAsync().ConfigureAwait(false);
+
+                _logger.LogInformation("✓ Database seeding completed successfully (DispatchCentersSeeded: {DispatchCentersSeeded}, UsersSeeded: {UsersSeeded})",
+                    !hasDispatchCenters,
                     !hasUsers);
             }
             catch (Exception ex)
@@ -95,31 +105,44 @@ namespace Chat.Web.Services
             }
         }
 
-        private async Task SeedRoomsAsync()
+        private async Task SeedDispatchCentersAsync()
         {
-            _logger.LogInformation("Seeding default rooms...");
+            _logger.LogInformation("Seeding default dispatch centers...");
 
-            var rooms = new[]
+            var dispatchCenters = new[]
             {
-                new { id = "general", name = "general", admin = (string?)null, users = Array.Empty<string>() },
-                new { id = "ops", name = "ops", admin = (string?)null, users = Array.Empty<string>() },
-                new { id = "random", name = "random", admin = (string?)null, users = Array.Empty<string>() }
+                new DispatchCenter
+                {
+                    Id = "dc-pl-main",
+                    Name = "Poland Main",
+                    Country = "PL",
+                    IfMain = true,
+                    OfficerUserName = "alice@example.com",
+                    CorrespondingDispatchCenterIds = new List<string> { "dc-de-berlin" },
+                    Users = new List<string>()
+                },
+                new DispatchCenter
+                {
+                    Id = "dc-de-berlin",
+                    Name = "Berlin Dispatch",
+                    Country = "DE",
+                    IfMain = true,
+                    OfficerUserName = "bob@example.com",
+                    CorrespondingDispatchCenterIds = new List<string> { "dc-pl-main" },
+                    Users = new List<string>()
+                }
             };
 
-            foreach (var room in rooms)
+            foreach (var dispatchCenter in dispatchCenters)
             {
                 try
                 {
-                    // Create room document directly in Cosmos using UpsertItemAsync
-                    await _cosmosClients!.Rooms.UpsertItemAsync(
-                        room,
-                        new PartitionKey(room.name)
-                    );
-                    _logger.LogInformation("  ✓ Created room: {RoomName}", room.name);
+                    await _dispatchCentersRepo!.UpsertAsync(dispatchCenter).ConfigureAwait(false);
+                    _logger.LogInformation("  ✓ Created dispatch center: {DispatchCenterName}", dispatchCenter.Name);
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Failed to create room: {RoomName}", room.name);
+                    _logger.LogError(ex, "Failed to create dispatch center: {DispatchCenterName}", dispatchCenter.Name);
                 }
             }
         }
@@ -137,6 +160,7 @@ namespace Chat.Web.Services
                     Email = "alice@example.com",
                     MobileNumber = "+1234567890",
                     Enabled = true,
+                    DispatchCenterId = "dc-pl-main",
                     FixedRooms = new List<string> { "general", "ops" },
                     DefaultRoom = "general",
                     Avatar = null,
@@ -154,6 +178,7 @@ namespace Chat.Web.Services
                     Email = "bob@example.com",
                     MobileNumber = "+1234567891",
                     Enabled = true,
+                    DispatchCenterId = "dc-de-berlin",
                     FixedRooms = new List<string> { "general", "random" },
                     DefaultRoom = "general",
                     Avatar = null,
@@ -171,6 +196,7 @@ namespace Chat.Web.Services
                     Email = "charlie@example.com",
                     MobileNumber = "+1234567892",
                     Enabled = true,
+                    DispatchCenterId = "dc-pl-main",
                     FixedRooms = new List<string> { "general" },
                     DefaultRoom = "general",
                     Avatar = null,
@@ -188,6 +214,10 @@ namespace Chat.Web.Services
                 try
                 {
                     await _usersRepo!.UpsertAsync(user).ConfigureAwait(false);
+                    if (!string.IsNullOrWhiteSpace(user.DispatchCenterId))
+                    {
+                        await _topology!.AssignUserAsync(user.DispatchCenterId, user.UserName).ConfigureAwait(false);
+                    }
                     _logger.LogInformation("  ✓ Created user: {UserName} ({FullName})", user.UserName, user.FullName);
                 }
                 catch (Exception ex)

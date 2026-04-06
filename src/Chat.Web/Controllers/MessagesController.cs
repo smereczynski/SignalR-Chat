@@ -14,6 +14,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
 using Microsoft.Extensions.Configuration;
+using Chat.Web.Services;
 
 namespace Chat.Web.Controllers
 {
@@ -35,6 +36,7 @@ namespace Chat.Web.Controllers
         private readonly IConfiguration _configuration;
         private readonly Services.ITranslationJobQueue _translationQueue;
         private readonly Microsoft.Extensions.Options.IOptions<Options.TranslationOptions> _translationOptions;
+        private readonly EscalationService _escalations;
 
         /// <summary>
         /// DI constructor for messages API.
@@ -45,7 +47,8 @@ namespace Chat.Web.Controllers
             IHubContext<ChatHub> hubContext,
             ILogger<MessagesController> logger,
             Services.ITranslationJobQueue translationQueue,
-            Microsoft.Extensions.Options.IOptions<Options.TranslationOptions> translationOptions)
+            Microsoft.Extensions.Options.IOptions<Options.TranslationOptions> translationOptions,
+            EscalationService escalations)
         {
             _messages = messages;
             _rooms = rooms;
@@ -55,6 +58,7 @@ namespace Chat.Web.Controllers
             _configuration = null; // Removed IConfiguration dependency
             _translationQueue = translationQueue;
             _translationOptions = translationOptions;
+            _escalations = escalations;
         }
 
         private bool UseManualSerialization => false; // Always false - use normal JSON serialization
@@ -83,6 +87,14 @@ namespace Chat.Web.Controllers
             var message = await _messages.GetByIdAsync(id);
             if (message == null)
                 return NotFound();
+            var user = await _users.GetByUserNameAsync(User?.Identity?.Name);
+            var room = await _rooms.GetByNameAsync(message.ToRoom?.Name);
+            if (user == null || room == null || string.IsNullOrWhiteSpace(user.DispatchCenterId) || !room.IsActive || !DispatchCenterPairing.IncludesDispatchCenter(room, user.DispatchCenterId))
+            {
+                return Forbid();
+            }
+
+            message.ToRoom = room;
 
             var vm = new MessageViewModel
             {
@@ -91,9 +103,13 @@ namespace Chat.Web.Controllers
                 FromUserName = message.FromUser?.UserName,
                 FromFullName = message.FromUser?.FullName,
                 Avatar = message.FromUser?.Avatar,
+                FromDispatchCenterId = message.FromDispatchCenterId,
                 Room = message.ToRoom?.Name,
                 Timestamp = message.Timestamp,
                 ReadBy = message.ReadBy != null ? message.ReadBy.ToArray() : Array.Empty<string>(),
+                ReadByDispatchCenterIds = message.ReadByDispatchCenterIds != null ? message.ReadByDispatchCenterIds.ToArray() : Array.Empty<string>(),
+                EscalationStatus = message.EscalationStatus.ToString(),
+                OpenEscalationId = message.OpenEscalationId,
                 TranslationStatus = message.TranslationStatus.ToString(),
                 SourceLanguage = Chat.Web.Utilities.LanguageCode.NormalizeToLanguageCode(message.FromUser?.PreferredLanguage, allowAuto: true) ?? "auto",
                 Translations = message.Translations ?? new System.Collections.Generic.Dictionary<string, string>(),
@@ -111,7 +127,8 @@ namespace Chat.Web.Controllers
             if (take <= 0) take = 1;
             if (take > 100) take = 100; // cap
             var room = await _rooms.GetByNameAsync(roomName);
-            if (room == null)
+            var user = await _users.GetByUserNameAsync(User?.Identity?.Name);
+            if (room == null || user == null || string.IsNullOrWhiteSpace(user.DispatchCenterId) || !room.IsActive || !DispatchCenterPairing.IncludesDispatchCenter(room, user.DispatchCenterId))
                 return BadRequest();
 
             IEnumerable<Message> source = before.HasValue
@@ -125,9 +142,13 @@ namespace Chat.Web.Controllers
                 FromUserName = m.FromUser?.UserName,
                 FromFullName = m.FromUser?.FullName,
                 Avatar = m.FromUser?.Avatar,
+                FromDispatchCenterId = m.FromDispatchCenterId,
                 Room = room.Name,
                 Timestamp = m.Timestamp,
                 ReadBy = m.ReadBy != null ? m.ReadBy.ToArray() : Array.Empty<string>(),
+                ReadByDispatchCenterIds = m.ReadByDispatchCenterIds != null ? m.ReadByDispatchCenterIds.ToArray() : Array.Empty<string>(),
+                EscalationStatus = m.EscalationStatus.ToString(),
+                OpenEscalationId = m.OpenEscalationId,
                 TranslationStatus = m.TranslationStatus.ToString(),
                 SourceLanguage = Chat.Web.Utilities.LanguageCode.NormalizeToLanguageCode(m.FromUser?.PreferredLanguage, allowAuto: true) ?? "auto",
                 Translations = m.Translations ?? new System.Collections.Generic.Dictionary<string, string>(),
@@ -169,9 +190,8 @@ namespace Chat.Web.Controllers
             if (room == null)
                 return NotFound();
 
-            // Basic authz: ensure user profile allows this room when FixedRooms is defined.
             var user = await _users.GetByUserNameAsync(User?.Identity?.Name);
-            if (user?.FixedRooms != null && user.FixedRooms.Any() && !user.FixedRooms.Contains(room.Name))
+            if (user == null || string.IsNullOrWhiteSpace(user.DispatchCenterId) || !room.IsActive || !DispatchCenterPairing.IncludesDispatchCenter(room, user.DispatchCenterId))
             {
                 return Forbid();
             }
@@ -182,12 +202,14 @@ namespace Chat.Web.Controllers
             {
                 Content = sanitized,
                 FromUser = user,
+                FromDispatchCenterId = user.DispatchCenterId,
                 ToRoom = room,
                 Timestamp = DateTime.UtcNow
             };
             try
             {
                 message = await _messages.CreateAsync(message);
+                await _escalations.ScheduleAutomaticAsync(message);
             }
             catch (Exception ex)
             {
@@ -202,10 +224,14 @@ namespace Chat.Web.Controllers
                 FromUserName = message.FromUser?.UserName,
                 FromFullName = message.FromUser?.FullName,
                 Avatar = message.FromUser?.Avatar,
+                FromDispatchCenterId = message.FromDispatchCenterId,
                 Room = room.Name,
                 Timestamp = message.Timestamp,
                 CorrelationId = dto.CorrelationId,
                 ReadBy = message.ReadBy != null ? message.ReadBy.ToArray() : Array.Empty<string>(),
+                ReadByDispatchCenterIds = message.ReadByDispatchCenterIds != null ? message.ReadByDispatchCenterIds.ToArray() : Array.Empty<string>(),
+                EscalationStatus = message.EscalationStatus.ToString(),
+                OpenEscalationId = message.OpenEscalationId,
                 TranslationStatus = message.TranslationStatus.ToString(),
                 SourceLanguage = Chat.Web.Utilities.LanguageCode.NormalizeToLanguageCode(message.FromUser?.PreferredLanguage, allowAuto: true) ?? "auto",
                 Translations = message.Translations ?? new System.Collections.Generic.Dictionary<string, string>(),
@@ -237,11 +263,30 @@ namespace Chat.Web.Controllers
         [HttpPost("{id}/read")]
         public async Task<IActionResult> MarkRead(int id)
         {
-            var updated = await _messages.MarkReadAsync(id, User?.Identity?.Name);
+            var user = await _users.GetByUserNameAsync(User?.Identity?.Name);
+            if (user == null || string.IsNullOrWhiteSpace(user.DispatchCenterId))
+            {
+                return Forbid();
+            }
+
+            var message = await _messages.GetByIdAsync(id);
+            var room = await _rooms.GetByNameAsync(message?.ToRoom?.Name);
+            if (message == null || room == null || !room.IsActive || !DispatchCenterPairing.IncludesDispatchCenter(room, user.DispatchCenterId))
+            {
+                return NotFound();
+            }
+
+            var updated = await _messages.MarkReadAsync(id, user.UserName, user.DispatchCenterId);
             if (updated == null) return NotFound();
+            await _escalations.ResolveIfAcknowledgedAsync(updated, user);
             // Fire-and-forget broadcast of readers list to the room
             _ = _hubContext.Clients.Group(updated.ToRoom?.Name ?? string.Empty)
-                .SendAsync("messageRead", new { id = updated.Id, readers = updated.ReadBy?.ToArray() ?? Array.Empty<string>() });
+                .SendAsync("messageRead", new
+                {
+                    id = updated.Id,
+                    readers = updated.ReadBy?.ToArray() ?? Array.Empty<string>(),
+                    readByDispatchCenterIds = updated.ReadByDispatchCenterIds?.ToArray() ?? Array.Empty<string>()
+                });
             return NoContent();
         }
 
@@ -265,9 +310,9 @@ namespace Chat.Web.Controllers
             if (message == null)
                 return NotFound(new { error = "Message not found" });
             
-            // Authorization: user must be in the same room
             var user = await _users.GetByUserNameAsync(User?.Identity?.Name);
-            if (user?.FixedRooms != null && user.FixedRooms.Any() && !user.FixedRooms.Contains(message.ToRoom?.Name))
+            var room = await _rooms.GetByNameAsync(message.ToRoom?.Name);
+            if (user == null || room == null || string.IsNullOrWhiteSpace(user.DispatchCenterId) || !room.IsActive || !DispatchCenterPairing.IncludesDispatchCenter(room, user.DispatchCenterId))
             {
                 return Forbid();
             }
@@ -278,7 +323,6 @@ namespace Chat.Web.Controllers
             var senderProfile = await _users.GetByUserNameAsync(message.FromUser?.UserName);
             var sourceLanguage = Chat.Web.Utilities.LanguageCode.NormalizeToLanguageCode(senderProfile?.PreferredLanguage) ?? "auto";
 
-            var room = await _rooms.GetByNameAsync(message.ToRoom?.Name);
             var targets = Chat.Web.Utilities.LanguageCode.BuildTargetLanguages(room?.Languages, sourceLanguage);
             
             // Create new job with high priority
@@ -320,6 +364,47 @@ namespace Chat.Web.Controllers
                 return ManualJson(new { success = true, jobId = job.JobId });
             }
             return Ok(new { success = true, jobId = job.JobId });
+        }
+
+        public class CreateEscalationDto
+        {
+            public int[] MessageIds { get; set; } = Array.Empty<int>();
+        }
+
+        [HttpPost("/api/escalations")]
+        public async Task<IActionResult> Escalate([FromBody] CreateEscalationDto dto)
+        {
+            var user = await _users.GetByUserNameAsync(User?.Identity?.Name);
+            if (user == null || string.IsNullOrWhiteSpace(user.DispatchCenterId))
+            {
+                return Forbid();
+            }
+
+            var messageIds = dto?.MessageIds ?? Array.Empty<int>();
+            if (messageIds.Length == 0)
+            {
+                return BadRequest(new { error = "At least one message must be selected." });
+            }
+
+            var firstMessage = await _messages.GetByIdAsync(messageIds[0]);
+            if (firstMessage?.ToRoom?.Name == null)
+            {
+                return NotFound();
+            }
+
+            var escalation = await _escalations.CreateManualAsync(user, firstMessage.ToRoom.Name, messageIds);
+            if (escalation == null)
+            {
+                return BadRequest(new { error = "Escalation could not be created for the selected messages." });
+            }
+
+            return Ok(new
+            {
+                escalationId = escalation.Id,
+                status = escalation.Status.ToString(),
+                triggerType = escalation.TriggerType.ToString(),
+                messageIds = escalation.MessageIds.ToArray()
+            });
         }
     }
 }

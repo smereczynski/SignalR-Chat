@@ -131,7 +131,7 @@ namespace Chat.Tests
             {
                 scheduler.Schedule(msg);
                 // Mark as read by bob before the delay elapses
-                await messages.MarkReadAsync(msg.Id, "bob");
+                await messages.MarkReadAsync(msg.Id, "bob", null);
 
                 // Wait longer than delay and assert no notifications were sent
                 await Task.Delay(TimeSpan.FromMilliseconds(1300));

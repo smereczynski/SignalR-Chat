@@ -103,11 +103,11 @@ public class ManualRetryTests
     public async Task RetryTranslation_WithUnauthorizedUser_ReturnsForbidden()
     {
         // Arrange
-        var room = new Room { Id = 1, Name = "general" };
+        var room = new Room { Id = 1, Name = "general", IsActive = true, DispatchCenterAId = "dc-a", DispatchCenterBId = "dc-b" };
         var user = new ApplicationUser
         {
             UserName = "user1",
-            FixedRooms = new List<string> { "different-room" } // User not in general
+            DispatchCenterId = "dc-z"
         };
         
         var message = new Message
@@ -121,6 +121,8 @@ public class ManualRetryTests
 
         _mockMessages.Setup(m => m.GetByIdAsync(123))
             .ReturnsAsync(message);
+        _mockRooms.Setup(r => r.GetByNameAsync("general"))
+            .ReturnsAsync(room);
         
         _mockUsers.Setup(u => u.GetByUserNameAsync("user1"))
             .ReturnsAsync(user);
@@ -140,11 +142,11 @@ public class ManualRetryTests
     public async Task RetryTranslation_WithNonFailedStatus_ReturnsBadRequest()
     {
         // Arrange
-        var room = new Room { Id = 1, Name = "general" };
+        var room = new Room { Id = 1, Name = "general", IsActive = true, DispatchCenterAId = "dc-a", DispatchCenterBId = "dc-b" };
         var user = new ApplicationUser
         {
             UserName = "user1",
-            FixedRooms = new List<string> { "general" }
+            DispatchCenterId = "dc-a"
         };
         
         var message = new Message
@@ -158,6 +160,8 @@ public class ManualRetryTests
 
         _mockMessages.Setup(m => m.GetByIdAsync(123))
             .ReturnsAsync(message);
+        _mockRooms.Setup(r => r.GetByNameAsync("general"))
+            .ReturnsAsync(room);
         
         _mockUsers.Setup(u => u.GetByUserNameAsync("user1"))
             .ReturnsAsync(user);
@@ -177,11 +181,11 @@ public class ManualRetryTests
     public async Task RetryTranslation_WithValidRequest_RequeuesToFrontAndReturnsSuccess()
     {
         // Arrange
-        var room = new Room { Id = 1, Name = "general" };
+        var room = new Room { Id = 1, Name = "general", IsActive = true, DispatchCenterAId = "dc-a", DispatchCenterBId = "dc-b" };
         var user = new ApplicationUser
         {
             UserName = "user1",
-            FixedRooms = new List<string> { "general" }
+            DispatchCenterId = "dc-a"
         };
         
         var message = new Message
@@ -196,6 +200,8 @@ public class ManualRetryTests
 
         _mockMessages.Setup(m => m.GetByIdAsync(123))
             .ReturnsAsync(message);
+        _mockRooms.Setup(r => r.GetByNameAsync("general"))
+            .ReturnsAsync(room);
         
         _mockUsers.Setup(u => u.GetByUserNameAsync("user1"))
             .ReturnsAsync(user);
@@ -263,7 +269,8 @@ public class ManualRetryTests
             _mockHubContext.Object,
             _mockControllerLogger.Object,
             _mockQueue.Object,
-            Options.Create(options));
+            Options.Create(options),
+            null);
     }
 
     private void SetupUserContext(MessagesController controller, string userId, string roomName)

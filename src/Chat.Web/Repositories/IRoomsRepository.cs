@@ -12,6 +12,9 @@ namespace Chat.Web.Repositories
         Task<IEnumerable<Room>> GetAllAsync();
         Task<Room> GetByIdAsync(int id);
         Task<Room> GetByNameAsync(string name);
+        Task<Room> GetByPairKeyAsync(string pairKey);
+        Task<IEnumerable<Room>> GetByDispatchCenterIdAsync(string dispatchCenterId);
+        Task UpsertAsync(Room room);
         // Maintain denormalized user membership in room document
         Task AddUserToRoomAsync(string roomName, string userName);
         Task RemoveUserFromRoomAsync(string roomName, string userName);

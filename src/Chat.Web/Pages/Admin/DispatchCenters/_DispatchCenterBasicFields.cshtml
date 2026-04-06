@@ -14,6 +14,12 @@
     <span asp-validation-for="Country" class="text-danger"></span>
 </div>
 
+<div class="mb-3">
+    <label asp-for="OfficerUserName" class="form-label">Officer User Name</label>
+    <input asp-for="OfficerUserName" class="form-control" />
+    <span asp-validation-for="OfficerUserName" class="text-danger"></span>
+</div>
+
 <div class="mb-3 form-check">
     <input asp-for="IfMain" class="form-check-input" />
     <label asp-for="IfMain" class="form-check-label">@Localizer["MainDispatchCenter"]</label>

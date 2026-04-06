@@ -75,6 +75,11 @@ namespace Chat.Web.Models
         public ICollection<string> DispatchCenterIds { get; set; } = new List<string>();
 
         /// <summary>
+        /// Primary dispatch center assignment used by chat authorization and escalation routing.
+        /// </summary>
+        public string DispatchCenterId { get; set; }
+
+        /// <summary>
         /// Preferred starting room. If user has more than one FixedRoom this selects which to auto-join.
         /// If null/empty and only one FixedRoom exists that one is auto-selected; otherwise first FixedRoom alphabetically.
         /// </summary>

@@ -16,6 +16,12 @@ namespace Chat.Web.ViewModels
         [RegularExpression(@"^\w+( \w+)*$", ErrorMessageResourceName = "ValidationRoomNamePattern", ErrorMessageResourceType = typeof(Resources.SharedResources))]
         public string Name { get; set; }
 
+        public string DisplayName { get; set; }
+        public string PairKey { get; set; }
+        public string DispatchCenterAId { get; set; }
+        public string DispatchCenterBId { get; set; }
+        public bool IsActive { get; set; } = true;
+
         /// <summary>
         /// Language codes enabled for this room (e.g., "en", "pl").
         /// </summary>

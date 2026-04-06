@@ -17,9 +17,16 @@ public class DispatchCentersControllerFlowTests
         IDispatchCentersRepository dispatchCenters,
         IUsersRepository users)
     {
+        var rooms = new InMemoryRoomsRepository();
+        var topology = new Chat.Web.Services.DispatchCenterTopologyService(
+            dispatchCenters,
+            users,
+            rooms,
+            NullLogger<Chat.Web.Services.DispatchCenterTopologyService>.Instance);
         var controller = new DispatchCentersController(
             dispatchCenters,
             users,
+            topology,
             NullLogger<DispatchCentersController>.Instance);
 
         var identity = new ClaimsIdentity(
@@ -46,13 +53,16 @@ public class DispatchCentersControllerFlowTests
         var dispatchRepo = new InMemoryDispatchCentersRepository();
         var usersRepo = new InMemoryUsersRepository();
         var controller = CreateController(dispatchRepo, usersRepo);
+        await usersRepo.UpsertAsync(new ApplicationUser { UserName = "officer-main" });
+        await usersRepo.UpsertAsync(new ApplicationUser { UserName = "officer-west" });
 
         var createMain = await controller.Create(new DispatchCentersController.UpsertDispatchCenterDto
         {
             Id = "dc-main",
             Name = "Main",
             Country = "PL",
-            IfMain = true
+            IfMain = true,
+            OfficerUserName = "officer-main"
         });
 
         Assert.IsType<CreatedResult>(createMain);
@@ -63,6 +73,7 @@ public class DispatchCentersControllerFlowTests
             Name = "West",
             Country = "DE",
             IfMain = false,
+            OfficerUserName = "officer-west",
             CorrespondingDispatchCenterIds = new List<string> { "dc-main" }
         });
 
@@ -80,6 +91,7 @@ public class DispatchCentersControllerFlowTests
             Name = "West Updated",
             Country = "DE",
             IfMain = false,
+            OfficerUserName = "officer-west",
             CorrespondingDispatchCenterIds = new List<string> { "dc-main" }
         });
 
@@ -101,13 +113,16 @@ public class DispatchCentersControllerFlowTests
         var dispatchRepo = new InMemoryDispatchCentersRepository();
         var usersRepo = new InMemoryUsersRepository();
         var controller = CreateController(dispatchRepo, usersRepo);
+        await usersRepo.UpsertAsync(new ApplicationUser { UserName = "officer-a" });
+        await usersRepo.UpsertAsync(new ApplicationUser { UserName = "officer-b" });
 
         await controller.Create(new DispatchCentersController.UpsertDispatchCenterDto
         {
             Id = "dc-a",
             Name = "A",
             Country = "PL",
-            IfMain = true
+            IfMain = true,
+            OfficerUserName = "officer-a"
         });
 
         await controller.Create(new DispatchCentersController.UpsertDispatchCenterDto
@@ -116,10 +131,11 @@ public class DispatchCentersControllerFlowTests
             Name = "B",
             Country = "FR",
             IfMain = false,
+            OfficerUserName = "officer-b",
             CorrespondingDispatchCenterIds = new List<string> { "dc-a" }
         });
 
-        await usersRepo.UpsertAsync(new ApplicationUser { UserName = "alice", DispatchCenterIds = new List<string>() });
+        await usersRepo.UpsertAsync(new ApplicationUser { UserName = "alice" });
 
         var assign = await controller.AssignUsers("dc-b", new DispatchCentersController.ManageUsersDto
         {
@@ -131,7 +147,7 @@ public class DispatchCentersControllerFlowTests
         Assert.Contains("alice", assignedDc.Users);
 
         var alice = await usersRepo.GetByUserNameAsync("alice");
-        Assert.Contains("dc-b", alice.DispatchCenterIds);
+        Assert.Equal("dc-b", alice.DispatchCenterId);
 
         var delete = await controller.Delete("dc-b");
         Assert.IsType<NoContentResult>(delete);
@@ -140,6 +156,6 @@ public class DispatchCentersControllerFlowTests
         Assert.Null(deleted);
 
         var aliceAfter = await usersRepo.GetByUserNameAsync("alice");
-        Assert.DoesNotContain("dc-b", aliceAfter.DispatchCenterIds);
+        Assert.Null(aliceAfter.DispatchCenterId);
     }
 }

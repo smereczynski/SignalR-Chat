@@ -13,24 +13,24 @@ namespace Chat.Web.Pages.Admin.Users;
 public class UsersAssignRoomsModel : PageModel
 {
     private readonly IUsersRepository _users;
-    private readonly IRoomsRepository _rooms;
-    public UsersAssignRoomsModel(IUsersRepository users, IRoomsRepository rooms)
-    { _users = users; _rooms = rooms; }
+    private readonly IDispatchCentersRepository _dispatchCenters;
+    private readonly Services.DispatchCenterTopologyService _topology;
+    public UsersAssignRoomsModel(IUsersRepository users, IDispatchCentersRepository dispatchCenters, Services.DispatchCenterTopologyService topology)
+    { _users = users; _dispatchCenters = dispatchCenters; _topology = topology; }
 
     [BindProperty(SupportsGet = true)]
     public string UserName { get; set; } = string.Empty;
-    public List<string> AllRooms { get; set; } = new();
+    public List<Models.DispatchCenter> DispatchCenters { get; set; } = new();
     [BindProperty]
-    public List<string> SelectedRooms { get; set; } = new();
+    public string SelectedDispatchCenterId { get; set; } = string.Empty;
 
     public async Task<IActionResult> OnGet()
     {
         if (string.IsNullOrWhiteSpace(UserName)) return RedirectToPage("Index");
         var user = await _users.GetByUserNameAsync(UserName);
         if (user == null) return RedirectToPage("Index");
-        var rooms = await _rooms.GetAllAsync();
-        AllRooms = rooms.Select(r => r.Name).ToList();
-        SelectedRooms = user.FixedRooms.ToList();
+        DispatchCenters = (await _dispatchCenters.GetAllAsync()).OrderBy(x => x.Name).ToList();
+        SelectedDispatchCenterId = user.DispatchCenterId ?? string.Empty;
         return Page();
     }
 
@@ -38,22 +38,19 @@ public class UsersAssignRoomsModel : PageModel
     {
         var user = await _users.GetByUserNameAsync(UserName);
         if (user == null) return RedirectToPage("Index");
-        var nextRooms = new HashSet<string>(SelectedRooms ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
-        var prevRooms = new HashSet<string>(user.FixedRooms ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
-
-        // Persist user first
-        user.FixedRooms = nextRooms.ToList();
-        await _users.UpsertAsync(user);
-
-        // Update denormalized helper list in room docs
-        foreach (var add in nextRooms.Except(prevRooms))
+        if (string.IsNullOrWhiteSpace(SelectedDispatchCenterId))
         {
-            await _rooms.AddUserToRoomAsync(add, user.UserName);
+            await _topology.RemoveUserFromDispatchCenterAsync(user.DispatchCenterId, user.UserName);
+            return RedirectToPage("Index");
         }
-        foreach (var rem in prevRooms.Except(nextRooms))
+
+        var dispatchCenter = await _dispatchCenters.GetByIdAsync(SelectedDispatchCenterId);
+        if (dispatchCenter == null)
         {
-            await _rooms.RemoveUserFromRoomAsync(rem, user.UserName);
+            return RedirectToPage("Index");
         }
+
+        await _topology.AssignUserAsync(SelectedDispatchCenterId, user.UserName);
         return RedirectToPage("Index");
     }
 }

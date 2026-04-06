@@ -18,15 +18,18 @@ namespace Chat.Web.Controllers
     public class PresenceController : ControllerBase
     {
         private readonly IUsersRepository _users;
+        private readonly IRoomsRepository _rooms;
         private readonly IPresenceTracker _presenceTracker;
         private readonly ILogger<PresenceController> _logger;
 
         public PresenceController(
             IUsersRepository users,
+            IRoomsRepository rooms,
             IPresenceTracker presenceTracker,
             ILogger<PresenceController> logger)
         {
             _users = users;
+            _rooms = rooms;
             _presenceTracker = presenceTracker;
             _logger = logger;
         }
@@ -69,12 +72,15 @@ namespace Chat.Web.Controllers
             }
 
             var requestedRoom = dto?.RoomName?.Trim();
-            var allowedRooms = profile.FixedRooms ?? [];
-            var resolvedRoom = string.IsNullOrWhiteSpace(requestedRoom)
-                ? string.Empty
-                : (allowedRooms.Any(r => string.Equals(r, requestedRoom, StringComparison.OrdinalIgnoreCase))
-                    ? requestedRoom
-                    : string.Empty);
+            var room = string.IsNullOrWhiteSpace(requestedRoom)
+                ? null
+                : await _rooms.GetByNameAsync(requestedRoom).ConfigureAwait(false);
+            var resolvedRoom = room != null &&
+                               room.IsActive &&
+                               !string.IsNullOrWhiteSpace(profile.DispatchCenterId) &&
+                               DispatchCenterPairing.IncludesDispatchCenter(room, profile.DispatchCenterId)
+                ? requestedRoom
+                : string.Empty;
 
             var canonicalUserName = string.IsNullOrWhiteSpace(profile.UserName)
                 ? identityName
@@ -118,4 +124,3 @@ namespace Chat.Web.Controllers
         }
     }
 }
-

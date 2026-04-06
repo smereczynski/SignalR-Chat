@@ -9,5 +9,6 @@
         public string FullName { get; set; }
         public string Avatar { get; set; }
         public string CurrentRoom { get; set; }
+        public string DispatchCenterId { get; set; }
     }
 }
