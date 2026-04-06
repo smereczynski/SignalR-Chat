@@ -31,7 +31,7 @@ public class DispatchCentersAdminPageTests
                 Name = "Main DC",
                 Country = "PL",
                 IfMain = true,
-                OfficerUserName = "officer-main",
+                OfficerUserNames = new List<string> { "officer-main" },
                 CorrespondingDispatchCenterIds = new List<string>()
             }
         };
@@ -67,7 +67,7 @@ public class DispatchCentersAdminPageTests
             Name = "Main",
             Country = "PL",
             IfMain = true,
-            OfficerUserName = "officer-main"
+            OfficerUserNames = new List<string> { "officer-main" }
         });
 
         var page = new DispatchCentersEditModel(dispatchRepo, usersRepo, topology)
@@ -78,7 +78,7 @@ public class DispatchCentersAdminPageTests
                 Name = "Main",
                 Country = "PL",
                 IfMain = true,
-                OfficerUserName = "officer-main",
+                OfficerUserNames = new List<string> { "officer-main" },
                 CorrespondingDispatchCenterIds = new List<string> { "dc-1" }
             }
         };
@@ -118,7 +118,7 @@ public class DispatchCentersAdminPageTests
                 Name = "Krakow Main",
                 Country = "pl",
                 IfMain = true,
-                OfficerUserName = "officer-krakow",
+                OfficerUserNames = new List<string> { "officer-krakow" },
                 CorrespondingDispatchCenterIds = new List<string>()
             }
         };

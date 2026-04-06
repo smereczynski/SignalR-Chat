@@ -184,7 +184,7 @@ namespace Chat.Web.Services
                     room.PairKey = pairKey;
                     room.DispatchCenterAId = leftCenter.Id;
                     room.DispatchCenterBId = rightCenter.Id;
-                    room.IsActive = !string.IsNullOrWhiteSpace(leftCenter.OfficerUserName) && !string.IsNullOrWhiteSpace(rightCenter.OfficerUserName);
+                    room.IsActive = (leftCenter.OfficerUserNames?.Count ?? 0) > 0 && (rightCenter.OfficerUserNames?.Count ?? 0) > 0;
                     room.Users = roomUsers;
                     room.Languages = roomLanguages;
 

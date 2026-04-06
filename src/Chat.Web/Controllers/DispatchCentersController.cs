@@ -39,7 +39,7 @@ namespace Chat.Web.Controllers
             public string Name { get; set; }
             public string Country { get; set; }
             public bool IfMain { get; set; }
-            public string OfficerUserName { get; set; }
+            public List<string> OfficerUserNames { get; set; } = new();
             public List<string> CorrespondingDispatchCenterIds { get; set; } = new();
         }
 
@@ -102,15 +102,16 @@ namespace Chat.Web.Controllers
             var validationError = await ValidateCorrespondingIdsAsync(id, dto.CorrespondingDispatchCenterIds).ConfigureAwait(false);
             if (validationError != null) return BadRequest(validationError);
 
-            if (string.IsNullOrWhiteSpace(dto.OfficerUserName))
+            var officerUserNames = NormalizeDistinct(dto.OfficerUserNames);
+            if (officerUserNames.Count == 0)
             {
-                return BadRequest("officerUserName is required");
+                return BadRequest("at least one officerUserName is required");
             }
 
-            var officer = await _users.GetByUserNameAsync(dto.OfficerUserName.Trim()).ConfigureAwait(false);
-            if (officer == null)
+            var missingOfficer = await FindMissingUserAsync(officerUserNames).ConfigureAwait(false);
+            if (missingOfficer != null)
             {
-                return BadRequest($"user not found: {dto.OfficerUserName}");
+                return BadRequest($"user not found: {missingOfficer}");
             }
 
             var entity = new DispatchCenter
@@ -121,7 +122,7 @@ namespace Chat.Web.Controllers
                 IfMain = dto.IfMain,
                 CorrespondingDispatchCenterIds = NormalizeDistinct(dto.CorrespondingDispatchCenterIds),
                 Users = new List<string>(),
-                OfficerUserName = dto.OfficerUserName.Trim()
+                OfficerUserNames = officerUserNames
             };
 
             await _topology.SaveDispatchCenterAsync(entity, entity.CorrespondingDispatchCenterIds).ConfigureAwait(false);
@@ -158,21 +159,22 @@ namespace Chat.Web.Controllers
             var validationError = await ValidateCorrespondingIdsAsync(id, dto.CorrespondingDispatchCenterIds).ConfigureAwait(false);
             if (validationError != null) return BadRequest(validationError);
 
-            if (string.IsNullOrWhiteSpace(dto.OfficerUserName))
+            var officerUserNames = NormalizeDistinct(dto.OfficerUserNames);
+            if (officerUserNames.Count == 0)
             {
-                return BadRequest("officerUserName is required");
+                return BadRequest("at least one officerUserName is required");
             }
 
-            var officer = await _users.GetByUserNameAsync(dto.OfficerUserName.Trim()).ConfigureAwait(false);
-            if (officer == null)
+            var missingOfficer = await FindMissingUserAsync(officerUserNames).ConfigureAwait(false);
+            if (missingOfficer != null)
             {
-                return BadRequest($"user not found: {dto.OfficerUserName}");
+                return BadRequest($"user not found: {missingOfficer}");
             }
 
             current.Name = name;
             current.Country = country;
             current.IfMain = dto.IfMain;
-            current.OfficerUserName = dto.OfficerUserName.Trim();
+            current.OfficerUserNames = officerUserNames;
             current.CorrespondingDispatchCenterIds = NormalizeDistinct(dto.CorrespondingDispatchCenterIds);
 
             await _topology.SaveDispatchCenterAsync(current, current.CorrespondingDispatchCenterIds).ConfigureAwait(false);
@@ -278,6 +280,20 @@ namespace Chat.Web.Controllers
                 if (existing == null)
                 {
                     return $"invalid corresponding dispatch center id: {id}";
+                }
+            }
+
+            return null;
+        }
+
+        private async Task<string> FindMissingUserAsync(IEnumerable<string> userNames)
+        {
+            foreach (var userName in NormalizeDistinct(userNames))
+            {
+                var user = await _users.GetByUserNameAsync(userName).ConfigureAwait(false);
+                if (user == null)
+                {
+                    return userName;
                 }
             }
 

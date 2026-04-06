@@ -33,7 +33,7 @@ namespace Chat.Web.Models
         public string PairKey { get; set; }
         public string SourceDispatchCenterId { get; set; }
         public string TargetDispatchCenterId { get; set; }
-        public string TargetOfficerUserName { get; set; }
+        public ICollection<string> TargetOfficerUserNames { get; set; } = new List<string>();
         public EscalationTriggerType TriggerType { get; set; }
         public EscalationStatus Status { get; set; }
         public DateTime CreatedAt { get; set; }

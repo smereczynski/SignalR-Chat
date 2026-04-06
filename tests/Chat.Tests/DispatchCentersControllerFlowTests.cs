@@ -62,7 +62,7 @@ public class DispatchCentersControllerFlowTests
             Name = "Main",
             Country = "PL",
             IfMain = true,
-            OfficerUserName = "officer-main"
+            OfficerUserNames = new List<string> { "officer-main" }
         });
 
         Assert.IsType<CreatedResult>(createMain);
@@ -73,7 +73,7 @@ public class DispatchCentersControllerFlowTests
             Name = "West",
             Country = "DE",
             IfMain = false,
-            OfficerUserName = "officer-west",
+            OfficerUserNames = new List<string> { "officer-west" },
             CorrespondingDispatchCenterIds = new List<string> { "dc-main" }
         });
 
@@ -91,7 +91,7 @@ public class DispatchCentersControllerFlowTests
             Name = "West Updated",
             Country = "DE",
             IfMain = false,
-            OfficerUserName = "officer-west",
+            OfficerUserNames = new List<string> { "officer-west" },
             CorrespondingDispatchCenterIds = new List<string> { "dc-main" }
         });
 
@@ -122,7 +122,7 @@ public class DispatchCentersControllerFlowTests
             Name = "A",
             Country = "PL",
             IfMain = true,
-            OfficerUserName = "officer-a"
+            OfficerUserNames = new List<string> { "officer-a" }
         });
 
         await controller.Create(new DispatchCentersController.UpsertDispatchCenterDto
@@ -131,7 +131,7 @@ public class DispatchCentersControllerFlowTests
             Name = "B",
             Country = "FR",
             IfMain = false,
-            OfficerUserName = "officer-b",
+            OfficerUserNames = new List<string> { "officer-b" },
             CorrespondingDispatchCenterIds = new List<string> { "dc-a" }
         });
 

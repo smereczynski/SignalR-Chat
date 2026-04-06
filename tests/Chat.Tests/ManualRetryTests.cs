@@ -103,7 +103,7 @@ public class ManualRetryTests
     public async Task RetryTranslation_WithUnauthorizedUser_ReturnsForbidden()
     {
         // Arrange
-        var room = new Room { Id = 1, Name = "general", IsActive = true, DispatchCenterAId = "dc-a", DispatchCenterBId = "dc-b" };
+        var room = CreatePairRoom();
         var user = new ApplicationUser
         {
             UserName = "user1",
@@ -121,14 +121,14 @@ public class ManualRetryTests
 
         _mockMessages.Setup(m => m.GetByIdAsync(123))
             .ReturnsAsync(message);
-        _mockRooms.Setup(r => r.GetByNameAsync("general"))
+        _mockRooms.Setup(r => r.GetByNameAsync(room.Name))
             .ReturnsAsync(room);
         
         _mockUsers.Setup(u => u.GetByUserNameAsync("user1"))
             .ReturnsAsync(user);
 
         var controller = CreateController(_translationOptions);
-        SetupUserContext(controller, "user1", "different-room");
+        SetupUserContext(controller, "user1", room.Name);
 
         // Act
         var result = await controller.RetryTranslation(123);
@@ -142,7 +142,7 @@ public class ManualRetryTests
     public async Task RetryTranslation_WithNonFailedStatus_ReturnsBadRequest()
     {
         // Arrange
-        var room = new Room { Id = 1, Name = "general", IsActive = true, DispatchCenterAId = "dc-a", DispatchCenterBId = "dc-b" };
+        var room = CreatePairRoom();
         var user = new ApplicationUser
         {
             UserName = "user1",
@@ -160,14 +160,14 @@ public class ManualRetryTests
 
         _mockMessages.Setup(m => m.GetByIdAsync(123))
             .ReturnsAsync(message);
-        _mockRooms.Setup(r => r.GetByNameAsync("general"))
+        _mockRooms.Setup(r => r.GetByNameAsync(room.Name))
             .ReturnsAsync(room);
         
         _mockUsers.Setup(u => u.GetByUserNameAsync("user1"))
             .ReturnsAsync(user);
 
         var controller = CreateController(_translationOptions);
-        SetupUserContext(controller, "user1", "general");
+        SetupUserContext(controller, "user1", room.Name);
 
         // Act
         var result = await controller.RetryTranslation(123);
@@ -181,7 +181,7 @@ public class ManualRetryTests
     public async Task RetryTranslation_WithValidRequest_RequeuesToFrontAndReturnsSuccess()
     {
         // Arrange
-        var room = new Room { Id = 1, Name = "general", IsActive = true, DispatchCenterAId = "dc-a", DispatchCenterBId = "dc-b" };
+        var room = CreatePairRoom();
         var user = new ApplicationUser
         {
             UserName = "user1",
@@ -200,7 +200,7 @@ public class ManualRetryTests
 
         _mockMessages.Setup(m => m.GetByIdAsync(123))
             .ReturnsAsync(message);
-        _mockRooms.Setup(r => r.GetByNameAsync("general"))
+        _mockRooms.Setup(r => r.GetByNameAsync(room.Name))
             .ReturnsAsync(room);
         
         _mockUsers.Setup(u => u.GetByUserNameAsync("user1"))
@@ -223,7 +223,7 @@ public class ManualRetryTests
             .Returns(Task.CompletedTask);
 
         var controller = CreateController(_translationOptions);
-        SetupUserContext(controller, "user1", "general");
+        SetupUserContext(controller, "user1", room.Name);
 
         // Act
         var result = await controller.RetryTranslation(123);
@@ -239,7 +239,7 @@ public class ManualRetryTests
         Assert.Equal(10, capturedJob.Priority); // High priority
         Assert.Equal(0, capturedJob.RetryCount); // Reset retry count
         Assert.Equal(123, capturedJob.MessageId);
-        Assert.Equal("general", capturedJob.RoomName);
+        Assert.Equal(room.Name, capturedJob.RoomName);
 
         // Verify status update
         _mockMessages.Verify(m => m.UpdateTranslationAsync(
@@ -271,6 +271,20 @@ public class ManualRetryTests
             _mockQueue.Object,
             Options.Create(options),
             null);
+    }
+
+    private static Room CreatePairRoom()
+    {
+        return new Room
+        {
+            Id = 1,
+            Name = "pair:dc-a::dc-b",
+            DisplayName = "Alpha <-> Beta",
+            PairKey = "dc-a::dc-b",
+            DispatchCenterAId = "dc-a",
+            DispatchCenterBId = "dc-b",
+            IsActive = true
+        };
     }
 
     private void SetupUserContext(MessagesController controller, string userId, string roomName)

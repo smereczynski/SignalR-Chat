@@ -47,7 +47,7 @@ namespace Chat.Tests
             return (rooms, users, messages);
         }
 
-        private static ApplicationUser MkUser(string name, params string[] fixedRooms)
+        private static ApplicationUser MkUser(string name)
         {
             return new ApplicationUser
             {
@@ -55,8 +55,7 @@ namespace Chat.Tests
                 FullName = name,
                 Email = $"{name}@test.com",
                 MobileNumber = $"+1234567{name.GetHashCode() % 10000:0000}",
-                Enabled = true,
-                FixedRooms = fixedRooms?.ToList() ?? new List<string>()
+                Enabled = true
             };
         }
 
@@ -64,15 +63,23 @@ namespace Chat.Tests
         public async Task Sends_notifications_to_room_members_except_sender()
         {
             var (rooms, users, messages) = SetupRepos();
-            // Prepare users assigned to #general via FixedRooms
-            await users.UpsertAsync(MkUser("alice", "general"));
-            await users.UpsertAsync(MkUser("bob", "general"));
-            await users.UpsertAsync(MkUser("charlie")); // not in general -> should not get notified
+            await users.UpsertAsync(MkUser("alice"));
+            await users.UpsertAsync(MkUser("bob"));
+            await users.UpsertAsync(MkUser("charlie"));
 
-            var room = await rooms.GetByNameAsync("general");
-            Assert.NotNull(room);
+            var room = new Room
+            {
+                Name = "pair:dc-a::dc-b",
+                DisplayName = "A <-> B",
+                PairKey = "dc-a::dc-b",
+                DispatchCenterAId = "dc-a",
+                DispatchCenterBId = "dc-b",
+                IsActive = true,
+                Users = new List<string> { "alice", "bob" }
+            };
+            await rooms.UpsertAsync(room);
 
-            // Create message from alice in #general
+            // Create message from alice in the pair room
             var msg = await messages.CreateAsync(new Message
             {
                 Content = "Hello",
@@ -111,10 +118,20 @@ namespace Chat.Tests
         public async Task Skips_notifications_if_message_marked_read_before_delay()
         {
             var (rooms, users, messages) = SetupRepos();
-            await users.UpsertAsync(MkUser("alice", "general"));
-            await users.UpsertAsync(MkUser("bob", "general"));
+            await users.UpsertAsync(MkUser("alice"));
+            await users.UpsertAsync(MkUser("bob"));
 
-            var room = await rooms.GetByNameAsync("general");
+            var room = new Room
+            {
+                Name = "pair:dc-a::dc-b",
+                DisplayName = "A <-> B",
+                PairKey = "dc-a::dc-b",
+                DispatchCenterAId = "dc-a",
+                DispatchCenterBId = "dc-b",
+                IsActive = true,
+                Users = new List<string> { "alice", "bob" }
+            };
+            await rooms.UpsertAsync(room);
             var msg = await messages.CreateAsync(new Message
             {
                 Content = "Check read",

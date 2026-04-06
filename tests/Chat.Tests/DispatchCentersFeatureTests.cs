@@ -63,7 +63,7 @@ public class DispatchCentersFeatureTests
             Name = "Main DC",
             Country = "PL",
             IfMain = true,
-            OfficerUserName = "officer-main",
+            OfficerUserNames = ["officer-main"],
             CorrespondingDispatchCenterIds = ["dc-main"]
         };
 
@@ -95,7 +95,7 @@ public class DispatchCentersFeatureTests
             Name = "South",
             Country = "DE",
             IfMain = false,
-            OfficerUserName = "officer-south",
+            OfficerUserNames = ["officer-south"],
             CorrespondingDispatchCenterIds = ["dc-1", "dc-1"]
         };
 
@@ -130,7 +130,7 @@ public class DispatchCentersFeatureTests
             Name = "Krakow Main",
             Country = "pl",
             IfMain = true,
-            OfficerUserName = "officer-krakow"
+            OfficerUserNames = ["officer-krakow"]
         };
 
         var result = await controller.Create(dto);
@@ -153,7 +153,7 @@ public class DispatchCentersFeatureTests
             Name = "Ops",
             Country = "PL",
             IfMain = true,
-            OfficerUserName = "officer-ops"
+            OfficerUserNames = ["officer-ops"]
         });
 
         await usersRepo.UpsertAsync(new ApplicationUser { UserName = "alice", FullName = "Alice" });
@@ -219,5 +219,83 @@ public class DispatchCentersFeatureTests
         var bob = await usersRepo.GetByUserNameAsync("bob");
         Assert.NotNull(bob);
         Assert.Null(bob.DispatchCenterId);
+    }
+
+    [Fact]
+    public async Task SyncRoomsAsync_CreatesPairRoomFromExistingTopology()
+    {
+        var dispatchRepo = new InMemoryDispatchCentersRepository();
+        var usersRepo = new InMemoryUsersRepository();
+        var roomsRepo = new InMemoryRoomsRepository();
+        var topology = new Chat.Web.Services.DispatchCenterTopologyService(
+            dispatchRepo,
+            usersRepo,
+            roomsRepo,
+            NullLogger<Chat.Web.Services.DispatchCenterTopologyService>.Instance);
+
+        await dispatchRepo.UpsertAsync(new DispatchCenter
+        {
+            Id = "dc-a",
+            Name = "Alpha",
+            Country = "PL",
+            OfficerUserNames = ["officer-a"],
+            CorrespondingDispatchCenterIds = ["dc-b"]
+        });
+        await dispatchRepo.UpsertAsync(new DispatchCenter
+        {
+            Id = "dc-b",
+            Name = "Beta",
+            Country = "DE",
+            OfficerUserNames = ["officer-b"],
+            CorrespondingDispatchCenterIds = ["dc-a"]
+        });
+        await usersRepo.UpsertAsync(new ApplicationUser { UserName = "alice", PreferredLanguage = "pl", DispatchCenterId = "dc-a" });
+        await usersRepo.UpsertAsync(new ApplicationUser { UserName = "bob", PreferredLanguage = "de", DispatchCenterId = "dc-b" });
+
+        await topology.SyncRoomsAsync();
+
+        var room = await roomsRepo.GetByNameAsync("pair:dc-a::dc-b");
+        Assert.NotNull(room);
+        Assert.True(room.IsActive);
+        Assert.Equal(RoomType.DispatchCenterPair, room.RoomType);
+        Assert.Contains("alice", room.Users);
+        Assert.Contains("bob", room.Users);
+        Assert.Contains("pl", room.Languages);
+        Assert.Contains("de", room.Languages);
+    }
+
+    [Fact]
+    public async Task SyncRoomsAsync_MarksPairRoomInactive_WhenCounterpartHasNoOfficer()
+    {
+        var dispatchRepo = new InMemoryDispatchCentersRepository();
+        var usersRepo = new InMemoryUsersRepository();
+        var roomsRepo = new InMemoryRoomsRepository();
+        var topology = new Chat.Web.Services.DispatchCenterTopologyService(
+            dispatchRepo,
+            usersRepo,
+            roomsRepo,
+            NullLogger<Chat.Web.Services.DispatchCenterTopologyService>.Instance);
+
+        await dispatchRepo.UpsertAsync(new DispatchCenter
+        {
+            Id = "dc-a",
+            Name = "Alpha",
+            Country = "PL",
+            OfficerUserNames = ["officer-a"],
+            CorrespondingDispatchCenterIds = ["dc-b"]
+        });
+        await dispatchRepo.UpsertAsync(new DispatchCenter
+        {
+            Id = "dc-b",
+            Name = "Beta",
+            Country = "DE",
+            CorrespondingDispatchCenterIds = ["dc-a"]
+        });
+
+        await topology.SyncRoomsAsync();
+
+        var room = await roomsRepo.GetByNameAsync("pair:dc-a::dc-b");
+        Assert.NotNull(room);
+        Assert.False(room.IsActive);
     }
 }

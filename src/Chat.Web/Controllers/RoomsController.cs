@@ -18,12 +18,16 @@ namespace Chat.Web.Controllers
     [Route("api/[controller]")]
     [ApiController]
     /// <summary>
-    /// Provides read-only room listing (static predefined rooms). Dynamic creation, update, and deletion are not part of this application.
+    /// Provides read-only derived dispatch-center pair room listing.
+    /// Pair rooms are synchronized from dispatch-center topology and are never managed directly by end users.
     /// </summary>
     public class RoomsController : ControllerBase
     {
+        private const string EmptyStateReasonHeader = "X-Chat-Empty-State-Reason";
+
         private readonly IRoomsRepository _rooms;
         private readonly IUsersRepository _users;
+        private readonly IDispatchCentersRepository _dispatchCenters;
         private readonly IHubContext<ChatHub> _hubContext;
         private readonly IPresenceTracker _presenceTracker;
         private readonly ILogger<RoomsController> _logger;
@@ -31,12 +35,14 @@ namespace Chat.Web.Controllers
         public RoomsController(
             IRoomsRepository rooms,
             IUsersRepository users,
+            IDispatchCentersRepository dispatchCenters,
             IHubContext<ChatHub> hubContext,
             IPresenceTracker presenceTracker,
             ILogger<RoomsController> logger)
         {
             _rooms = rooms;
             _users = users;
+            _dispatchCenters = dispatchCenters;
             _hubContext = hubContext;
             _presenceTracker = presenceTracker;
             _logger = logger;
@@ -50,13 +56,14 @@ namespace Chat.Web.Controllers
         {
             var userName = User?.Identity?.Name;
             var profile = string.IsNullOrWhiteSpace(userName) ? null : await _users.GetByUserNameAsync(userName);
-            if (profile == null || string.IsNullOrWhiteSpace(profile.DispatchCenterId))
+            if (profile == null)
             {
+                Response.Headers[EmptyStateReasonHeader] = "profile-not-found";
                 return Ok(Array.Empty<RoomViewModel>());
             }
 
-            var rooms = (await _rooms.GetByDispatchCenterIdAsync(profile.DispatchCenterId))
-                .Where(r => r.IsActive)
+            var allRooms = (await _rooms.GetAllAsync()).ToList();
+            var rooms = RoomAccessPolicy.GetAccessibleRooms(profile, allRooms)
                 .Select(r => new RoomViewModel
                 {
                     Id = r.Id,
@@ -69,6 +76,11 @@ namespace Chat.Web.Controllers
                     Languages = r.Languages
                 })
                 .ToList();
+
+            if (rooms.Count == 0)
+            {
+                Response.Headers[EmptyStateReasonHeader] = await DetermineEmptyStateReasonAsync(profile, allRooms).ConfigureAwait(false);
+            }
 
             var json = JsonSerializer.Serialize(rooms, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
             return new ContentResult { Content = json, ContentType = "application/json", StatusCode = 200 };
@@ -83,7 +95,7 @@ namespace Chat.Web.Controllers
             var userName = User?.Identity?.Name;
             var profile = string.IsNullOrWhiteSpace(userName) ? null : await _users.GetByUserNameAsync(userName);
             var room = await _rooms.GetByIdAsync(id);
-            if (profile == null || string.IsNullOrWhiteSpace(profile.DispatchCenterId) || room == null || !room.IsActive || !DispatchCenterPairing.IncludesDispatchCenter(room, profile.DispatchCenterId))
+            if (!RoomAccessPolicy.CanAccessRoom(profile, room))
                 return NotFound();
 
             var vm = new RoomViewModel
@@ -116,16 +128,12 @@ namespace Chat.Web.Controllers
             var currentUserName = User?.Identity?.Name;
             var currentProfile = string.IsNullOrWhiteSpace(currentUserName) ? null : await _users.GetByUserNameAsync(currentUserName);
             var room = await _rooms.GetByNameAsync(roomName);
-            if (currentProfile == null || string.IsNullOrWhiteSpace(currentProfile.DispatchCenterId) || room == null || !room.IsActive || !DispatchCenterPairing.IncludesDispatchCenter(room, currentProfile.DispatchCenterId))
+            if (!RoomAccessPolicy.CanAccessRoom(currentProfile, room))
             {
                 return Forbid();
             }
 
-            var users = (await _users.GetAllAsync())
-                .Where(u => u.Enabled)
-                .Where(u =>
-                    string.Equals(u.DispatchCenterId, room.DispatchCenterAId, System.StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(u.DispatchCenterId, room.DispatchCenterBId, System.StringComparison.OrdinalIgnoreCase))
+            var users = RoomAccessPolicy.GetAssignedUsersForRoom(room, await _users.GetAllAsync())
                 .OrderBy(u => u.FullName ?? u.UserName)
                 .ToList();
 
@@ -157,6 +165,53 @@ namespace Chat.Web.Controllers
 
             var json = JsonSerializer.Serialize(result, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
             return new ContentResult { Content = json, ContentType = "application/json", StatusCode = 200 };
+        }
+
+        private async Task<string> DetermineEmptyStateReasonAsync(Models.ApplicationUser profile, List<Models.Room> allRooms)
+        {
+            if (profile == null)
+            {
+                return "profile-not-found";
+            }
+
+            if (!profile.Enabled)
+            {
+                return "user-disabled";
+            }
+
+            if (string.IsNullOrWhiteSpace(profile.DispatchCenterId))
+            {
+                return "no-dispatch-center";
+            }
+
+            var dispatchCenter = await _dispatchCenters.GetByIdAsync(profile.DispatchCenterId).ConfigureAwait(false);
+            var correspondingIds = dispatchCenter?.CorrespondingDispatchCenterIds?
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList()
+                ?? new List<string>();
+
+            if (correspondingIds.Count == 0)
+            {
+                return "no-corresponding-dispatch-centers";
+            }
+
+            var relatedPairRooms = allRooms
+                .Where(room => RoomAccessPolicy.IsDispatchCenterScoped(room) &&
+                               DispatchCenterPairing.IncludesDispatchCenter(room, profile.DispatchCenterId))
+                .ToList();
+
+            if (relatedPairRooms.Count == 0)
+            {
+                return "no-derived-pair-rooms";
+            }
+
+            if (relatedPairRooms.Any(room => !room.IsActive))
+            {
+                return "inactive-pair-room";
+            }
+
+            return "no-accessible-rooms";
         }
     }
 }

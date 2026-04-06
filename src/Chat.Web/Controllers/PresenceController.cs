@@ -76,9 +76,7 @@ namespace Chat.Web.Controllers
                 ? null
                 : await _rooms.GetByNameAsync(requestedRoom).ConfigureAwait(false);
             var resolvedRoom = room != null &&
-                               room.IsActive &&
-                               !string.IsNullOrWhiteSpace(profile.DispatchCenterId) &&
-                               DispatchCenterPairing.IncludesDispatchCenter(room, profile.DispatchCenterId)
+                               RoomAccessPolicy.CanAccessRoom(profile, room)
                 ? requestedRoom
                 : string.Empty;
 

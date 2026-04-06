@@ -70,19 +70,15 @@ namespace Chat.Web.Repositories
 
     public class InMemoryUsersRepository : IUsersRepository
     {
-        private readonly ConcurrentDictionary<string, ApplicationUser> _users = new();
-        private readonly IRoomsRepository _rooms;
+        private readonly ConcurrentDictionary<string, ApplicationUser> _users = new(StringComparer.OrdinalIgnoreCase);
         public InMemoryUsersRepository() { }
-        public InMemoryUsersRepository(IRoomsRepository rooms)
-        {
-            _rooms = rooms;
-        }
+        public InMemoryUsersRepository(IRoomsRepository rooms) { }
         public Task<IEnumerable<ApplicationUser>> GetAllAsync() => Task.FromResult<IEnumerable<ApplicationUser>>(_users.Values);
         public Task<IEnumerable<ApplicationUser>> GetByDispatchCenterIdAsync(string dispatchCenterId)
             => Task.FromResult<IEnumerable<ApplicationUser>>(
                 _users.Values.Where(u => string.Equals(u.DispatchCenterId, dispatchCenterId, StringComparison.OrdinalIgnoreCase)).ToList());
         public Task<ApplicationUser> GetByUserNameAsync(string userName) => Task.FromResult(_users.TryGetValue(userName, out var user) ? user : null);
-        public Task<ApplicationUser> GetByUpnAsync(string upn) => Task.FromResult(_users.Values.FirstOrDefault(u => u.Upn == upn));
+        public Task<ApplicationUser> GetByUpnAsync(string upn) => Task.FromResult(_users.Values.FirstOrDefault(u => string.Equals(u.Upn, upn, StringComparison.OrdinalIgnoreCase)));
         public Task UpsertAsync(ApplicationUser user)
         {
             if (user == null || string.IsNullOrWhiteSpace(user.UserName)) return Task.CompletedTask;
@@ -100,26 +96,8 @@ namespace Chat.Web.Repositories
     public class InMemoryRoomsRepository : IRoomsRepository
     {
         private readonly ConcurrentDictionary<int, Room> _roomsById = new();
-        private readonly ConcurrentDictionary<string, Room> _roomsByName = new();
-        public InMemoryRoomsRepository()
-        {
-            // Pre-initialize static rooms for testing (deterministic IDs 1..n)
-            var rooms = new[] { ("general", "General"), ("ops", "Ops"), ("random", "Random") };
-            int id = 1;
-            foreach (var r in rooms)
-            {
-                var room = new Room
-                {
-                    Id = id++,
-                    Name = r.Item1,
-                    DisplayName = r.Item2,
-                    Users = new List<string>(),
-                    Languages = new List<string>()
-                };
-                _roomsById[room.Id] = room;
-                _roomsByName[room.Name] = room;
-            }
-        }
+        private readonly ConcurrentDictionary<string, Room> _roomsByName = new(StringComparer.OrdinalIgnoreCase);
+        public InMemoryRoomsRepository() { }
         public Task<IEnumerable<Room>> GetAllAsync() => Task.FromResult<IEnumerable<Room>>(_roomsById.Values);
         public Task<Room> GetByIdAsync(int id) => Task.FromResult(_roomsById.TryGetValue(id, out var r) ? r : null);
         public Task<Room> GetByNameAsync(string name) => Task.FromResult(_roomsByName.TryGetValue(name, out var r) ? r : null);

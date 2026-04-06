@@ -30,7 +30,7 @@ if(window.__chatAppBooted){
 
   // ---------------- State ----------------
   const AuthStatus = { UNKNOWN:'UNKNOWN', PROBING:'PROBING', AUTHENTICATED:'AUTHENTICATED', UNAUTHENTICATED:'UNAUTHENTICATED' };
-  const state = { loading:true, profile:null, rooms:[], users:[], messages:[], joinedRoom:null, filter:'', oldestLoaded:null, canLoadMore:true, pageSize:20, loadingMore:false, lastSendAt:0, minSendIntervalMs:800, joinInProgress:false, pendingJoin:null, outbox:[], pendingAck:{}, authStatus: AuthStatus.UNKNOWN, pendingMessages:{}, isOffline:false, unreadCount:0, unsentByRoom:{}, ackTimers:{}, autoScroll:true, _firstRender:true, _autoFillPass:0, selectedEscalationMessageIds:[] };
+  const state = { loading:true, profile:null, rooms:[], users:[], messages:[], joinedRoom:null, roomsEmptyReason:'', filter:'', oldestLoaded:null, canLoadMore:true, pageSize:20, loadingMore:false, lastSendAt:0, minSendIntervalMs:800, joinInProgress:false, pendingJoin:null, outbox:[], pendingAck:{}, authStatus: AuthStatus.UNKNOWN, pendingMessages:{}, isOffline:false, unreadCount:0, unsentByRoom:{}, ackTimers:{}, autoScroll:true, _firstRender:true, _autoFillPass:0, selectedEscalationMessageIds:[] };
   // Extended auth / hub timing metadata
   state._hubStartedEarly = false;       // whether hub started before auth probe resolved
   state._graceStartedAt = null;         // timestamp when grace window started
@@ -80,7 +80,8 @@ if(window.__chatAppBooted){
   els.profileName = document.getElementById('profileName') || document.querySelector('.profile span:not(.avatar)');
     els.btnLogin = document.getElementById('btn-login');
     els.btnLogout = document.getElementById('btn-logout');
-  els.roomsNoSelection = document.querySelector('[data-role="no-room-selected"]');
+    els.roomsNoSelection = document.querySelector('[data-role="no-room-selected"]');
+    els.noRoomSelectedMessage = document.getElementById('noRoomSelectedMessage');
   els.roomsPanel = document.querySelector('[data-role="room-panel"]');
   els.usersHeader = document.getElementById('users-header');
   els.queueBadge = document.getElementById('queue-badge');
@@ -900,7 +901,36 @@ if(window.__chatAppBooted){
       if(els.profileAvatarImg) els.profileAvatarImg.classList.add('d-none');
     }
   }
-  function renderRoomContext(){ if(!els.roomsPanel||!els.roomsNoSelection) return; const hasRoom=!!state.joinedRoom; els.roomsPanel.classList.toggle('d-none', !hasRoom); els.roomsNoSelection.classList.toggle('d-none', hasRoom); if(state.joinedRoom && els.joinedRoomTitle) els.joinedRoomTitle.textContent=getJoinedRoomLabel(); renderRooms(); renderRoomActions(); }
+  function getNoRoomSelectedMessage(){
+    switch(state.roomsEmptyReason){
+      case 'no-dispatch-center':
+        return 'No dispatch center is assigned to your user. Ask an admin to assign one before using chat.';
+      case 'no-corresponding-dispatch-centers':
+        return 'Your dispatch center has no corresponding dispatch center configured yet.';
+      case 'inactive-pair-room':
+        return 'A dispatch-center pair exists, but chat is inactive until both dispatch centers have at least one escalation officer.';
+      case 'no-derived-pair-rooms':
+        return 'No pair room has been derived for your dispatch center yet. Refresh in a moment or ask an admin to verify the topology.';
+      case 'user-disabled':
+        return 'Your user is disabled and cannot access chat rooms.';
+      case 'profile-not-found':
+        return 'Your user profile could not be loaded.';
+      case 'no-accessible-rooms':
+        return 'No accessible dispatch-center pair rooms are currently available for your user.';
+      default:
+        return 'Select a dispatch-center pair room to join.';
+    }
+  }
+  function renderRoomContext(){
+    if(!els.roomsPanel||!els.roomsNoSelection) return;
+    const hasRoom=!!state.joinedRoom;
+    els.roomsPanel.classList.toggle('d-none', !hasRoom);
+    els.roomsNoSelection.classList.toggle('d-none', hasRoom);
+    if(state.joinedRoom && els.joinedRoomTitle) els.joinedRoomTitle.textContent=getJoinedRoomLabel();
+    if(!hasRoom && els.noRoomSelectedMessage) els.noRoomSelectedMessage.textContent = getNoRoomSelectedMessage();
+    renderRooms();
+    renderRoomActions();
+  }
   function renderAll(){ renderProfile(); renderRoomContext(); renderUsers(); renderMessages(); }
   function renderQueueBadge(){ if(!els.queueBadge) return; const qLen = state.outbox.length; els.queueBadge.textContent = qLen; els.queueBadge.classList.toggle('d-none', qLen===0); }
 
@@ -1548,13 +1578,25 @@ if(window.__chatAppBooted){
     performJoin();
   }
   function loadRooms(){
-    apiGet('/api/Rooms').then(list=>{
-      state.rooms = (list||[]).map(normalizeRoomPayload).filter(Boolean);
-      renderRooms();
-      const stored=localStorage.getItem('lastRoom');
-      if(stored && state.rooms.some(r=>r.name===stored)) joinRoom(stored);
-      else if(state.rooms.length>0) joinRoom(state.rooms[0].name);
-    }).catch(()=>{});
+    fetch('/api/Rooms',{credentials:'include'})
+      .then(resp=>{
+        if(!resp.ok) throw resp;
+        state.roomsEmptyReason = resp.headers.get('X-Chat-Empty-State-Reason') || '';
+        return resp.json();
+      })
+      .then(list=>{
+        state.rooms = (list||[]).map(normalizeRoomPayload).filter(Boolean);
+        if(state.rooms.length > 0){
+          state.roomsEmptyReason = '';
+        } else if(!state.roomsEmptyReason) {
+          state.roomsEmptyReason = state.profile && state.profile.dispatchCenterId ? 'no-accessible-rooms' : 'no-dispatch-center';
+        }
+        renderRoomContext();
+        const stored=localStorage.getItem('lastRoom');
+        if(stored && state.rooms.some(r=>r.name===stored)) joinRoom(stored);
+        else if(state.rooms.length>0) joinRoom(state.rooms[0].name);
+      })
+      .catch(()=>{});
   }
   function loadUsers(){ if(!state.joinedRoom) return; apiGet('/api/Rooms/by-name/'+encodeURIComponent(state.joinedRoom.name)+'/users').then(users=>{
     const normalized = (users||[]).map(u=>({
@@ -1840,7 +1882,7 @@ if(window.__chatAppBooted){
     if(els.messageInput) els.messageInput.value='';
   }
   // deleteMessage removed
-  function logoutCleanup(){ state.rooms=[]; state.users=[]; state.messages=[]; state.profile=null; state.joinedRoom=null; renderAll(); setLoading(false); }
+  function logoutCleanup(){ state.rooms=[]; state.users=[]; state.messages=[]; state.profile=null; state.joinedRoom=null; state.roomsEmptyReason=''; renderAll(); setLoading(false); }
 
   // --------------- Auth Probe -----------
   function probeAuth(){

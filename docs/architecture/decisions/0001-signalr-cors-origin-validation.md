@@ -29,7 +29,7 @@ const connection = new signalR.HubConnectionBuilder()
   .build();
 
 await connection.start(); // Uses victim's cookies automatically
-await connection.invoke("SendMessage", "general", "I love evil.com!"); // Sent as victim
+await connection.invoke("SendMessage", "pair:dc-a::dc-b", "I love evil.com!"); // Sent as victim
 ```
 
 ### Requirements

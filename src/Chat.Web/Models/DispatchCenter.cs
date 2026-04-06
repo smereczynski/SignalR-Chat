@@ -23,8 +23,8 @@ namespace Chat.Web.Models
         public ICollection<string> Users { get; set; } = new List<string>();
 
         /// <summary>
-        /// User responsible for escalations targeting this dispatch center.
+        /// Users responsible for escalations targeting this dispatch center.
         /// </summary>
-        public string OfficerUserName { get; set; }
+        public ICollection<string> OfficerUserNames { get; set; } = new List<string>();
     }
 }

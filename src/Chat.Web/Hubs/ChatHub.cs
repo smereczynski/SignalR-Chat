@@ -29,7 +29,6 @@ namespace Chat.Web.Hubs
     private readonly Repositories.IUsersRepository _users;
     private readonly Repositories.IMessagesRepository _messages;
     private readonly Repositories.IRoomsRepository _rooms;
-        private readonly Services.UnreadNotificationScheduler _unreadScheduler;
         private readonly ILogger<ChatHub> _logger;
         private readonly Services.IInProcessMetrics _metrics;
         private readonly Services.IMarkReadRateLimiter _markReadRateLimiter;
@@ -54,15 +53,13 @@ namespace Chat.Web.Hubs
             HealthCheckService healthCheckService,
             Services.ITranslationJobQueue translationQueue,
             Microsoft.Extensions.Options.IOptions<Options.TranslationOptions> translationOptions,
-            Services.EscalationService escalations,
-            Services.UnreadNotificationScheduler unreadScheduler = null)
+            Services.EscalationService escalations)
         {
             _users = users;
             _messages = messages;
             _rooms = rooms;
             _logger = logger;
             _metrics = metrics;
-            _unreadScheduler = unreadScheduler;
             _markReadRateLimiter = markReadRateLimiter;
             _presenceTracker = presenceTracker;
             _localizer = localizer;
@@ -73,8 +70,7 @@ namespace Chat.Web.Hubs
         }
 
         /// <summary>
-        /// Adds the calling connection to the specified room (SignalR group) and notifies existing members.
-        /// Enforces fixed room membership if user profile defines FixedRooms.
+        /// Adds the calling connection to the specified dispatch-center pair room and notifies existing members.
         /// </summary>
         public async Task Join(string roomName)
         {
@@ -92,7 +88,7 @@ namespace Chat.Web.Hubs
             {
                 var profile = await _users.GetByUserNameAsync(IdentityName);
                 var room = await _rooms.GetByNameAsync(roomName);
-                if (profile == null || string.IsNullOrWhiteSpace(profile.DispatchCenterId) || room == null || !room.IsActive || !Services.DispatchCenterPairing.IncludesDispatchCenter(room, profile.DispatchCenterId))
+                if (!Services.RoomAccessPolicy.CanAccessRoom(profile, room))
                 {
                     _logger.LogWarning("Unauthorized room join attempt {User} => {Room} correlation={CorrelationId}", IdentityName, roomName, Context.ConnectionId);
                     await Clients.Caller.SendAsync("onError", _localizer["ErrorNotAuthorizedRoom"].Value);
@@ -221,7 +217,7 @@ namespace Chat.Web.Hubs
                     FullName = user?.FullName ?? IdentityName,
                     Avatar = user?.Avatar,
                     CurrentRoom = string.Empty,
-                    DispatchCenterId = user?.DispatchCenterId
+                    DispatchCenterId = Services.RoomAccessPolicy.GetPrimaryDispatchCenterId(user)
                 };
                 
                 // Store user profile in Context.Items for fast access (per-connection state)
@@ -247,41 +243,23 @@ namespace Chat.Web.Hubs
                 await Clients.All.SendAsync("presenceChanged", new { userName = connectionUserKey, isPresent = true });
                 _logger.LogDebug("PresenceChanged broadcast published: user={User} isPresent=true", connectionUserKey);
 
-                // Auto-join default room logic
+                // Auto-join the first accessible pair room, if any.
                 try
                 {
-                    var accessibleRooms = string.IsNullOrWhiteSpace(user?.DispatchCenterId)
-                        ? new System.Collections.Generic.List<Models.Room>()
-                        : (await _rooms.GetByDispatchCenterIdAsync(user.DispatchCenterId)).Where(r => r.IsActive).OrderBy(r => r.DisplayName ?? r.Name).ToList();
+                    var accessibleRooms = Services.RoomAccessPolicy
+                        .GetAccessibleRooms(user, await _rooms.GetAllAsync())
+                        .OrderBy(r => r.DisplayName ?? r.Name)
+                        .ToList();
                     if (accessibleRooms.Any())
                     {
-                        string target = null;
-                        string strategy = null;
-                        if (!string.IsNullOrWhiteSpace(user?.DefaultRoom) && accessibleRooms.Any(r => string.Equals(r.Name, user.DefaultRoom, StringComparison.OrdinalIgnoreCase)))
-                        {
-                            target = user.DefaultRoom;
-                            strategy = "autoJoin.default";
-                        }
-                        else if (accessibleRooms.Count == 1)
-                        {
-                            target = accessibleRooms.First().Name;
-                            strategy = "autoJoin.single";
-                        }
-                        else
-                        {
-                            target = accessibleRooms.OrderBy(r => r.DisplayName ?? r.Name).First().Name;
-                            strategy = "autoJoin.firstAlphabetical";
-                        }
-                        if (!string.IsNullOrEmpty(target))
-                        {
-                            Tracing.ActivitySource.StartActivity(strategy)?.Dispose();
-                            await Join(target);
-                        }
+                        var target = accessibleRooms.First().Name;
+                        Tracing.ActivitySource.StartActivity("autoJoin.firstAccessiblePair")?.Dispose();
+                        await Join(target);
                     }
                 }
                 catch (System.Exception ex)
                 {
-                    _logger.LogWarning(ex, "Auto-join default room failed for {User}", IdentityName);
+                    _logger.LogWarning(ex, "Auto-join pair room failed for {User}", IdentityName);
                 }
             }
             catch (Exception ex)
@@ -407,7 +385,7 @@ namespace Chat.Web.Hubs
             }
             
             var domainUser = await _users.GetByUserNameAsync(IdentityName);
-            if (domainUser == null || string.IsNullOrWhiteSpace(domainUser.DispatchCenterId))
+            if (domainUser == null)
             {
                 _logger.LogWarning("SendMessage unauthorized user={User} room={Room}", IdentityName, currentRoom);
                 activity?.SetStatus(ActivityStatusCode.Error, "unauthorized");
@@ -415,13 +393,14 @@ namespace Chat.Web.Hubs
                 return;
             }
             var room = await _rooms.GetByNameAsync(currentRoom);
-            if (room == null || !room.IsActive || !Services.DispatchCenterPairing.IncludesDispatchCenter(room, domainUser.DispatchCenterId))
+            if (!Services.RoomAccessPolicy.CanAccessRoom(domainUser, room))
             {
                 _logger.LogWarning("SendMessage room missing user={User} room={Room}", IdentityName, currentRoom);
                 activity?.SetStatus(ActivityStatusCode.Error, "room_missing");
                 await Clients.Caller.SendAsync("onError", _localizer["ErrorOccurred"].Value);
                 return;
             }
+            var senderDispatchCenterId = Services.RoomAccessPolicy.ResolveDispatchCenterIdForRoom(domainUser, room);
             // Basic sanitization (strip tags)
             var sanitized = System.Text.RegularExpressions.Regex.Replace(content, @"<.*?>", string.Empty);
             activity?.SetTag("chat.room", room.Name);
@@ -430,7 +409,7 @@ namespace Chat.Web.Hubs
             {
                 Content = sanitized,
                 FromUser = domainUser,
-                FromDispatchCenterId = domainUser.DispatchCenterId,
+                FromDispatchCenterId = senderDispatchCenterId,
                 ToRoom = room,
                 Timestamp = System.DateTime.UtcNow
             };
@@ -514,14 +493,6 @@ namespace Chat.Web.Hubs
                 IsTranslated = msg.IsTranslated
             };
             await Clients.Group(room.Name).SendAsync("newMessage", vm);
-            try
-            {
-                _unreadScheduler?.Schedule(msg);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Unread notification scheduling failed for message {Id} in room {Room}", msg.Id, room.Name);
-            }
             _metrics.IncMessagesSent();
             activity?.SetStatus(ActivityStatusCode.Ok);
         }
@@ -552,31 +523,24 @@ namespace Chat.Web.Hubs
             if (user == null || string.IsNullOrEmpty(currentRoom)) return;
             
             var profile = await _users.GetByUserNameAsync(IdentityName);
-            if (profile == null || string.IsNullOrWhiteSpace(profile.DispatchCenterId))
+            if (profile == null)
             {
                 return;
             }
 
             var message = await _messages.GetByIdAsync(messageId);
             var room = await _rooms.GetByNameAsync(message?.ToRoom?.Name);
-            if (message == null || room == null || !room.IsActive || !Services.DispatchCenterPairing.IncludesDispatchCenter(room, profile.DispatchCenterId))
+            if (!Services.RoomAccessPolicy.CanAccessRoom(profile, room))
             {
                 return;
             }
 
-            var updated = await _messages.MarkReadAsync(messageId, IdentityName, profile.DispatchCenterId);
+            var readDispatchCenterId = Services.RoomAccessPolicy.ResolveDispatchCenterIdForRoom(profile, room);
+            profile.DispatchCenterId = readDispatchCenterId;
+
+            var updated = await _messages.MarkReadAsync(messageId, IdentityName, readDispatchCenterId);
             if (updated == null) return;
             await _escalations.ResolveIfAcknowledgedAsync(updated, profile);
-            
-            // Cancel any pending unread notification for this message since someone has read it
-            try
-            {
-                _unreadScheduler?.CancelNotification(messageId);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Failed to cancel unread notification for message {Id}", messageId);
-            }
             
             // Use the message's actual room name for broadcasting
             var messageRoom = updated.ToRoom?.Name;

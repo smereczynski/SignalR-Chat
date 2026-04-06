@@ -33,7 +33,6 @@ namespace Chat.Web.Controllers
         private readonly IUsersRepository _users;
         private readonly IHubContext<ChatHub> _hubContext;
         private readonly ILogger<MessagesController> _logger;
-        private readonly IConfiguration _configuration;
         private readonly Services.ITranslationJobQueue _translationQueue;
         private readonly Microsoft.Extensions.Options.IOptions<Options.TranslationOptions> _translationOptions;
         private readonly EscalationService _escalations;
@@ -55,7 +54,6 @@ namespace Chat.Web.Controllers
             _users = users;
             _hubContext = hubContext;
             _logger = logger;
-            _configuration = null; // Removed IConfiguration dependency
             _translationQueue = translationQueue;
             _translationOptions = translationOptions;
             _escalations = escalations;
@@ -89,7 +87,7 @@ namespace Chat.Web.Controllers
                 return NotFound();
             var user = await _users.GetByUserNameAsync(User?.Identity?.Name);
             var room = await _rooms.GetByNameAsync(message.ToRoom?.Name);
-            if (user == null || room == null || string.IsNullOrWhiteSpace(user.DispatchCenterId) || !room.IsActive || !DispatchCenterPairing.IncludesDispatchCenter(room, user.DispatchCenterId))
+            if (!RoomAccessPolicy.CanAccessRoom(user, room))
             {
                 return Forbid();
             }
@@ -128,7 +126,7 @@ namespace Chat.Web.Controllers
             if (take > 100) take = 100; // cap
             var room = await _rooms.GetByNameAsync(roomName);
             var user = await _users.GetByUserNameAsync(User?.Identity?.Name);
-            if (room == null || user == null || string.IsNullOrWhiteSpace(user.DispatchCenterId) || !room.IsActive || !DispatchCenterPairing.IncludesDispatchCenter(room, user.DispatchCenterId))
+            if (!RoomAccessPolicy.CanAccessRoom(user, room))
                 return BadRequest();
 
             IEnumerable<Message> source = before.HasValue
@@ -174,11 +172,10 @@ namespace Chat.Web.Controllers
 
         [HttpPost]
         public async Task<IActionResult> Post([FromBody] CreateMessageDto dto,
-            [FromServices] Services.IInProcessMetrics metrics,
-            [FromServices] Services.UnreadNotificationScheduler unreadScheduler)
+            [FromServices] Services.IInProcessMetrics metrics)
         {
             // Feature flag: disable REST creation path unless explicitly enabled (tests / emergency fallback)
-            var enabled = _configuration != null && string.Equals(_configuration["Features:EnableRestPostMessages"], "true", StringComparison.OrdinalIgnoreCase);
+            var enabled = false;
             if (!enabled)
             {
                 return NotFound(); // Pretend endpoint absent in production
@@ -191,10 +188,12 @@ namespace Chat.Web.Controllers
                 return NotFound();
 
             var user = await _users.GetByUserNameAsync(User?.Identity?.Name);
-            if (user == null || string.IsNullOrWhiteSpace(user.DispatchCenterId) || !room.IsActive || !DispatchCenterPairing.IncludesDispatchCenter(room, user.DispatchCenterId))
+            if (!RoomAccessPolicy.CanAccessRoom(user, room))
             {
                 return Forbid();
             }
+
+            var senderDispatchCenterId = RoomAccessPolicy.ResolveDispatchCenterIdForRoom(user, room);
 
             // Sanitize (strip tags) similar to hub path.
             var sanitized = Regex.Replace(dto.Content, @"<.*?>", string.Empty);
@@ -202,7 +201,7 @@ namespace Chat.Web.Controllers
             {
                 Content = sanitized,
                 FromUser = user,
-                FromDispatchCenterId = user.DispatchCenterId,
+                FromDispatchCenterId = senderDispatchCenterId,
                 ToRoom = room,
                 Timestamp = DateTime.UtcNow
             };
@@ -240,14 +239,6 @@ namespace Chat.Web.Controllers
 
             // Fire-and-forget hub broadcast (do not block API latency on network fan-out)
             _ = _hubContext.Clients.Group(room.Name).SendAsync("newMessage", vm);
-            try
-            {
-                unreadScheduler?.Schedule(message);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Unread notification scheduling failed for message {Id} in room {Room}", message.Id, room.Name);
-            }
             metrics?.IncMessagesSent();
 
             if (UseManualSerialization)
@@ -264,19 +255,22 @@ namespace Chat.Web.Controllers
         public async Task<IActionResult> MarkRead(int id)
         {
             var user = await _users.GetByUserNameAsync(User?.Identity?.Name);
-            if (user == null || string.IsNullOrWhiteSpace(user.DispatchCenterId))
+            if (user == null)
             {
                 return Forbid();
             }
 
             var message = await _messages.GetByIdAsync(id);
             var room = await _rooms.GetByNameAsync(message?.ToRoom?.Name);
-            if (message == null || room == null || !room.IsActive || !DispatchCenterPairing.IncludesDispatchCenter(room, user.DispatchCenterId))
+            if (!RoomAccessPolicy.CanAccessRoom(user, room))
             {
                 return NotFound();
             }
 
-            var updated = await _messages.MarkReadAsync(id, user.UserName, user.DispatchCenterId);
+            var readDispatchCenterId = RoomAccessPolicy.ResolveDispatchCenterIdForRoom(user, room);
+            user.DispatchCenterId = readDispatchCenterId;
+
+            var updated = await _messages.MarkReadAsync(id, user.UserName, readDispatchCenterId);
             if (updated == null) return NotFound();
             await _escalations.ResolveIfAcknowledgedAsync(updated, user);
             // Fire-and-forget broadcast of readers list to the room
@@ -312,7 +306,7 @@ namespace Chat.Web.Controllers
             
             var user = await _users.GetByUserNameAsync(User?.Identity?.Name);
             var room = await _rooms.GetByNameAsync(message.ToRoom?.Name);
-            if (user == null || room == null || string.IsNullOrWhiteSpace(user.DispatchCenterId) || !room.IsActive || !DispatchCenterPairing.IncludesDispatchCenter(room, user.DispatchCenterId))
+            if (!RoomAccessPolicy.CanAccessRoom(user, room))
             {
                 return Forbid();
             }
@@ -375,7 +369,7 @@ namespace Chat.Web.Controllers
         public async Task<IActionResult> Escalate([FromBody] CreateEscalationDto dto)
         {
             var user = await _users.GetByUserNameAsync(User?.Identity?.Name);
-            if (user == null || string.IsNullOrWhiteSpace(user.DispatchCenterId))
+            if (user == null)
             {
                 return Forbid();
             }
@@ -391,6 +385,15 @@ namespace Chat.Web.Controllers
             {
                 return NotFound();
             }
+
+            var room = await _rooms.GetByNameAsync(firstMessage.ToRoom.Name);
+            var escalationDispatchCenterId = RoomAccessPolicy.ResolveDispatchCenterIdForRoom(user, room);
+            if (string.IsNullOrWhiteSpace(escalationDispatchCenterId))
+            {
+                return Forbid();
+            }
+
+            user.DispatchCenterId = escalationDispatchCenterId;
 
             var escalation = await _escalations.CreateManualAsync(user, firstMessage.ToRoom.Name, messageIds);
             if (escalation == null)

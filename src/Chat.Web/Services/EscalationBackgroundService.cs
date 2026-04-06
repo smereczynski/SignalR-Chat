@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
@@ -8,17 +9,20 @@ namespace Chat.Web.Services
 {
     public class EscalationBackgroundService : BackgroundService
     {
-        private readonly EscalationService _escalations;
+        private readonly IServiceProvider _serviceProvider;
         private readonly ILogger<EscalationBackgroundService> _logger;
+        private EscalationService _escalations;
 
-        public EscalationBackgroundService(EscalationService escalations, ILogger<EscalationBackgroundService> logger)
+        public EscalationBackgroundService(IServiceProvider serviceProvider, ILogger<EscalationBackgroundService> logger)
         {
-            _escalations = escalations;
+            _serviceProvider = serviceProvider;
             _logger = logger;
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
+            // Resolve lazily so Cosmos-backed repositories are available after initialization.
+            _escalations = _serviceProvider.GetRequiredService<EscalationService>();
             _logger.LogInformation("EscalationBackgroundService started");
 
             while (!stoppingToken.IsCancellationRequested)

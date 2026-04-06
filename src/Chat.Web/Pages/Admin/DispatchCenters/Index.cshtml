@@ -17,7 +17,7 @@
                 <th>@Localizer["Name"]</th>
                 <th>@Localizer["Country"]</th>
                 <th>@Localizer["Main"]</th>
-                <th>Officer</th>
+                <th>Escalation Officers</th>
                 <th>@Localizer["CorrespondingDispatchCenters"]</th>
                 <th>@Localizer["AssignedUsers"]</th>
                 <th>@Localizer["Actions"]</th>
@@ -39,7 +39,7 @@
                             <span class="badge bg-secondary">@Localizer["No"]</span>
                         }
                     </td>
-                    <td>@dc.OfficerUserName</td>
+                    <td>@string.Join(", ", dc.OfficerUserNames ?? new List<string>())</td>
                     <td class="text-muted">@Model.FormatCorrespondingDispatchCenters(dc.CorrespondingDispatchCenterIds)</td>
                     <td>@((dc.Users ?? new List<string>()).Count)</td>
                     <td class="d-flex gap-1">

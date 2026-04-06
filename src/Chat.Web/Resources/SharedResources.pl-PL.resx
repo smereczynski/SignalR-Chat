@@ -434,9 +434,6 @@
   <data name="Disable" xml:space="preserve">
     <value>Wyłącz</value>
   </data>
-  <data name="AssignRooms" xml:space="preserve">
-    <value>Przypisz pokoje</value>
-  </data>
   <data name="RoomName" xml:space="preserve">
     <value>Nazwa pokoju</value>
   </data>
@@ -454,9 +451,6 @@
   </data>
   <data name="CreateUser" xml:space="preserve">
     <value>Utwórz użytkownika</value>
-  </data>
-  <data name="AssignRoomsToUser" xml:space="preserve">
-    <value>Przypisz pokoje do {0}</value>
   </data>
   <data name="EnabledQuestion" xml:space="preserve">
     <value>Włączony?</value>

@@ -54,7 +54,12 @@ namespace Chat.Web.Services
 
             var targetDispatchCenterId = DispatchCenterPairing.GetCounterpartDispatchCenterId(room, message.FromDispatchCenterId);
             var targetDispatchCenter = await _dispatchCenters.GetByIdAsync(targetDispatchCenterId).ConfigureAwait(false);
-            if (targetDispatchCenter == null || string.IsNullOrWhiteSpace(targetDispatchCenter.OfficerUserName))
+            var targetOfficerUserNames = targetDispatchCenter?.OfficerUserNames?
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Select(x => x.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            if (targetOfficerUserNames == null || targetOfficerUserNames.Count == 0)
             {
                 return null;
             }
@@ -66,7 +71,7 @@ namespace Chat.Web.Services
                 PairKey = room.PairKey,
                 SourceDispatchCenterId = message.FromDispatchCenterId,
                 TargetDispatchCenterId = targetDispatchCenterId,
-                TargetOfficerUserName = targetDispatchCenter.OfficerUserName,
+                TargetOfficerUserNames = targetOfficerUserNames,
                 TriggerType = EscalationTriggerType.Automatic,
                 Status = Models.EscalationStatus.Scheduled,
                 CreatedAt = DateTime.UtcNow,
@@ -138,7 +143,12 @@ namespace Chat.Web.Services
 
             var counterpartId = DispatchCenterPairing.GetCounterpartDispatchCenterId(room, user.DispatchCenterId);
             var counterpart = await _dispatchCenters.GetByIdAsync(counterpartId).ConfigureAwait(false);
-            if (counterpart == null || string.IsNullOrWhiteSpace(counterpart.OfficerUserName))
+            var counterpartOfficerUserNames = counterpart?.OfficerUserNames?
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Select(x => x.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            if (counterpartOfficerUserNames == null || counterpartOfficerUserNames.Count == 0)
             {
                 return null;
             }
@@ -151,7 +161,7 @@ namespace Chat.Web.Services
                 PairKey = room.PairKey,
                 SourceDispatchCenterId = user.DispatchCenterId,
                 TargetDispatchCenterId = counterpartId,
-                TargetOfficerUserName = counterpart.OfficerUserName,
+                TargetOfficerUserNames = counterpartOfficerUserNames,
                 TriggerType = EscalationTriggerType.Manual,
                 Status = Models.EscalationStatus.Escalated,
                 CreatedAt = now,
@@ -218,7 +228,7 @@ namespace Chat.Web.Services
                     status = escalation.Status.ToString(),
                     messageIds = escalation.MessageIds.ToArray(),
                     triggerType = escalation.TriggerType.ToString(),
-                    targetOfficerUserName = escalation.TargetOfficerUserName,
+                    targetOfficerUserNames = escalation.TargetOfficerUserNames?.ToArray() ?? Array.Empty<string>(),
                     timestamp = DateTime.UtcNow
                 }).ConfigureAwait(false);
             }
@@ -290,14 +300,22 @@ namespace Chat.Web.Services
                 status = escalation.Status.ToString(),
                 messageIds = escalation.MessageIds.ToArray(),
                 triggerType = escalation.TriggerType.ToString(),
-                targetOfficerUserName = escalation.TargetOfficerUserName,
+                targetOfficerUserNames = escalation.TargetOfficerUserNames?.ToArray() ?? Array.Empty<string>(),
                 timestamp = DateTime.UtcNow
             }).ConfigureAwait(false);
 
-            var officer = await _users.GetByUserNameAsync(escalation.TargetOfficerUserName).ConfigureAwait(false);
-            if (officer != null)
+            var officerUserNames = escalation.TargetOfficerUserNames?
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList()
+                ?? new List<string>();
+            foreach (var officerUserName in officerUserNames)
             {
-                await _notifications.NotifyAsync(officer, room.DisplayName ?? room.Name, referenceMessage).ConfigureAwait(false);
+                var officer = await _users.GetByUserNameAsync(officerUserName).ConfigureAwait(false);
+                if (officer != null)
+                {
+                    await _notifications.NotifyAsync(officer, room.DisplayName ?? room.Name, referenceMessage).ConfigureAwait(false);
+                }
             }
 
             _logger.LogInformation(

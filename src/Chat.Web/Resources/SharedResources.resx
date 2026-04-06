@@ -422,9 +422,6 @@
   <data name="Disable" xml:space="preserve">
     <value>Disable</value>
   </data>
-  <data name="AssignRooms" xml:space="preserve">
-    <value>Assign Rooms</value>
-  </data>
   <data name="RoomName" xml:space="preserve">
     <value>Room Name</value>
   </data>
@@ -442,9 +439,6 @@
   </data>
   <data name="CreateUser" xml:space="preserve">
     <value>Create User</value>
-  </data>
-  <data name="AssignRoomsToUser" xml:space="preserve">
-    <value>Assign Rooms to {0}</value>
   </data>
   <data name="EnabledQuestion" xml:space="preserve">
     <value>Enabled?</value>

@@ -1,47 +1,28 @@
 # Features
 
-Learn about SignalR Chat's features and how they work.
+This section documents the features that exist on the current branch.
 
-## Core Features
+## Available Feature Docs
 
-### Authentication & Sessions
-- **[Authentication](authentication.md)** - Dual authentication: Microsoft Entra ID (SSO) + OTP fallback with Argon2id hashing
-- **[Entra ID Setup](../development/entra-id-multi-tenant-setup.md)** - Multi-tenant Entra ID configuration guide
-- **[Sessions](sessions.md)** - Session management and security headers
+- [Authentication](authentication.md)
+- [Dispatch-Center Escalation Implementation](dispatch-center-escalation-implementation-plan.md)
+- [Presence](presence.md)
+- [Sessions](sessions.md)
+- [Async Translation Implementation Plan](async-translation-implementation-plan.md)
 
-### Real-time Communication
-- **[Real-time Messaging](real-time-messaging.md)** - SignalR implementation details
-- **[Presence Tracking](presence.md)** - Online/offline status and visibility
-- **[Read Receipts](read-receipts.md)** - Message read status tracking
+## Current Feature Summary
 
-### User Experience
-- **[Localization](localization.md)** - Multi-language support (8 languages)
-- **[Notifications](notifications.md)** - Email/SMS notifications for unread messages
-- **[Pagination](pagination.md)** - Efficient message loading
+- Entra ID primary login with OTP failover
+- dispatch-center pair room authorization
+- startup topology reconciliation
+- manual and automatic escalations
+- multi-officer escalation targets
+- presence tracking
+- asynchronous translation pipeline
 
-### Security & Performance
-- **[Rate Limiting](rate-limiting.md)** - Abuse prevention and throttling
-- Security headers (CSP, HSTS) - See [Sessions](sessions.md)
+## Feature Checklist
 
-## Feature Status
-
-| Feature | Status | Documentation |
-|---------|--------|---------------|
-| Entra ID Authentication | ✅ Production | [authentication.md](authentication.md), [Entra ID Setup](../development/entra-id-multi-tenant-setup.md) |
-| OTP Authentication (Fallback) | ✅ Production | [authentication.md](authentication.md) |
-| Real-time Messaging | ✅ Production | [real-time-messaging.md](real-time-messaging.md) |
-| Read Receipts | ✅ Production | [read-receipts.md](read-receipts.md) |
-| Presence Tracking | ✅ Production | [presence.md](presence.md) |
-| Dispatch Offices (organizational structure) | ✅ Implemented (API + Admin UI) | [../architecture/data-model.md](../architecture/data-model.md), [../development/admin-panel-app-role-integration.md](../development/admin-panel-app-role-integration.md) |
-| Localization (8 languages) | ✅ Production | [localization.md](localization.md) |
-| Rate Limiting | ✅ Production | [rate-limiting.md](rate-limiting.md) |
-| Email/SMS Notifications | ✅ Production | [notifications.md](notifications.md) |
-| Message Pagination | ✅ Production | [pagination.md](pagination.md) |
-
-## Quick Links
-
-- [Architecture Overview](../architecture/overview.md)
-- [Getting Started](../getting-started/)
-- [Deployment Guide](../deployment/)
-
-[Back to documentation home](../README.md)
+- [x] dispatch-center assignment is authoritative
+- [x] pair rooms are derived from topology
+- [x] escalations route to counterpart officer lists
+- [x] legacy standard-room chat is out of scope

@@ -57,7 +57,7 @@
         </div>
     </div>
     <div class="main-content" data-role="no-room-selected">
-        <span class="m-auto">@Localizer["SelectRoomToJoin"]</span>
+        <span class="m-auto" id="noRoomSelectedMessage">@Localizer["SelectRoomToJoin"]</span>
     </div>
     <div class="main-content d-none" data-role="room-panel">
         <div class="header">
@@ -123,6 +123,6 @@
     </environment>
     <environment exclude="Development">
         <script src="~/js/dist/site.js" asp-append-version="true"></script>
-        <script src="~/js/dist/chat.js" asp-append-version="true"></script>
+        <script src="~/js/chat.js" asp-append-version="true"></script>
     </environment>
 }

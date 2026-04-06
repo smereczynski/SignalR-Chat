@@ -14,7 +14,7 @@ public class DispatchCenterInputModel
     public bool IfMain { get; set; }
 
     [Required]
-    public string OfficerUserName { get; set; } = string.Empty;
+    public List<string> OfficerUserNames { get; set; } = new();
 
     public List<string> CorrespondingDispatchCenterIds { get; set; } = new();
 }

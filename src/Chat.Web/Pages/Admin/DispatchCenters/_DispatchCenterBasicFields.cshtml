@@ -15,9 +15,10 @@
 </div>
 
 <div class="mb-3">
-    <label asp-for="OfficerUserName" class="form-label">Officer User Name</label>
-    <input asp-for="OfficerUserName" class="form-control" />
-    <span asp-validation-for="OfficerUserName" class="text-danger"></span>
+    <label asp-for="OfficerUserNames" class="form-label">Escalation Officers</label>
+    <select asp-for="OfficerUserNames" class="form-select" multiple size="6" asp-items="ViewBag.OfficerUsers"></select>
+    <span asp-validation-for="OfficerUserNames" class="text-danger"></span>
+    <div class="form-text">Select one or more users assigned as escalation officers for this dispatch center.</div>
 </div>
 
 <div class="mb-3 form-check">

@@ -138,10 +138,8 @@ namespace Chat.Web.Services
                     return;
                 }
                 
-                // Gather ALL users assigned to the room from FixedRooms (source of truth for room membership)
-                // Note: room.Users contains only currently connected users (presence tracking), not all assigned users
                 var userNames = (await _users.GetAllAsync().ConfigureAwait(false))
-                    ?.Where(u => u != null && u.Enabled != false && (u.FixedRooms?.Contains(roomName, StringComparer.OrdinalIgnoreCase) ?? false))
+                    ?.Where(u => u != null && u.Enabled != false && (room.Users?.Contains(u.UserName, StringComparer.OrdinalIgnoreCase) ?? false))
                     ?.Select(u => u.UserName)
                     ?.Where(n => !string.IsNullOrWhiteSpace(n))
                     ?.Distinct(StringComparer.OrdinalIgnoreCase)
@@ -149,11 +147,11 @@ namespace Chat.Web.Services
                 
                 if (userNames.Count == 0)
                 {
-                    _logger.LogDebug("No recipients found for room {Room} (no users with FixedRooms containing this room). Skipping notification for message {Id}", roomName, messageId);
+                    _logger.LogDebug("No recipients found for room {Room}. Skipping notification for message {Id}", roomName, messageId);
                     return;
                 }
                 
-                _logger.LogDebug("Found {Count} recipients for room {Room} from FixedRooms", userNames.Count, roomName);
+                _logger.LogDebug("Found {Count} recipients for room {Room}", userNames.Count, roomName);
                 
                 // Exclude sender only (don't exclude readers since we already checked if anyone read it above)
                 var toNotify = userNames.Where(u => !string.Equals(u, msg.FromUser?.UserName, StringComparison.OrdinalIgnoreCase)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();

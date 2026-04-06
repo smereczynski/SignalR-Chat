@@ -7,8 +7,7 @@ namespace Chat.Web.Models
 {
     public enum RoomType
     {
-        General = 0,
-        DispatchCenterPair = 1
+        DispatchCenterPair = 0
     }
 
     public class Room
@@ -16,7 +15,7 @@ namespace Chat.Web.Models
         public int Id { get; set; }
         public string Name { get; set; }
         public string DisplayName { get; set; }
-        public RoomType RoomType { get; set; } = RoomType.General;
+        public RoomType RoomType { get; set; } = RoomType.DispatchCenterPair;
         public string PairKey { get; set; }
         public string DispatchCenterAId { get; set; }
         public string DispatchCenterBId { get; set; }

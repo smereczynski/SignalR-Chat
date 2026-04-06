@@ -71,8 +71,7 @@ public class UsersCreateModel : PageModel
             MobileNumber = Input.MobileNumber,
             Upn = !string.IsNullOrWhiteSpace(Input.Upn) ? Input.Upn : null,
             Enabled = Input.Enabled,
-            DispatchCenterId = Input.DispatchCenterId,
-            FixedRooms = new List<string>()
+            DispatchCenterId = Input.DispatchCenterId
         };
         await _users.UpsertAsync(user);
         await _topology.AssignUserAsync(Input.DispatchCenterId, user.UserName);

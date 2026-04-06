@@ -119,10 +119,7 @@ namespace Chat.Web.Repositories
         public string displayName { get; set; }
         public string country { get; set; }
         public string region { get; set; }
-        public string[] fixedRooms { get; set; } 
-        public string[] dispatchCenterIds { get; set; }
         public string dispatchCenterId { get; set; }
-        public string defaultRoom { get; set; } 
     }
     internal class RoomDoc
     {
@@ -146,7 +143,7 @@ namespace Chat.Web.Repositories
         public bool ifMain { get; set; }
         public string[] correspondingDispatchCenterIds { get; set; }
         public string[] users { get; set; }
-        public string officerUserName { get; set; }
+        public string[] officerUserNames { get; set; }
     }
     internal class MessageDoc 
     { 
@@ -183,7 +180,7 @@ namespace Chat.Web.Repositories
         public string pairKey { get; set; }
         public string sourceDispatchCenterId { get; set; }
         public string targetDispatchCenterId { get; set; }
-        public string targetOfficerUserName { get; set; }
+        public string[] targetOfficerUserNames { get; set; }
         public string triggerType { get; set; }
         public string status { get; set; }
         public DateTime createdAt { get; set; }
@@ -283,12 +280,6 @@ namespace Chat.Web.Repositories
 
         private static ApplicationUser MapUser(UserDoc d)
         {
-            var rooms = d.fixedRooms;
-            var fixedRooms = rooms != null ? new System.Collections.Generic.List<string>(rooms) : new System.Collections.Generic.List<string>();
-            var dispatchCenterIds = d.dispatchCenterIds != null
-                ? new System.Collections.Generic.List<string>(d.dispatchCenterIds)
-                : new System.Collections.Generic.List<string>();
-            var def = !string.IsNullOrWhiteSpace(d.defaultRoom) ? d.defaultRoom : (fixedRooms.Count > 0 ? fixedRooms[0] : null);
             return new ApplicationUser
             {
                 UserName = d.userName,
@@ -303,10 +294,7 @@ namespace Chat.Web.Repositories
                 DisplayName = d.displayName,
                 Country = d.country,
                 Region = d.region,
-                FixedRooms = fixedRooms,
-                DispatchCenterIds = dispatchCenterIds,
-                DispatchCenterId = d.dispatchCenterId,
-                DefaultRoom = def
+                DispatchCenterId = d.dispatchCenterId
             };
         }
 
@@ -387,10 +375,7 @@ namespace Chat.Web.Repositories
                 displayName = user.DisplayName,
                 country = user.Country,
                 region = user.Region,
-                fixedRooms = user.FixedRooms != null ? System.Linq.Enumerable.ToArray(user.FixedRooms) : null, 
-                dispatchCenterIds = user.DispatchCenterIds != null ? System.Linq.Enumerable.ToArray(user.DispatchCenterIds) : null,
-                dispatchCenterId = user.DispatchCenterId,
-                defaultRoom = user.DefaultRoom 
+                dispatchCenterId = user.DispatchCenterId
             };
             try
             {
@@ -428,7 +413,7 @@ namespace Chat.Web.Repositories
                 Id = DocIdUtil.TryParseRoomId(d.id),
                 Name = d.name,
                 DisplayName = d.displayName,
-                RoomType = Enum.TryParse<RoomType>(d.roomType, out var roomType) ? roomType : RoomType.General,
+                RoomType = Enum.TryParse<RoomType>(d.roomType, out var roomType) ? roomType : RoomType.DispatchCenterPair,
                 PairKey = d.pairKey,
                 DispatchCenterAId = d.dispatchCenterAId,
                 DispatchCenterBId = d.dispatchCenterBId,
@@ -931,7 +916,7 @@ namespace Chat.Web.Repositories
                 IfMain = d.ifMain,
                 CorrespondingDispatchCenterIds = d.correspondingDispatchCenterIds != null ? new List<string>(d.correspondingDispatchCenterIds) : new List<string>(),
                 Users = d.users != null ? new List<string>(d.users) : new List<string>(),
-                OfficerUserName = d.officerUserName
+                OfficerUserNames = d.officerUserNames != null ? new List<string>(d.officerUserNames) : new List<string>()
             };
         }
 
@@ -992,7 +977,7 @@ namespace Chat.Web.Repositories
                 ifMain = dispatchCenter.IfMain,
                 correspondingDispatchCenterIds = dispatchCenter.CorrespondingDispatchCenterIds?.ToArray() ?? Array.Empty<string>(),
                 users = dispatchCenter.Users?.ToArray() ?? Array.Empty<string>(),
-                officerUserName = dispatchCenter.OfficerUserName
+                officerUserNames = dispatchCenter.OfficerUserNames?.ToArray() ?? Array.Empty<string>()
             };
 
             try
@@ -1088,7 +1073,7 @@ namespace Chat.Web.Repositories
                 PairKey = d.pairKey,
                 SourceDispatchCenterId = d.sourceDispatchCenterId,
                 TargetDispatchCenterId = d.targetDispatchCenterId,
-                TargetOfficerUserName = d.targetOfficerUserName,
+                TargetOfficerUserNames = d.targetOfficerUserNames != null ? new List<string>(d.targetOfficerUserNames) : new List<string>(),
                 TriggerType = Enum.TryParse<EscalationTriggerType>(d.triggerType, out var triggerType) ? triggerType : EscalationTriggerType.Automatic,
                 Status = Enum.TryParse<Models.EscalationStatus>(d.status, out var status) ? status : Models.EscalationStatus.Scheduled,
                 CreatedAt = d.createdAt,
@@ -1120,7 +1105,7 @@ namespace Chat.Web.Repositories
                 pairKey = escalation.PairKey,
                 sourceDispatchCenterId = escalation.SourceDispatchCenterId,
                 targetDispatchCenterId = escalation.TargetDispatchCenterId,
-                targetOfficerUserName = escalation.TargetOfficerUserName,
+                targetOfficerUserNames = escalation.TargetOfficerUserNames?.ToArray() ?? Array.Empty<string>(),
                 triggerType = escalation.TriggerType.ToString(),
                 status = escalation.Status.ToString(),
                 createdAt = escalation.CreatedAt,

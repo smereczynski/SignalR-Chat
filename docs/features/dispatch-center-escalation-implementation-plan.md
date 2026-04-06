@@ -1,157 +1,137 @@
-# Dispatch Center Pair Rooms and Officer Escalations
+# Dispatch-Center Escalation Implementation
 
 ## Summary
 
-This plan is based on the current code shape:
+This branch implements a strict dispatch-center communication model:
 
-- `ApplicationUser` currently uses both `FixedRooms` and a multi-value `DispatchCenterIds` collection.
-- `DispatchCenter` already exists and already stores `CorrespondingDispatchCenterIds`, but there is no officer assignment and no first-class pairing workflow.
-- `Room` has no dispatch-center semantics today; room access is still driven by `FixedRooms`.
-- `Message` stores per-user `ReadBy`, but not per-dispatch-center acknowledgement and not escalation state.
-- The current unread timer service is in-memory and not registered in the Cosmos/Redis startup path, so it is not a safe base for durable 300-second escalations.
-- Infra/config already knows about `dispatchcenters` in code, but app-service settings do not currently publish `Cosmos__DispatchCentersContainer`.
+- A user belongs to exactly one dispatch center via `ApplicationUser.DispatchCenterId`.
+- Dispatch centers define their allowed communication graph through `CorrespondingDispatchCenterIds`.
+- Chat rooms are derived from active dispatch-center pairs and are never seeded or managed manually.
+- Each dispatch center has one or more escalation officers in `OfficerUserNames`.
+- Escalations target all officers assigned to the counterpart dispatch center.
+- OTP remains available as a failover login path; Entra ID is the primary enterprise login path.
 
-Chosen defaults for v1:
+There is no backward compatibility with the legacy room-based chat model. `FixedRooms`, `DefaultRoom`, legacy room seeding, and standard chat rooms are not part of the product anymore.
 
-- One required dispatch center per user.
-- One explicit room per dispatch-center pair.
-- One designated officer user per dispatch center, stored in app data.
-- Automatic escalation after 300 seconds from message creation if the opposite dispatch center has not acknowledged the message.
+## Current Domain Model
 
-```mermaid
-flowchart LR
-    A[User in Dispatch Center A] -->|send message| R[Pair Room A-B]
-    R --> M[Message]
-    M --> S[Escalation Record\nstatus=Scheduled\ndueAt=+300s]
+### Application user
 
-    B[Users in Dispatch Center B] -->|mark read| M
-    M -->|readByDispatchCenterIds contains B| C[Cancel / Resolve Scheduled Escalation]
+`ApplicationUser` is the runtime identity and authorization source.
 
-    S -->|still unread by B at dueAt| E[Escalated]
-    E --> O[Dispatch Center B Officer]
-    E --> N[SignalR room event + email/SMS if configured]
-```
+- `UserName`: application identity used inside the app
+- `Upn`: Entra ID identity used for strict pre-provisioned login matching
+- `DispatchCenterId`: authoritative dispatch-center assignment
+- `Enabled`: login and chat access switch
+- Profile fields such as `FullName`, `Email`, `MobileNumber`, `PreferredLanguage`
 
-## Implementation Changes
+### Dispatch center
 
-### 1. Domain and Cosmos data model
+`DispatchCenter` models topology and escalation routing.
 
-- Make dispatch-center membership singular in `ApplicationUser`:
-  - Add `DispatchCenterId` as the authoritative field.
-  - Keep reading legacy `DispatchCenterIds` during migration, but stop using it as the runtime source of truth after cutover.
-  - Keep `FixedRooms` only as a temporary compatibility/cache field during migration; room authorization must move to dispatch-center pairing.
-- Extend `DispatchCenter` with officer assignment:
-  - Add `OfficerUserName`.
-  - Keep existing Cosmos field `correspondingDispatchCenterIds` for backward compatibility, but treat it as the pairing field in code and UI.
-- Extend `Room` so a room can explicitly represent one dispatch-center pair:
-  - Add `RoomType = DispatchCenterPair`.
-  - Add `PairKey` as a normalized stable key from the two dispatch-center IDs.
-  - Add `DispatchCenterAId`, `DispatchCenterBId`.
-  - Add `IsActive` so pairs can be archived without deleting historical messages.
-- Extend `Message` with dispatch-center-aware acknowledgement data:
-  - Add `FromDispatchCenterId`.
-  - Add `ReadByDispatchCenterIds`.
-  - Add a denormalized escalation summary for UI (`EscalationStatus`, `OpenEscalationId`) while keeping the escalation record as the source of truth.
-- Add a new Cosmos container `escalations`:
-  - Partition key: `/roomName`.
-  - Store one document per escalation case, including the selected message snapshots so the escalation survives message TTL or later edits.
-  - Suggested shape: `id`, `roomName`, `pairKey`, `sourceDispatchCenterId`, `targetDispatchCenterId`, `targetOfficerUserName`, `triggerType`, `status`, `createdAt`, `dueAt`, `escalatedAt`, `cancelledAt`, `createdByUserName`, `messageIds`, `messageSnapshots[]`.
+- `Id`
+- `Name`
+- `Country`
+- `IfMain`
+- `CorrespondingDispatchCenterIds`
+- `Users`
+- `OfficerUserNames`
 
-### 2. Pairing and room provisioning
+### Room
 
-- Keep pairing managed from dispatch centers, but make it symmetric in code:
-  - Updating center A to pair with B must also update center B to pair with A.
-  - Pair validation must reject self-pairing and duplicates, as today.
-- Add explicit room provisioning for each active pair:
-  - Upsert one pair-room when a valid pair is created.
-  - Archive the room when a pair is removed or a center is deleted; do not hard-delete rooms with message history.
-- Add a small pairing service that owns:
-  - Pair key generation.
-  - Room name/display name generation.
-  - Counterpart-center resolution.
-  - Officer lookup for the opposite center.
-- Sync denormalized room membership from dispatch-center membership:
-  - When a user is assigned to a dispatch center, add them to all active rooms for that center.
-  - When a user changes center, remove them from old pair rooms and add them to new ones.
+`Room` is derived from dispatch-center topology.
 
-### 3. Authorization and runtime behavior
+- `RoomType = DispatchCenterPair`
+- `PairKey`
+- `DispatchCenterAId`
+- `DispatchCenterBId`
+- `IsActive`
+- `Users`
+- `Languages`
 
-- Replace `FixedRooms` authorization with dispatch-center-pair authorization everywhere:
-  - `RoomsController`
-  - `ChatHub.Join`
-  - `ChatHub.SendMessage`
-  - `MessagesController`
-  - `MarkRead`
-- Treat a message as acknowledged only when at least one reader from the opposite dispatch center reads it.
-- On message create:
-  - Determine sender center from `ApplicationUser.DispatchCenterId`.
-  - Determine target center from the pair room.
-  - Create a durable scheduled escalation record with `dueAt = Timestamp + 300s`.
-- On `MarkRead`:
-  - Add the reader's dispatch center to `ReadByDispatchCenterIds`.
-  - If the read comes from the target center, cancel or resolve any open scheduled escalation for that message.
-- For manual escalation:
-  - Add a new action that escalates selected messages immediately.
-  - Allow selection only for messages from the current user's dispatch center that still have no acknowledgement from the opposite center and no open escalation.
-  - Persist one escalation record containing all selected message snapshots.
-- Replace the current timer-only unread service for this feature:
-  - Add a durable background service that polls the `escalations` container for `Scheduled` items whose `dueAt <= now`.
-  - Re-check message acknowledgement before escalating.
-  - Transition atomically to `Escalated`.
-  - Notify via SignalR room event and existing email/SMS plumbing when the officer has contact data.
+Rooms are synchronized from dispatch-center state. A pair room is active only when both sides have at least one escalation officer.
 
-## Public API, type, and interface changes
+### Escalation
 
-- Update models and projections:
-  - `ApplicationUser`: add `DispatchCenterId`; deprecate runtime use of `DispatchCenterIds`.
-  - `DispatchCenter`: add `OfficerUserName`.
-  - `Room`: add pair metadata and `IsActive`.
-  - `Message` and `MessageViewModel`: add dispatch-center read/escalation fields.
-- Repository changes:
-  - Add `IEscalationsRepository`.
-  - Extend `IRoomsRepository` with room upsert/archive and pair lookup methods.
-  - Extend `IUsersRepository` with query support needed for dispatch-center membership and officer resolution.
-- HTTP / SignalR surface:
-  - Add `POST /api/escalations` for manual escalation creation.
-  - Add `ChatHub.EscalateMessages(int[] messageIds)` as the realtime path for the chat UI.
-  - Add SignalR events such as `escalationCreated`, `escalationResolved`, and optionally `escalationCancelled`.
-- Admin UX:
-  - Dispatch-center create/edit pages must include officer assignment and show paired centers explicitly.
-  - User create/edit/assignment flows must enforce exactly one dispatch center.
-  - Chat UI must support message selection, an "Escalate selected" action, and visible escalation state per message.
+`Escalation` represents either a scheduled automatic escalation or an immediate manual escalation.
 
-## Test Plan
+- `SourceDispatchCenterId`
+- `TargetDispatchCenterId`
+- `TargetOfficerUserNames`
+- `TriggerType`
+- `Status`
+- `MessageIds`
+- `MessageSnapshots`
 
-- Data model and migration
-  - User with exactly one legacy `DispatchCenterIds` entry is backfilled to `DispatchCenterId`.
-  - User with zero or multiple legacy dispatch centers is flagged for admin correction and cannot receive pair-room authorization until fixed.
-  - Existing pair rooms are generated from current corresponding/pair data.
-- Pairing and room authorization
-  - Pairing A-B creates exactly one active room.
-  - Removing a pair archives the room and preserves message history.
-  - Users only see and join rooms for their dispatch center.
-  - REST and SignalR paths enforce the same pair-room authorization.
-- Read and escalation logic
-  - Read by sender's own center does not cancel escalation.
-  - First read by the opposite center cancels scheduled escalation.
-  - Automatic escalation fires after 300 seconds when still unread by the opposite center.
-  - Manual escalation creates one escalation record with multiple selected message snapshots.
-  - Duplicate open escalations for the same message set are prevented.
-- Officer handling and notifications
-  - Active pairing is blocked if either dispatch center has no officer assigned.
-  - Escalated officer receives room event and contact-channel notification when email/mobile exists.
-- Operational coverage
-  - Background worker is restart-safe because schedule state lives in Cosmos, not in-memory timers.
-  - New Cosmos container configuration is wired in appsettings, startup, and Bicep.
-  - `Cosmos__DispatchCentersContainer` drift is fixed alongside the new `Cosmos__EscalationsContainer`.
+## Runtime Behavior
 
-## Assumptions and chosen defaults
+### Authorization
 
-- A user belongs to exactly one dispatch center in v1.
-- Pairing is explicit and symmetric; one room exists per active pair.
-- `OfficerUserName` is a per-dispatch-center domain assignment, not an Entra-only role.
-- Automatic escalation starts from message creation time, not from room join time or last-view time.
-- A single read by any user from the opposite dispatch center counts as acknowledgement.
-- Messages selected for manual escalation are stored as embedded snapshots inside the escalation document.
-- Escalation history is retained independently of message TTL.
-- Runtime tests were not executed in this review pass because `dotnet` is not available in the current environment; the plan above is grounded in repository inspection.
+Room access is allowed only when all of the following are true:
+
+1. The user exists and is enabled.
+2. The user has a non-empty `DispatchCenterId`.
+3. The room is a dispatch-center pair room.
+4. The room is active.
+5. The room includes the user’s dispatch center.
+
+### Room derivation
+
+Pair rooms are rebuilt from dispatch-center topology:
+
+1. Load all dispatch centers.
+2. Expand each `CorrespondingDispatchCenterIds` relation into a normalized pair key.
+3. Build or update the pair room.
+4. Copy assigned users and preferred languages from both dispatch centers into the room document.
+5. Archive stale pair rooms that are no longer present in topology.
+
+Startup runs a reconciliation pass so an existing database can self-heal even if no admin mutation has occurred recently.
+
+### Escalation flow
+
+Automatic escalation:
+
+1. User sends a message into an active pair room.
+2. The message stores `FromDispatchCenterId`.
+3. An automatic escalation is scheduled for the counterpart dispatch center.
+4. If the counterpart dispatch center reads the message before the due time, the escalation resolves.
+5. If not, the escalation becomes `Escalated` and notifications are sent to `TargetOfficerUserNames`.
+
+Manual escalation:
+
+1. User selects messages authored by their own dispatch center.
+2. Messages must belong to the active pair room and must not already be acknowledged by the counterpart dispatch center.
+3. A manual escalation is created immediately in `Escalated` status.
+4. Notifications are sent to all officers assigned to the counterpart dispatch center.
+
+## Admin Workflows
+
+The admin surface is intentionally narrow:
+
+- Create users
+- Assign a user to one dispatch center
+- Create and edit dispatch centers
+- Assign escalation officers
+- Define corresponding dispatch-center relations
+
+There is no admin room management because rooms are derived from topology.
+
+## Bootstrap Rules
+
+For a fresh environment:
+
+1. Insert the first user manually with `userName`, `upn`, `dispatchCenterId`, and `enabled = true`.
+2. Create dispatch centers.
+3. Add `OfficerUserNames` on both sides of any desired communication pair.
+4. Add corresponding dispatch-center relations.
+5. Start the application or trigger topology sync.
+
+If any of those pieces are missing, the user may authenticate successfully but still see no accessible rooms.
+
+## Acceptance Checklist
+
+- No runtime path relies on legacy room assignment fields.
+- Users only see pair rooms involving their assigned dispatch center.
+- Pair rooms are derived automatically on startup and on topology changes.
+- Escalations target officer lists on the counterpart dispatch center.
+- No seeded users or seeded standard rooms are required.

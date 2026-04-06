@@ -7,6 +7,7 @@ using Chat.Web.Repositories;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.AspNetCore.Mvc.Rendering;
 
 namespace Chat.Web.Pages.Admin.DispatchCenters;
 
@@ -31,6 +32,7 @@ public class DispatchCentersEditModel : PageModel
     public DispatchCenterInputModel Input { get; set; } = new();
 
     public List<DispatchCenter> AllDispatchCenters { get; set; } = new();
+    public List<SelectListItem> OfficerUsers { get; set; } = new();
 
     public async Task<IActionResult> OnGetAsync()
     {
@@ -44,7 +46,7 @@ public class DispatchCentersEditModel : PageModel
             Name = current.Name,
             Country = current.Country,
             IfMain = current.IfMain,
-            OfficerUserName = current.OfficerUserName,
+            OfficerUserNames = current.OfficerUserNames?.ToList() ?? new List<string>(),
             CorrespondingDispatchCenterIds = current.CorrespondingDispatchCenterIds?.ToList() ?? new List<string>()
         };
 
@@ -52,6 +54,7 @@ public class DispatchCentersEditModel : PageModel
             .Where(d => !string.Equals(d.Id, Id, StringComparison.OrdinalIgnoreCase))
             .OrderBy(d => d.Name)
             .ToList();
+        await LoadOfficerUsersAsync().ConfigureAwait(false);
 
         return Page();
     }
@@ -67,6 +70,7 @@ public class DispatchCentersEditModel : PageModel
             .Where(d => !string.Equals(d.Id, Id, StringComparison.OrdinalIgnoreCase))
             .OrderBy(d => d.Name)
             .ToList();
+        await LoadOfficerUsersAsync().ConfigureAwait(false);
 
         if (!ModelState.IsValid) return Page();
 
@@ -94,21 +98,44 @@ public class DispatchCentersEditModel : PageModel
             }
         }
 
-        var officer = await _users.GetByUserNameAsync(Input.OfficerUserName.Trim());
-        if (officer == null)
+        var officerUserNames = NormalizeDistinct(Input.OfficerUserNames);
+        if (officerUserNames.Count == 0)
         {
-            ModelState.AddModelError(nameof(Input.OfficerUserName), "Officer user was not found.");
+            ModelState.AddModelError(nameof(Input.OfficerUserNames), "Select at least one escalation officer.");
             return Page();
+        }
+
+        foreach (var officerUserName in officerUserNames)
+        {
+            var officer = await _users.GetByUserNameAsync(officerUserName);
+            if (officer == null)
+            {
+                ModelState.AddModelError(nameof(Input.OfficerUserNames), $"Officer user was not found: {officerUserName}");
+                return Page();
+            }
         }
 
         current.Name = Input.Name.Trim();
         current.Country = Input.Country.Trim();
         current.IfMain = Input.IfMain;
-        current.OfficerUserName = Input.OfficerUserName.Trim();
+        current.OfficerUserNames = officerUserNames;
         current.CorrespondingDispatchCenterIds = normalizedCorresponding;
 
         await _topology.SaveDispatchCenterAsync(current, current.CorrespondingDispatchCenterIds);
         return RedirectToPage("Index");
+    }
+
+    private async Task LoadOfficerUsersAsync()
+    {
+        OfficerUsers = (await _users.GetAllAsync())
+            .Where(x => x.Enabled)
+            .OrderBy(x => x.FullName ?? x.UserName)
+            .Select(x => new SelectListItem(x.FullName ?? x.UserName, x.UserName))
+            .ToList();
+        if (PageContext?.ViewData != null)
+        {
+            PageContext.ViewData["OfficerUsers"] = OfficerUsers;
+        }
     }
 
     private static List<string> NormalizeDistinct(IEnumerable<string> values)
