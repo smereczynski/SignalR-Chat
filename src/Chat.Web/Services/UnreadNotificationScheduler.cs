@@ -129,11 +129,9 @@ namespace Chat.Web.Services
 
                 var (emailsSent, smsSent) = await SendNotificationsAsync(notification).ConfigureAwait(false);
                 _logger.LogInformation(
-                    "Unread notifications processed for message {Id}: {UserCount} users, {EmailCount} emails sent, {SmsCount} SMS sent",
+                    "Unread notifications processed for message {Id}: {UserCount} users",
                     messageId,
-                    notification.Recipients.Count,
-                    emailsSent,
-                    smsSent);
+                    notification.Recipients.Count);
             }
             catch (Exception ex)
             {
