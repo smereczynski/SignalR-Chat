@@ -219,9 +219,9 @@ namespace Chat.Web.Controllers
                 {
                     return BadRequest($"user not found: {userName}");
                 }
-
-                await _topology.AssignUserAsync(id, userName).ConfigureAwait(false);
             }
+
+            await _topology.AssignUsersAsync(id, targetUsers).ConfigureAwait(false);
 
             return Ok(await _dispatchCenters.GetByIdAsync(id).ConfigureAwait(false));
         }
@@ -236,14 +236,7 @@ namespace Chat.Web.Controllers
             if (dispatchCenter == null) return NotFound();
 
             var targetUsers = NormalizeDistinct(dto.UserNames);
-            foreach (var userName in targetUsers)
-            {
-                var user = await _users.GetByUserNameAsync(userName).ConfigureAwait(false);
-                if (user != null)
-                {
-                    await _topology.RemoveUserFromDispatchCenterAsync(id, userName).ConfigureAwait(false);
-                }
-            }
+            await _topology.RemoveUsersFromDispatchCenterAsync(id, targetUsers).ConfigureAwait(false);
 
             return Ok(await _dispatchCenters.GetByIdAsync(id).ConfigureAwait(false));
         }

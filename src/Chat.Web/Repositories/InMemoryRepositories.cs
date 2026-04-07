@@ -233,7 +233,11 @@ namespace Chat.Web.Repositories
         public Task<Escalation> GetByIdAsync(string id, string roomName)
         {
             if (string.IsNullOrWhiteSpace(id)) return Task.FromResult<Escalation>(null);
-            return Task.FromResult(_escalations.TryGetValue(id, out var escalation) ? escalation : null);
+            _escalations.TryGetValue(id, out var escalation);
+            if (escalation == null) return Task.FromResult<Escalation>(null);
+            if (!string.IsNullOrWhiteSpace(roomName) && !string.Equals(escalation.RoomName, roomName, StringComparison.OrdinalIgnoreCase))
+                return Task.FromResult<Escalation>(null);
+            return Task.FromResult(escalation);
         }
 
         public Task<IEnumerable<Escalation>> GetByRoomAsync(string roomName, int take = 50)

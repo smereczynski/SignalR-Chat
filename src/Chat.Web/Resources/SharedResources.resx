@@ -482,6 +482,21 @@
   <data name="AssignUsersToDispatchCenter" xml:space="preserve">
     <value>Assign Users to Dispatch Office {0}</value>
   </data>
+  <data name="DispatchCenter" xml:space="preserve">
+    <value>Dispatch Center</value>
+  </data>
+  <data name="AssignDispatchCenter" xml:space="preserve">
+    <value>Assign Dispatch Center</value>
+  </data>
+  <data name="SelectDispatchCenter" xml:space="preserve">
+    <value>Select dispatch center</value>
+  </data>
+  <data name="NoDispatchCenter" xml:space="preserve">
+    <value>No dispatch center</value>
+  </data>
+  <data name="EscalationOfficers" xml:space="preserve">
+    <value>Escalation Officers</value>
+  </data>
   <data name="Delete" xml:space="preserve">
     <value>Delete</value>
   </data>

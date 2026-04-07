@@ -246,8 +246,11 @@ namespace Chat.Web.Hubs
                 // Auto-join the first accessible pair room, if any.
                 try
                 {
+                    var candidateRooms = string.IsNullOrWhiteSpace(userViewModel.DispatchCenterId)
+                        ? await _rooms.GetAllAsync()
+                        : await _rooms.GetByDispatchCenterIdAsync(userViewModel.DispatchCenterId);
                     var accessibleRooms = Services.RoomAccessPolicy
-                        .GetAccessibleRooms(user, await _rooms.GetAllAsync())
+                        .GetAccessibleRooms(user, candidateRooms)
                         .OrderBy(r => r.DisplayName ?? r.Name)
                         .ToList();
                     if (accessibleRooms.Any())

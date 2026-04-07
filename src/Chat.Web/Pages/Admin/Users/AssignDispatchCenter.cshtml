@@ -3,18 +3,18 @@
 @inject IStringLocalizer<Chat.Web.Resources.SharedResources> Localizer
 @model UsersAssignDispatchCenterModel
 @{
-    ViewData["Title"] = "Assign Dispatch Center";
+    ViewData["Title"] = Localizer["AssignDispatchCenter"];
     Layout = "/Pages/Shared/_Layout.cshtml";
 }
 <div class="row justify-content-center">
     <div class="col-md-6">
-        <h2 class="mb-4">Assign Dispatch Center to @Model.UserName</h2>
+        <h2 class="mb-4">@Localizer["AssignDispatchCenter"] - @Model.UserName</h2>
         <form method="post">
             <input type="hidden" asp-for="UserName" />
             <div class="mb-3">
-                <label asp-for="SelectedDispatchCenterId" class="form-label">Dispatch Center</label>
+                <label asp-for="SelectedDispatchCenterId" class="form-label">@Localizer["DispatchCenter"]</label>
                 <select asp-for="SelectedDispatchCenterId" class="form-select">
-                    <option value="">No dispatch center</option>
+                    <option value="">@Localizer["NoDispatchCenter"]</option>
                     @foreach (var dispatchCenter in Model.DispatchCenters)
                     {
                         <option value="@dispatchCenter.Id">@dispatchCenter.Name (@dispatchCenter.Country)</option>

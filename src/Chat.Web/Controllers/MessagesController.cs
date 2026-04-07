@@ -105,7 +105,7 @@ namespace Chat.Web.Controllers
             var room = await _rooms.GetByNameAsync(roomName);
             var user = await _users.GetByUserNameAsync(User?.Identity?.Name);
             if (!RoomAccessPolicy.CanAccessRoom(user, room))
-                return BadRequest();
+                return Forbid();
 
             IEnumerable<Message> source = before.HasValue
                 ? await _messages.GetBeforeByRoomAsync(room.Name, before.Value, take)

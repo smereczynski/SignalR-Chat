@@ -49,6 +49,74 @@ namespace Chat.Web.Services
             await SyncRoomsAsync().ConfigureAwait(false);
         }
 
+        /// <summary>
+        /// Assigns multiple users to a dispatch center and reconciles rooms once at the end,
+        /// avoiding O(N * fullSync) when processing a batch of changes.
+        /// </summary>
+        public async Task AssignUsersAsync(string dispatchCenterId, IEnumerable<string> userNames)
+        {
+            var dispatchCenter = await _dispatchCenters.GetByIdAsync(dispatchCenterId).ConfigureAwait(false);
+            if (dispatchCenter == null) return;
+
+            var names = (userNames ?? Enumerable.Empty<string>())
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (names.Count == 0) return;
+
+            foreach (var userName in names)
+            {
+                var user = await _users.GetByUserNameAsync(userName).ConfigureAwait(false);
+                if (user == null) continue;
+
+                if (!string.IsNullOrWhiteSpace(user.DispatchCenterId) &&
+                    !string.Equals(user.DispatchCenterId, dispatchCenterId, StringComparison.OrdinalIgnoreCase))
+                {
+                    var previousDispatchCenterId = user.DispatchCenterId;
+                    user.DispatchCenterId = null;
+                    await _users.UpsertAsync(user).ConfigureAwait(false);
+                    await _dispatchCenters.UnassignUserAsync(previousDispatchCenterId, userName).ConfigureAwait(false);
+                }
+
+                user.DispatchCenterId = dispatchCenterId;
+                await _users.UpsertAsync(user).ConfigureAwait(false);
+                await _dispatchCenters.AssignUserAsync(dispatchCenterId, userName).ConfigureAwait(false);
+            }
+
+            await SyncRoomsAsync().ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Removes multiple users from a dispatch center and reconciles rooms once at the end,
+        /// avoiding O(N * fullSync) when processing a batch of changes.
+        /// </summary>
+        public async Task RemoveUsersFromDispatchCenterAsync(string dispatchCenterId, IEnumerable<string> userNames)
+        {
+            if (string.IsNullOrWhiteSpace(dispatchCenterId)) return;
+
+            var names = (userNames ?? Enumerable.Empty<string>())
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (names.Count == 0) return;
+
+            foreach (var userName in names)
+            {
+                var user = await _users.GetByUserNameAsync(userName).ConfigureAwait(false);
+                if (user != null && string.Equals(user.DispatchCenterId, dispatchCenterId, StringComparison.OrdinalIgnoreCase))
+                {
+                    user.DispatchCenterId = null;
+                    await _users.UpsertAsync(user).ConfigureAwait(false);
+                }
+
+                await _dispatchCenters.UnassignUserAsync(dispatchCenterId, userName).ConfigureAwait(false);
+            }
+
+            await SyncRoomsAsync().ConfigureAwait(false);
+        }
+
         public async Task RemoveUserFromDispatchCenterAsync(string dispatchCenterId, string userName)
         {
             if (string.IsNullOrWhiteSpace(dispatchCenterId) || string.IsNullOrWhiteSpace(userName))

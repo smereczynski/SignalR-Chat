@@ -62,8 +62,11 @@ namespace Chat.Web.Controllers
                 return Ok(Array.Empty<RoomViewModel>());
             }
 
-            var allRooms = (await _rooms.GetAllAsync()).ToList();
-            var rooms = RoomAccessPolicy.GetAccessibleRooms(profile, allRooms)
+            var candidateRooms = string.IsNullOrWhiteSpace(profile.DispatchCenterId)
+                ? (await _rooms.GetAllAsync()).ToList()
+                : (await _rooms.GetByDispatchCenterIdAsync(profile.DispatchCenterId)).ToList();
+
+            var rooms = RoomAccessPolicy.GetAccessibleRooms(profile, candidateRooms)
                 .Select(r => new RoomViewModel
                 {
                     Id = r.Id,
@@ -79,7 +82,7 @@ namespace Chat.Web.Controllers
 
             if (rooms.Count == 0)
             {
-                Response.Headers[EmptyStateReasonHeader] = await DetermineEmptyStateReasonAsync(profile, allRooms).ConfigureAwait(false);
+                Response.Headers[EmptyStateReasonHeader] = await DetermineEmptyStateReasonAsync(profile, candidateRooms).ConfigureAwait(false);
             }
 
             var json = JsonSerializer.Serialize(rooms, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });

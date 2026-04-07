@@ -16,7 +16,7 @@
                 <th>@Localizer["Email"]</th>
                 <th>@Localizer["Mobile"]</th>
                 <th>@Localizer["Enabled"]</th>
-                <th>Dispatch Center</th>
+                <th>@Localizer["DispatchCenter"]</th>
                 <th>@Localizer["Actions"]</th>
             </tr>
         </thead>
@@ -45,7 +45,7 @@
                                 @(u.Enabled ? Localizer["Disable"] : Localizer["Enable"])
                             </button>
                         </form>
-                        <a asp-page="AssignDispatchCenter" asp-route-userName="@u.UserName" class="btn btn-sm btn-outline-primary">Assign Dispatch Center</a>
+                        <a asp-page="AssignDispatchCenter" asp-route-userName="@u.UserName" class="btn btn-sm btn-outline-primary">@Localizer["AssignDispatchCenter"]</a>
                     </td>
                 </tr>
             }

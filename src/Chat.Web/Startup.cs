@@ -343,9 +343,12 @@ namespace Chat.Web
                 }
                 services.AddSingleton(cosmosOpts);
 
-                // Initialize Cosmos clients during startup registration so dependent singletons and hosted
-                // services never observe an uninitialized placeholder instance.
-                services.AddSingleton(sp => CosmosClients.CreateAsync(cosmosOpts).GetAwaiter().GetResult());
+                // Start Cosmos client initialization asynchronously at DI registration time.
+                // Registering Task<CosmosClients> allows Program.Main to await it before
+                // accepting requests, so no request thread ever blocks on this.
+                var cosmosClientsTask = CosmosClients.CreateAsync(cosmosOpts);
+                services.AddSingleton(cosmosClientsTask);
+                services.AddSingleton(sp => sp.GetRequiredService<Task<CosmosClients>>().GetAwaiter().GetResult());
                 services.AddSingleton<IUsersRepository, CosmosUsersRepository>();
                 services.AddSingleton<IRoomsRepository, CosmosRoomsRepository>();
                 services.AddSingleton<IMessagesRepository, CosmosMessagesRepository>();
