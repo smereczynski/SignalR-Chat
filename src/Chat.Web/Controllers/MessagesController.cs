@@ -12,9 +12,10 @@ using Chat.Web.ViewModels;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
-using System.Text.Json;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
 using Chat.Web.Services;
+using Microsoft.Extensions.Options;
 
 namespace Chat.Web.Controllers
 {
@@ -33,8 +34,6 @@ namespace Chat.Web.Controllers
         private readonly IUsersRepository _users;
         private readonly IHubContext<ChatHub> _hubContext;
         private readonly ILogger<MessagesController> _logger;
-        private readonly Services.ITranslationJobQueue _translationQueue;
-        private readonly Microsoft.Extensions.Options.IOptions<Options.TranslationOptions> _translationOptions;
         private readonly EscalationService _escalations;
 
         /// <summary>
@@ -45,8 +44,6 @@ namespace Chat.Web.Controllers
             IUsersRepository users,
             IHubContext<ChatHub> hubContext,
             ILogger<MessagesController> logger,
-            Services.ITranslationJobQueue translationQueue,
-            Microsoft.Extensions.Options.IOptions<Options.TranslationOptions> translationOptions,
             EscalationService escalations)
         {
             _messages = messages;
@@ -54,26 +51,7 @@ namespace Chat.Web.Controllers
             _users = users;
             _hubContext = hubContext;
             _logger = logger;
-            _translationQueue = translationQueue;
-            _translationOptions = translationOptions;
             _escalations = escalations;
-        }
-
-        private bool UseManualSerialization => false; // Always false - use normal JSON serialization
-
-        private ContentResult ManualJson(object obj, int statusCode = StatusCodes.Status200OK, string location = null)
-        {
-            var json = JsonSerializer.Serialize(obj, new JsonSerializerOptions
-            {
-                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                WriteIndented = false
-            });
-            if (!string.IsNullOrEmpty(location))
-            {
-                Response.Headers["Location"] = location;
-            }
-            Response.StatusCode = statusCode;
-            return Content(json, "application/json");
         }
 
         /// <summary>
@@ -152,10 +130,6 @@ namespace Chat.Web.Controllers
                 Translations = m.Translations ?? new System.Collections.Generic.Dictionary<string, string>(),
                 IsTranslated = m.IsTranslated
             });
-            if (UseManualSerialization)
-            {
-                return ManualJson(items);
-            }
             return Ok(items);
         }
 
@@ -172,10 +146,11 @@ namespace Chat.Web.Controllers
 
         [HttpPost]
         public async Task<IActionResult> Post([FromBody] CreateMessageDto dto,
-            [FromServices] Services.IInProcessMetrics metrics)
+            [FromServices] Services.IInProcessMetrics metrics,
+            [FromServices] IConfiguration configuration,
+            [FromServices] Microsoft.Extensions.Hosting.IHostEnvironment environment)
         {
-            // Feature flag: disable REST creation path unless explicitly enabled (tests / emergency fallback)
-            var enabled = false;
+            var enabled = environment.IsDevelopment() || configuration.GetValue<bool>("Messages:EnableRestCreate");
             if (!enabled)
             {
                 return NotFound(); // Pretend endpoint absent in production
@@ -240,11 +215,6 @@ namespace Chat.Web.Controllers
             // Fire-and-forget hub broadcast (do not block API latency on network fan-out)
             _ = _hubContext.Clients.Group(room.Name).SendAsync("newMessage", vm);
             metrics?.IncMessagesSent();
-
-            if (UseManualSerialization)
-            {
-                return ManualJson(vm, StatusCodes.Status201Created, $"/api/Messages/{vm.Id}");
-            }
             return Created($"/api/Messages/{vm.Id}", vm);
         }
 
@@ -289,13 +259,17 @@ namespace Chat.Web.Controllers
         /// Requires translation feature to be enabled and message to be in Failed state.
         /// </summary>
         [HttpPost("{id}/retry-translation")]
-        public async Task<IActionResult> RetryTranslation(int id)
+        public async Task<IActionResult> RetryTranslation(
+            int id,
+            [FromServices] ITranslationJobQueue translationQueue,
+            [FromServices] IOptions<Options.TranslationOptions> translationOptions)
         {
             using var activity = Observability.Tracing.ActivitySource.StartActivity("api.messages.retry-translation");
             activity?.SetTag("message.id", id);
+            var translationSettings = translationOptions.Value;
             
             // Check if translation is enabled
-            if (_translationOptions?.Value?.Enabled != true || _translationQueue == null)
+            if (!translationSettings.Enabled)
             {
                 return BadRequest(new { error = "Translation feature is not enabled" });
             }
@@ -327,14 +301,14 @@ namespace Chat.Web.Controllers
                 Content = message.Content,
                 SourceLanguage = sourceLanguage,
                 TargetLanguages = targets,
-                DeploymentName = _translationOptions.Value.DeploymentName,
+                DeploymentName = translationSettings.DeploymentName,
                 CreatedAt = DateTime.UtcNow,
                 RetryCount = 0,
                 Priority = 10, // High priority for manual retries
                 JobId = $"transjob:{message.Id}:{DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}"
             };
             
-            await _translationQueue.RequeueAsync(job, highPriority: true);
+            await translationQueue.RequeueAsync(job, highPriority: true);
             await _messages.UpdateTranslationAsync(
                 message.Id,
                 new MessageTranslationUpdate(
@@ -352,11 +326,7 @@ namespace Chat.Web.Controllers
                     status = "Pending",
                     timestamp = DateTime.UtcNow
                 });
-            
-            if (UseManualSerialization)
-            {
-                return ManualJson(new { success = true, jobId = job.JobId });
-            }
+
             return Ok(new { success = true, jobId = job.JobId });
         }
 

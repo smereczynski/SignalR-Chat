@@ -11,7 +11,6 @@ using Chat.Web.Services;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
@@ -37,7 +36,6 @@ public class ManualRetryTests
     private readonly Mock<IClientProxy> _mockClientProxy;
     private readonly Mock<ITranslationJobQueue> _mockQueue;
     private readonly Mock<ILogger<MessagesController>> _mockControllerLogger;
-    private readonly Mock<IConfiguration> _mockConfiguration;
     private readonly TranslationOptions _translationOptions;
 
     public ManualRetryTests()
@@ -50,7 +48,6 @@ public class ManualRetryTests
         _mockClientProxy = new Mock<IClientProxy>();
         _mockQueue = new Mock<ITranslationJobQueue>();
         _mockControllerLogger = new Mock<ILogger<MessagesController>>();
-        _mockConfiguration = new Mock<IConfiguration>();
 
         // Setup HubContext to return mocked clients
         _mockHubContext.Setup(h => h.Clients).Returns(_mockClients.Object);
@@ -71,10 +68,10 @@ public class ManualRetryTests
     {
         // Arrange
         var disabledOptions = new TranslationOptions { Enabled = false };
-        var controller = CreateController(disabledOptions);
+        var controller = CreateController();
 
         // Act
-        var result = await controller.RetryTranslation(123);
+        var result = await controller.RetryTranslation(123, _mockQueue.Object, Options.Create(disabledOptions));
 
         // Assert
         var badRequestResult = Assert.IsType<BadRequestObjectResult>(result);
@@ -88,11 +85,11 @@ public class ManualRetryTests
         _mockMessages.Setup(m => m.GetByIdAsync(It.IsAny<int>()))
             .ReturnsAsync((Message?)null);
 
-        var controller = CreateController(_translationOptions);
+        var controller = CreateController();
         SetupUserContext(controller, "user1", "general");
 
         // Act
-        var result = await controller.RetryTranslation(999);
+        var result = await controller.RetryTranslation(999, _mockQueue.Object, Options.Create(_translationOptions));
 
         // Assert
         var notFoundResult = Assert.IsType<NotFoundObjectResult>(result);
@@ -127,11 +124,11 @@ public class ManualRetryTests
         _mockUsers.Setup(u => u.GetByUserNameAsync("user1"))
             .ReturnsAsync(user);
 
-        var controller = CreateController(_translationOptions);
+        var controller = CreateController();
         SetupUserContext(controller, "user1", room.Name);
 
         // Act
-        var result = await controller.RetryTranslation(123);
+        var result = await controller.RetryTranslation(123, _mockQueue.Object, Options.Create(_translationOptions));
 
         // Assert
         var forbidResult = Assert.IsType<ForbidResult>(result);
@@ -166,11 +163,11 @@ public class ManualRetryTests
         _mockUsers.Setup(u => u.GetByUserNameAsync("user1"))
             .ReturnsAsync(user);
 
-        var controller = CreateController(_translationOptions);
+        var controller = CreateController();
         SetupUserContext(controller, "user1", room.Name);
 
         // Act
-        var result = await controller.RetryTranslation(123);
+        var result = await controller.RetryTranslation(123, _mockQueue.Object, Options.Create(_translationOptions));
 
         // Assert
         var badRequestResult = Assert.IsType<BadRequestObjectResult>(result);
@@ -222,11 +219,11 @@ public class ManualRetryTests
             })
             .Returns(Task.CompletedTask);
 
-        var controller = CreateController(_translationOptions);
+        var controller = CreateController();
         SetupUserContext(controller, "user1", room.Name);
 
         // Act
-        var result = await controller.RetryTranslation(123);
+        var result = await controller.RetryTranslation(123, _mockQueue.Object, Options.Create(_translationOptions));
 
         // Assert
         var okResult = Assert.IsType<OkObjectResult>(result);
@@ -260,7 +257,7 @@ public class ManualRetryTests
 
     #region Helper Methods
 
-    private MessagesController CreateController(TranslationOptions options)
+    private MessagesController CreateController()
     {
         return new MessagesController(
             _mockMessages.Object,
@@ -268,8 +265,6 @@ public class ManualRetryTests
             _mockUsers.Object,
             _mockHubContext.Object,
             _mockControllerLogger.Object,
-            _mockQueue.Object,
-            Options.Create(options),
             null);
     }
 
