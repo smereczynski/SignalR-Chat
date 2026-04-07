@@ -419,3 +419,6 @@ infra/bicep/**/*.json
 *.pdf
 *.xlsx
 *.pptx
+
+## MCP
+.github/instructions/sonarqube_mcp.instructions.md

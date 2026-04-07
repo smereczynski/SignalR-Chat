@@ -1,104 +1,71 @@
-# SignalR Chat Documentation
+# Documentation
 
-Welcome to the SignalR Chat documentation! This guide will help you understand, deploy, and contribute to the project.
+This documentation set reflects the current dispatch-center pair chat implementation on `feat/dispatch-center-escalations-v1`.
 
-## 📚 Documentation Structure
+## Start Here
 
-### 🚀 Getting Started
-New to SignalR Chat? Start here!
+- [Architecture Overview](architecture/overview.md)
+- [Dispatch-Center Escalation Implementation](features/dispatch-center-escalation-implementation-plan.md)
+- [Local Setup](development/local-setup.md)
+- [Bootstrap](deployment/bootstrap.md)
+- [Documentation Status](DOCUMENTATION-STATUS.md)
 
-- **[Quickstart](getting-started/quickstart.md)** - Run locally in 5 minutes (no Azure required)
-- **[Installation](getting-started/installation.md)** - Full installation guide with Azure resources
-- **[Configuration](getting-started/configuration.md)** - Environment variables and options reference
+## Sections
 
-### 🏗️ Architecture
-Understand how the system works.
+### Getting Started
 
-- **[Overview](architecture/overview.md)** - System design and components
-- **[Data Model](architecture/data-model.md)** - Cosmos DB schema and Redis keys
-- **[Security](architecture/security.md)** - Security architecture and threat model
-- **[Diagrams](architecture/diagrams/)** - Visual architecture diagrams
-- **[Decisions (ADRs)](architecture/decisions/)** - Architecture Decision Records
+- [Getting Started](getting-started/README.md)
+- [Configuration](getting-started/configuration.md)
+- [Installation](getting-started/installation.md)
+- [Quickstart](getting-started/quickstart.md)
 
-### ✨ Features
-Learn about specific features and how they work.
+### Architecture
 
-- **[Authentication](features/authentication.md)** - Dual authentication (Entra ID + OTP)
-- **[Entra ID Setup](development/entra-id-multi-tenant-setup.md)** - Multi-tenant configuration
-- **Dispatch Offices (organizational structure)** - Admin-only API + Admin UI (`/Admin/DispatchCenters`) with country/main validation (see [Data Model](architecture/data-model.md))
-- **[Sessions](features/sessions.md)** - Session management
-- **[Presence Tracking](features/presence.md)** - Online/offline status
-- **[Real-time Messaging](features/real-time-messaging.md)** - SignalR implementation
-- **[Read Receipts](features/read-receipts.md)** - Message read status
-- **[Notifications](features/notifications.md)** - Email/SMS notifications
-- **[Localization](features/localization.md)** - Multi-language support
-- **[Rate Limiting](features/rate-limiting.md)** - Abuse prevention
-- **[Pagination](features/pagination.md)** - Message pagination
+- [Overview](architecture/overview.md)
+- [Data Model](architecture/data-model.md)
+- [System Design](architecture/system-design.md)
+- [Translation Architecture](architecture/translation-architecture.md)
+- [Architecture Decisions](architecture/decisions/)
 
-### 🚀 Deployment
-Deploy to Azure and configure environments.
+### Features
 
-- **[Azure Deployment](deployment/azure/)** - Azure infrastructure and Bicep templates
-  - **[Bicep Templates](deployment/azure/bicep-templates.md)** - Infrastructure as Code details
-- **[Bootstrap Guide](deployment/bootstrap.md)** - Complete deployment from scratch
-- **[GitHub Actions](deployment/github-actions.md)** - CI/CD pipelines
-- **[Production Checklist](deployment/production-checklist.md)** - Pre-launch checklist
-- **[GitHub Secrets](deployment/github-secrets.md)** - Azure credentials configuration
-- **[GitHub Variables](deployment/github-variables.md)** - Environment variables setup
+- [Features Index](features/README.md)
+- [Authentication](features/authentication.md)
+- [Dispatch-Center Escalation Implementation](features/dispatch-center-escalation-implementation-plan.md)
+- [Presence](features/presence.md)
+- [Sessions](features/sessions.md)
+- [Async Translation Plan](features/async-translation-implementation-plan.md)
 
-### 💻 Development
-Contributing and local development.
+### Development
 
-- **[Local Setup](development/local-setup.md)** - Set up your development environment
-- **[Project Structure](development/project-structure.md)** - Code organization
-- **[Testing](development/testing.md)** - Running and writing tests
-- **[Debugging](development/debugging.md)** - Debugging tips and tools
-- **[VS Code Setup](development/vscode-setup.md)** - VS Code configuration
-- **[Contributing](../CONTRIBUTING.md)** - How to contribute
+- [Local Setup](development/local-setup.md)
+- [Testing](development/testing.md)
+- [Admin Panel and App Role Integration](development/admin-panel-app-role-integration.md)
+- [Entra ID Multi-Tenant Setup](development/entra-id-multi-tenant-setup.md)
+- [Integration Test Improvements](development/integration-tests-improvements.md)
 
-### 🔧 Operations
-Running and monitoring in production.
+### Deployment
 
-- **[Monitoring](operations/monitoring.md)** - Observability overview
-- **[OpenTelemetry](operations/opentelemetry.md)** - OpenTelemetry configuration
-- **[Application Insights](operations/application-insights.md)** - Azure monitoring
-- **[Logging](operations/logging.md)** - Logging best practices
-- **[Diagnostics](operations/diagnostics.md)** - Troubleshooting production issues
-- **[Health Checks](operations/health-checks.md)** - Health endpoint details
-- **[Performance](operations/performance.md)** - Performance tuning
+- [Deployment Index](deployment/README.md)
+- [Bootstrap](deployment/bootstrap.md)
+- [Azure Deployment](deployment/azure/README.md)
+- [GitHub Actions](deployment/github-actions.md)
+- [Production Checklist](deployment/production-checklist.md)
 
-### 📖 Reference
-Technical reference documentation.
+### Operations
 
-- **[REST API](reference/api/rest-endpoints.md)** - HTTP endpoints
-- **[SignalR Hub](reference/api/signalr-hub.md)** - WebSocket methods
-- **[Configuration Reference](reference/configuration-reference.md)** - All config options
-- **[Telemetry Reference](reference/telemetry-reference.md)** - Metrics and traces
-- **[FAQ](reference/faq.md)** - Frequently asked questions
-- **[Glossary](reference/glossary.md)** - Terms and definitions
+- [Monitoring](operations/monitoring.md)
+- [Disaster Recovery](operations/disaster-recovery.md)
 
----
+### Reference
 
-## 🔍 Quick Links
+- [FAQ](reference/faq.md)
 
-- **[Back to main README](../README.md)**
-- **[Architecture Overview](architecture/overview.md)**
-- **[5-Minute Quickstart](getting-started/quickstart.md)**
-- **[Production Checklist](deployment/production-checklist.md)**
-- **[Contributing Guide](../CONTRIBUTING.md)**
-- **[Changelog](../CHANGELOG.md)**
+## Current-State Checklist
 
----
-
-## 📝 Documentation Standards
-
-This documentation follows the [Diátaxis framework](https://diataxis.fr/):
-
-- **Tutorials** (learning-oriented) → Getting Started
-- **How-to guides** (problem-oriented) → Features, Deployment, Development, Operations
-- **Reference** (information-oriented) → Reference
-- **Explanation** (understanding-oriented) → Architecture
-
----
-
-**Last updated**: November 2025 | **Version**: 0.9.5
+- [x] Users are assigned to one dispatch center
+- [x] Rooms are derived from dispatch-center pairs
+- [x] Escalations target officer lists on the counterpart dispatch center
+- [x] Entra ID is primary login
+- [x] OTP remains available as failover
+- [x] No seeded standard rooms or seeded users are required

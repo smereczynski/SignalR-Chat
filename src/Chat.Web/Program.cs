@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Serilog;
@@ -10,6 +11,7 @@ using OpenTelemetry.Trace;
 using Chat.Web.Observability;
 using System;
 using System.IO;
+using System.Threading.Tasks;
 using Microsoft.ApplicationInsights.Extensibility;
 
 namespace Chat.Web
@@ -26,7 +28,7 @@ namespace Chat.Web
         /// Ensures fatal exceptions are flushed to the sink before process exit.
         /// </summary>
         /// <param name="args">Command-line arguments.</param>
-        public static void Main(string[] args)
+        public static async Task Main(string[] args)
         {
             var otlpEndpoint = Environment.GetEnvironmentVariable("OTel__OtlpEndpoint");
             var aiConnectionString = Environment.GetEnvironmentVariable("APPLICATIONINSIGHTS_CONNECTION_STRING");
@@ -116,7 +118,21 @@ namespace Chat.Web
             try
             {
                 Log.Information("Starting host");
-                CreateHostBuilder(args).Build().Run();
+                var host = CreateHostBuilder(args).Build();
+                // Await Cosmos DB initialization before accepting requests so no request
+                // thread ever blocks on first-use resolution of CosmosClients.
+                var cosmosTask = host.Services.GetService<Task<Repositories.CosmosClients>>();
+                if (cosmosTask != null)
+                {
+                    Log.Information("Awaiting Cosmos DB initialization before accepting requests");
+                    await cosmosTask.ConfigureAwait(false);
+                    Log.Information("Cosmos DB initialization complete");
+                }
+                else
+                {
+                    Log.Debug("Cosmos DB initialization task not registered (in-memory mode)");
+                }
+                await host.RunAsync().ConfigureAwait(false);
             }
             catch (System.Exception ex)
             {

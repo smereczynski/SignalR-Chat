@@ -1,85 +1,34 @@
 # Getting Started
 
-Welcome! This section will help you get SignalR Chat up and running, whether you want to try it locally or deploy to Azure.
+Use this section to understand how to run the current dispatch-center pair chat implementation.
 
-## Quick Navigation
+## Recommended Reading Order
 
-### 🚀 5-Minute Quickstart
-Want to try it right now without any setup?
+1. [Architecture Overview](../architecture/overview.md)
+2. [Local Setup](../development/local-setup.md)
+3. [Bootstrap](../deployment/bootstrap.md)
+4. [Dispatch-Center Escalation Implementation](../features/dispatch-center-escalation-implementation-plan.md)
 
-➡️ **[Quickstart Guide](quickstart.md)** - Run locally in 5 minutes (no Azure required)
+## Entry Points
 
-### 📦 Full Installation
-Ready to set up with Azure resources for persistence and scale?
+- [Configuration](configuration.md)
+- [Installation](installation.md)
+- [Quickstart](quickstart.md)
 
-➡️ **[Installation Guide](installation.md)** - Complete setup with Cosmos DB, Redis, and Azure
+## Important Context
 
-### ⚙️ Configuration
-Need help with environment variables and configuration options?
+The current branch does not use seeded users or seeded rooms.
 
-➡️ **[Configuration Reference](configuration.md)** - All environment variables and settings
+To validate the real dispatch-center workflow locally or in Azure, you need:
 
-## What's the Difference?
+- a user with `upn` and `dispatchCenterId`
+- dispatch centers with pair relations
+- officers assigned on both sides of the pair
 
-| Aspect | Quickstart | Full Installation |
-|--------|-----------|-------------------|
-| **Time to setup** | 5 minutes | 30-60 minutes |
-| **Azure account** | Not required | Required |
-| **Persistence** | ❌ In-memory only | ✅ Cosmos DB |
-| **OTP storage** | ❌ In-memory only | ✅ Redis |
-| **Scalability** | ❌ Single instance | ✅ Multi-instance |
-| **Notifications** | ❌ No SMS/email | ✅ Via Azure Communication Services |
-| **Production ready** | ❌ Development only | ✅ Yes |
+`quickstart.md` is still useful for lightweight application bring-up, but the current product behavior is best validated through [Local Setup](../development/local-setup.md).
 
-## Learning Path
+## Checklist
 
-Recommended order for new users:
-
-1. **Start** → [Quickstart](quickstart.md) (5 min)
-2. **Explore** → Try features, experiment with the UI
-3. **Understand** → [Architecture Overview](../architecture/overview.md)
-4. **Deploy** → [Full Installation](installation.md) (if you need persistence)
-5. **Develop** → [Local Development Setup](../development/local-setup.md) (if contributing)
-
-## System Requirements
-
-### Minimum Requirements
-- **OS**: Windows, macOS, or Linux
-- **Runtime**: .NET 10.0 SDK
-- **Browser**: Modern browser (Chrome, Firefox, Edge, Safari)
-- **RAM**: 2 GB available
-- **Disk**: 500 MB for source code and dependencies
-
-### For Azure Deployment
-- **Azure Subscription**: Active subscription with contributor access
-- **Azure CLI**: Version 2.50.0 or later
-- **Bicep CLI**: Version 0.20.0 or later (included with Azure CLI)
-
-## Common Scenarios
-
-### "I want to see what this does"
-➡️ Start with [Quickstart](quickstart.md) - 5 minutes, no Azure needed
-
-### "I want to run this in production"
-➡️ Follow [Full Installation](installation.md) → [Production Checklist](../deployment/production-checklist.md)
-
-### "I want to contribute code"
-➡️ Read [Contributing Guide](../../CONTRIBUTING.md) → [Development Setup](../development/local-setup.md)
-
-### "I want to understand how it works"
-➡️ Check [Architecture Overview](../architecture/overview.md) → [Feature Guides](../features/)
-
-## Next Steps
-
-Choose your path:
-
-- 🚀 **Quick Try** → [Quickstart Guide](quickstart.md)
-- 📚 **Learn First** → [Architecture Overview](../architecture/overview.md)
-- 🛠️ **Full Setup** → [Installation Guide](installation.md)
-- 💻 **Develop** → [Local Development](../development/local-setup.md)
-
----
-
-**Need help?** Check the [FAQ](../reference/faq.md) or [open an issue](https://github.com/smereczynski/SignalR-Chat/issues)
-
-[Back to documentation home](../README.md)
+- [x] understand that rooms are derived from topology
+- [x] provision a real user record before Entra login
+- [x] configure dispatch centers and officers before expecting visible chat rooms

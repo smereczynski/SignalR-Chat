@@ -8,6 +8,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Dispatch-center topology startup reconciliation** (2026-04-06):
+  - Added startup synchronization of derived pair rooms from existing dispatch-center data
+  - Existing databases now rebuild pair rooms on application start without requiring an admin edit
+  - Pair room activity continues to depend on officers existing on both sides
+
+### Changed
+- **Dispatch-center branch stabilization and cleanup** (2026-04-06):
+  - Replaced the fragile Cosmos startup pattern that could throw `CosmosClients not yet initialized`
+  - Renamed the admin user assignment flow from room-oriented naming to dispatch-center-oriented naming
+  - Added explicit chat empty-state reasons for missing dispatch center assignment, missing corresponding centers, missing derived rooms, and inactive pair rooms
+  - Aligned in-memory repository UPN lookup behavior with Cosmos case-insensitive behavior
+  - Updated chat page asset loading so the current non-development experience uses the updated chat client script
+
+### Documentation
+- **Dispatch-center and escalation documentation rewrite** (2026-04-06):
+  - Rewrote architecture, local setup, bootstrap, admin, Entra ID, and feature docs to match the current dispatch-center pair model
+  - Updated root README and docs README/index pages to remove stale seeded-room guidance and broken navigation
+  - Documented the current bootstrap rule that the first user must be inserted manually with `upn` and `dispatchCenterId`
+  - Added current-state implementation checklists for the sprint deliverables
+
+### Testing
+- **Verification refresh** (2026-04-06):
+  - Added tests for startup-style topology room derivation and inactive pair-room behavior
+  - Added tests for case-insensitive in-memory UPN lookup parity
+  - Full solution test status is now **211 passing**
+
+### Added
 - **Per-user and per-room translation language selection** (#139, 2025-12-16):
   - ✅ Added user `preferredLanguage` (stored in Cosmos DB user documents)
   - ✅ Added room `languages` set (stored in Cosmos DB room documents)

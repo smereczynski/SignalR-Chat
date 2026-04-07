@@ -18,15 +18,18 @@ namespace Chat.Web.Controllers
     {
         private readonly IDispatchCentersRepository _dispatchCenters;
         private readonly IUsersRepository _users;
+        private readonly Services.DispatchCenterTopologyService _topology;
         private readonly ILogger<DispatchCentersController> _logger;
 
         public DispatchCentersController(
             IDispatchCentersRepository dispatchCenters,
             IUsersRepository users,
+            Services.DispatchCenterTopologyService topology,
             ILogger<DispatchCentersController> logger)
         {
             _dispatchCenters = dispatchCenters;
             _users = users;
+            _topology = topology;
             _logger = logger;
         }
 
@@ -36,6 +39,7 @@ namespace Chat.Web.Controllers
             public string Name { get; set; }
             public string Country { get; set; }
             public bool IfMain { get; set; }
+            public List<string> OfficerUserNames { get; set; } = new();
             public List<string> CorrespondingDispatchCenterIds { get; set; } = new();
         }
 
@@ -98,6 +102,18 @@ namespace Chat.Web.Controllers
             var validationError = await ValidateCorrespondingIdsAsync(id, dto.CorrespondingDispatchCenterIds).ConfigureAwait(false);
             if (validationError != null) return BadRequest(validationError);
 
+            var officerUserNames = NormalizeDistinct(dto.OfficerUserNames);
+            if (officerUserNames.Count == 0)
+            {
+                return BadRequest("at least one officerUserName is required");
+            }
+
+            var missingOfficer = await FindMissingUserAsync(officerUserNames).ConfigureAwait(false);
+            if (missingOfficer != null)
+            {
+                return BadRequest($"user not found: {missingOfficer}");
+            }
+
             var entity = new DispatchCenter
             {
                 Id = id,
@@ -105,10 +121,11 @@ namespace Chat.Web.Controllers
                 Country = country,
                 IfMain = dto.IfMain,
                 CorrespondingDispatchCenterIds = NormalizeDistinct(dto.CorrespondingDispatchCenterIds),
-                Users = new List<string>()
+                Users = new List<string>(),
+                OfficerUserNames = officerUserNames
             };
 
-            await _dispatchCenters.UpsertAsync(entity).ConfigureAwait(false);
+            await _topology.SaveDispatchCenterAsync(entity, entity.CorrespondingDispatchCenterIds).ConfigureAwait(false);
 
             _logger.LogInformation(
                 "Dispatch center created: id={DispatchCenterId}, name={Name}",
@@ -142,12 +159,25 @@ namespace Chat.Web.Controllers
             var validationError = await ValidateCorrespondingIdsAsync(id, dto.CorrespondingDispatchCenterIds).ConfigureAwait(false);
             if (validationError != null) return BadRequest(validationError);
 
+            var officerUserNames = NormalizeDistinct(dto.OfficerUserNames);
+            if (officerUserNames.Count == 0)
+            {
+                return BadRequest("at least one officerUserName is required");
+            }
+
+            var missingOfficer = await FindMissingUserAsync(officerUserNames).ConfigureAwait(false);
+            if (missingOfficer != null)
+            {
+                return BadRequest($"user not found: {missingOfficer}");
+            }
+
             current.Name = name;
             current.Country = country;
             current.IfMain = dto.IfMain;
+            current.OfficerUserNames = officerUserNames;
             current.CorrespondingDispatchCenterIds = NormalizeDistinct(dto.CorrespondingDispatchCenterIds);
 
-            await _dispatchCenters.UpsertAsync(current).ConfigureAwait(false);
+            await _topology.SaveDispatchCenterAsync(current, current.CorrespondingDispatchCenterIds).ConfigureAwait(false);
 
             _logger.LogInformation(
                 "Dispatch center updated: id={DispatchCenterId}, name={Name}",
@@ -165,29 +195,7 @@ namespace Chat.Web.Controllers
             var current = await _dispatchCenters.GetByIdAsync(id).ConfigureAwait(false);
             if (current == null) return NotFound();
 
-            var users = await _users.GetAllAsync().ConfigureAwait(false);
-            foreach (var user in users)
-            {
-                var set = new HashSet<string>(user.DispatchCenterIds ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
-                if (!set.Remove(id)) continue;
-
-                user.DispatchCenterIds = set.ToList();
-                await _users.UpsertAsync(user).ConfigureAwait(false);
-            }
-
-            var allDispatchCenters = await _dispatchCenters.GetAllAsync().ConfigureAwait(false);
-            foreach (var dc in allDispatchCenters)
-            {
-                if (string.Equals(dc.Id, id, StringComparison.OrdinalIgnoreCase)) continue;
-
-                var set = new HashSet<string>(dc.CorrespondingDispatchCenterIds ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
-                if (!set.Remove(id)) continue;
-
-                dc.CorrespondingDispatchCenterIds = set.ToList();
-                await _dispatchCenters.UpsertAsync(dc).ConfigureAwait(false);
-            }
-
-            await _dispatchCenters.DeleteAsync(id).ConfigureAwait(false);
+            await _topology.DeleteDispatchCenterAsync(id).ConfigureAwait(false);
 
             _logger.LogInformation("Dispatch center deleted: id={DispatchCenterId}", LogSanitizer.Sanitize(id));
 
@@ -211,16 +219,9 @@ namespace Chat.Web.Controllers
                 {
                     return BadRequest($"user not found: {userName}");
                 }
-
-                var set = new HashSet<string>(user.DispatchCenterIds ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
-                if (set.Add(id))
-                {
-                    user.DispatchCenterIds = set.ToList();
-                    await _users.UpsertAsync(user).ConfigureAwait(false);
-                }
-
-                await _dispatchCenters.AssignUserAsync(id, userName).ConfigureAwait(false);
             }
+
+            await _topology.AssignUsersAsync(id, targetUsers).ConfigureAwait(false);
 
             return Ok(await _dispatchCenters.GetByIdAsync(id).ConfigureAwait(false));
         }
@@ -235,21 +236,7 @@ namespace Chat.Web.Controllers
             if (dispatchCenter == null) return NotFound();
 
             var targetUsers = NormalizeDistinct(dto.UserNames);
-            foreach (var userName in targetUsers)
-            {
-                var user = await _users.GetByUserNameAsync(userName).ConfigureAwait(false);
-                if (user != null)
-                {
-                    var set = new HashSet<string>(user.DispatchCenterIds ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
-                    if (set.Remove(id))
-                    {
-                        user.DispatchCenterIds = set.ToList();
-                        await _users.UpsertAsync(user).ConfigureAwait(false);
-                    }
-                }
-
-                await _dispatchCenters.UnassignUserAsync(id, userName).ConfigureAwait(false);
-            }
+            await _topology.RemoveUsersFromDispatchCenterAsync(id, targetUsers).ConfigureAwait(false);
 
             return Ok(await _dispatchCenters.GetByIdAsync(id).ConfigureAwait(false));
         }
@@ -266,7 +253,7 @@ namespace Chat.Web.Controllers
             if (validationError != null) return BadRequest(validationError);
 
             dispatchCenter.CorrespondingDispatchCenterIds = NormalizeDistinct(correspondingIds);
-            await _dispatchCenters.UpsertAsync(dispatchCenter).ConfigureAwait(false);
+            await _topology.SaveDispatchCenterAsync(dispatchCenter, dispatchCenter.CorrespondingDispatchCenterIds).ConfigureAwait(false);
 
             return Ok(dispatchCenter);
         }
@@ -286,6 +273,20 @@ namespace Chat.Web.Controllers
                 if (existing == null)
                 {
                     return $"invalid corresponding dispatch center id: {id}";
+                }
+            }
+
+            return null;
+        }
+
+        private async Task<string> FindMissingUserAsync(IEnumerable<string> userNames)
+        {
+            foreach (var userName in NormalizeDistinct(userNames))
+            {
+                var user = await _users.GetByUserNameAsync(userName).ConfigureAwait(false);
+                if (user == null)
+                {
+                    return userName;
                 }
             }
 

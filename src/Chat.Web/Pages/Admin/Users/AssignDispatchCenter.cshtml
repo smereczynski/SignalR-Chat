@@ -1,0 +1,30 @@
+@page "{userName}"
+@using Microsoft.Extensions.Localization
+@inject IStringLocalizer<Chat.Web.Resources.SharedResources> Localizer
+@model UsersAssignDispatchCenterModel
+@{
+    ViewData["Title"] = Localizer["AssignDispatchCenter"];
+    Layout = "/Pages/Shared/_Layout.cshtml";
+}
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <h2 class="mb-4">@Localizer["AssignDispatchCenter"] - @Model.UserName</h2>
+        <form method="post">
+            <input type="hidden" asp-for="UserName" />
+            <div class="mb-3">
+                <label asp-for="SelectedDispatchCenterId" class="form-label">@Localizer["DispatchCenter"]</label>
+                <select asp-for="SelectedDispatchCenterId" class="form-select">
+                    <option value="">@Localizer["NoDispatchCenter"]</option>
+                    @foreach (var dispatchCenter in Model.DispatchCenters)
+                    {
+                        <option value="@dispatchCenter.Id">@dispatchCenter.Name (@dispatchCenter.Country)</option>
+                    }
+                </select>
+            </div>
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-primary">@Localizer["Save"]</button>
+                <a asp-page="Index" class="btn btn-secondary">@Localizer["Back"]</a>
+            </div>
+        </form>
+    </div>
+</div>

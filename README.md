@@ -1,358 +1,66 @@
-# SignalR Chat (v0.9.5)
+# SignalR Chat
 
-A production-ready real-time chat application with **asynchronous AI-powered translation** built using ASP.NET Core 10, SignalR, Azure Cosmos DB, Redis, and Azure AI Translator (Text Translation REST API). Features multi-language chat rooms, dual authentication (Entra ID + OTP), read receipts, presence tracking, and comprehensive observability.
+SignalR Chat is a dispatch-center pair chat application built with ASP.NET Core, SignalR, Cosmos DB, Redis, and Azure-hosted services. The current branch implements strict dispatch-center topology, multi-officer escalations, Entra ID admin login, and OTP failover authentication.
 
-> **Status**: Production-ready | **License**: [MIT](LICENSE) | **Tests**: 193 passing ✅
+## Current Product Model
 
-![Chat Application](docs/images/hero.gif)
-<!-- TODO: Add screenshot showing login, rooms, read receipts, reconnection -->
+- Users belong to exactly one dispatch center through `ApplicationUser.DispatchCenterId`.
+- Dispatch centers communicate only with configured corresponding dispatch centers.
+- Rooms are derived from dispatch-center pairs and synchronized automatically.
+- Each dispatch center can have multiple escalation officers.
+- Escalations target all officers assigned to the counterpart dispatch center.
+- OTP remains available as a failover login path.
 
-## Why This Project?
+There are no standard chat rooms, no seeded rooms, and no legacy room-assignment compatibility in the current implementation.
 
-SignalR Chat demonstrates modern real-time web application patterns with production-grade security, scalability, and observability. Built for learning and as a foundation for real-time features.
+## Quick Links
 
-**What it does**:
-- 🚀 Real-time messaging with SignalR (WebSocket + Server-Sent Events fallback)
-- 🌐 **Asynchronous AI-powered translation** (Azure AI Translator, background workers; targets derived from room languages)
-- 🔐 Dual authentication: Microsoft Entra ID (enterprise) + OTP fallback (Argon2id hashing, rate limiting)
-- 👥 Fixed chat rooms: General, Tech, Random, Sports (no DMs)
-- ✓ Read receipts, typing indicators, presence tracking
-- 🌍 8 languages supported (i18n with server-side + client-side resources)
-- 📊 Full observability (OpenTelemetry, Azure App Insights, health checks)
-- 🔒 Security headers (CSP with nonces, HSTS, frame protection)
+- [Documentation Home](docs/README.md)
+- [Architecture Overview](docs/architecture/overview.md)
+- [Dispatch-Center Escalation Implementation](docs/features/dispatch-center-escalation-implementation-plan.md)
+- [Local Setup](docs/development/local-setup.md)
+- [Bootstrap Guide](docs/deployment/bootstrap.md)
+- [Changelog](CHANGELOG.md)
 
-**What it doesn't do** (non-goals):
-- ❌ No direct messages (DMs)
-- ❌ No message editing/deletion
-- ❌ No user registration (fixed users: alice, bob, charlie, dave, eve)
-- ❌ No file uploads or rich media
+## Local Development
 
----
+For the current branch behavior, use the dispatch-center setup described in [Local Setup](docs/development/local-setup.md).
 
-## 🚀 5-Minute Quickstart (No Azure Required)
+At minimum you need:
 
-Run locally with in-memory storage (no external dependencies):
+1. Redis and Cosmos DB configuration
+2. a manually inserted user with `upn` and `dispatchCenterId`
+3. dispatch centers with corresponding relations
+4. officers assigned on both sides of a desired pair
 
-```bash
-# Clone and build
-git clone https://github.com/smereczynski/SignalR-Chat.git
-cd SignalR-Chat
-dotnet build ./src/Chat.sln
-
-# Run with in-memory mode
-Testing__InMemory=true dotnet run --project ./src/Chat.Web --urls=http://localhost:5099
-
-# Open browser: http://localhost:5099
-# Users: alice, bob, charlie, dave, eve
-# OTP codes are printed to console (6-digit codes)
-```
-
-**What's running**:
-- In-memory OTP storage (no Redis)
-- In-memory session state (no Cosmos DB)
-- Direct SignalR connections (no Azure SignalR Service)
-- All features work except persistence across restarts
-
-➡️ **Next**: [Full local setup with Azure resources](docs/getting-started/installation.md) | [Configuration guide](docs/getting-started/configuration.md)
-
----
-
-## 📚 Documentation
-
-| Category | Description | Link |
-|----------|-------------|------|
-| **Getting Started** | Installation, configuration, first run | [docs/getting-started/](docs/getting-started/) |
-| **Architecture** | System design, diagrams, decisions | [docs/architecture/](docs/architecture/) |
-| **Deployment** | Azure deployment, Bicep, CI/CD | [docs/deployment/](docs/deployment/) |
-| **Features** | Authentication, presence, i18n, real-time | [docs/features/](docs/features/) |
-| **Development** | Local setup, testing, debugging | [docs/development/](docs/development/) |
-| **Operations** | Monitoring, diagnostics, health checks | [docs/operations/](docs/operations/) |
-| **Reference** | API, configuration, telemetry | [docs/reference/](docs/reference/) |
-
----
-
-Translation deep-dive: [docs/architecture/translation-architecture.md](docs/architecture/translation-architecture.md)
-
-## 🏗️ Architecture Overview
-
-```mermaid
-graph TD
-    Browser[Browser<br/>Razor Pages + SignalR.js]
-    
-    subgraph "ASP.NET Core 10"
-        RazorPages[Razor Pages<br/>Login, UI]
-        SignalRHub[SignalR Hub<br/>ChatHub]
-        Auth[Cookie Authentication]
-        
-        RazorPages --> Auth
-        SignalRHub --> Auth
-    end
-    
-    Browser -->|HTTPS/WSS| RazorPages
-    Browser -->|WebSocket| SignalRHub
-    
-    Auth --> CosmosDB[(Cosmos DB<br/>Messages, Rooms<br/>Read Status)]
-    Auth --> Redis[(Redis<br/>OTP Codes<br/>Rate Limits)]
-    
-    SignalRHub --> CosmosDB
-    SignalRHub --> Redis
-    
-    subgraph "Optional Azure Services"
-        AzureSignalR[Azure SignalR Service<br/>Scale to 1000s]
-        ACS[Azure Communication Services<br/>SMS/Email]
-        AppInsights[Application Insights<br/>Telemetry]
-    end
-    
-    SignalRHub -.->|Optional| AzureSignalR
-    Auth -.->|Notifications| ACS
-    ASPNETCore -.->|Metrics/Logs| AppInsights
-    
-    style Browser fill:#e1f5ff
-    style CosmosDB fill:#ffe1e1
-    style Redis fill:#ffe1e1
-    style Auth fill:#fff4e1
-```
-
-➡️ [Full architecture documentation](docs/architecture/overview.md)
-
----
-
-## 🛠️ Tech Stack
-
-| Layer | Technology | Purpose |
-|-------|------------|---------|
-| **Frontend** | Vanilla JS, Bootstrap 5, SignalR Client | UI, real-time updates |
-| **Backend** | ASP.NET Core 10, SignalR | Web server, WebSocket hub |
-| **Database** | Azure Cosmos DB (NoSQL) | Messages, rooms, read receipts, translations |
-| **Cache** | Redis | OTP storage, rate limiting, translation job queue |
-| **AI Translation** | Azure AI Translator (Text Translation REST API) | Asynchronous message translation |
-| **Auth** | Cookie authentication + Entra ID/OTP | Dual authentication: enterprise SSO + guest OTP |
-| **Observability** | OpenTelemetry, App Insights | Metrics, traces, logs |
-| **Deployment** | Azure App Service (Linux), Bicep IaC | Infrastructure as Code |
-
----
-
-## 📦 Project Structure
-
-```
-SignalR-Chat/
-├── src/
-│   ├── Chat.Web/              # Main ASP.NET Core application
-│   │   ├── Controllers/       # REST API endpoints
-│   │   ├── Hubs/             # SignalR ChatHub
-│   │   ├── Pages/            # Razor Pages (login, chat UI)
-│   │   ├── Services/         # OTP, presence, notifications
-│   │   ├── Repositories/     # Cosmos DB data access
-│   │   └── Middleware/       # Security headers, logging
-│   └── Chat.sln              # Solution file
-├── tests/
-│   ├── Chat.Tests/           # Unit tests (included in Chat.sln)
-│   ├── Chat.IntegrationTests/# Integration tests (not included in Chat.sln)
-│   └── Chat.Web.Tests/       # Web/security tests (not included in Chat.sln)
-├── infra/
-│   └── bicep/                # Azure infrastructure (Bicep)
-├── docs/                     # Documentation (detailed guides)
-├── .github/
-│   └── workflows/            # CI/CD pipelines
-└── README.md                 # This file
-```
-
----
-
-## 🧪 Testing
-
-**193 unit tests** (100% passing) in `tests/Chat.Tests` (this is the only test project included in `src/Chat.sln`):
+Then run:
 
 ```bash
-# Run all tests
-dotnet test src/Chat.sln
-
-# Run specific test project
-dotnet test tests/Chat.Tests/
-
-# Optional: additional test projects exist under tests/, but are not referenced by Chat.sln
-# dotnet test tests/Chat.IntegrationTests/
-# dotnet test tests/Chat.Web.Tests/
+dotnet build src/Chat.sln
+dotnet run --project ./src/Chat.Web --urls=https://localhost:5099
 ```
 
-Note: additional test projects exist under `tests/`, but they are not currently referenced by `src/Chat.sln`.
+## Verification
 
-➡️ [Testing guide](docs/development/testing.md)
+Current verification status on this branch:
 
----
+- `dotnet build src/Chat.sln` passes
+- `dotnet test src/Chat.sln --no-build --nologo` passes
+- Development startup succeeds without the previous `CosmosClients not yet initialized` failure
+- topology reconciliation runs on startup and rebuilds derived pair rooms
 
-## 🚀 Deployment
+## Sprint Implementation Checklist
 
-### Azure (Production)
+- [x] Replaced fragile Cosmos startup initialization with deterministic startup behavior
+- [x] Added startup dispatch-center topology reconciliation
+- [x] Preserved pair-room authorization as the single access model
+- [x] Aligned in-memory repository behavior with Cosmos UPN lookup semantics
+- [x] Renamed admin user assignment flow to dispatch-center-specific naming
+- [x] Added clearer chat empty states for missing dispatch-center topology
+- [x] Rewrote stale dispatch-center, architecture, setup, bootstrap, and admin docs
+- [x] Removed stale documentation references to seeded standard rooms and legacy room assignment
 
-Deploy to Azure using Bicep infrastructure as code:
+## Notes
 
-```bash
-cd infra/bicep
-
-# Deploy to dev environment
-az deployment sub create \
-  --location westeurope \
-  --template-file main.bicep \
-  --parameters main.parameters.dev.bicepparam
-
-# Deploy to production
-az deployment sub create \
-  --location westeurope \
-  --template-file main.bicep \
-  --parameters main.parameters.prod.bicepparam
-```
-
-**Automated CI/CD**: GitHub Actions workflows deploy on push to `main`
-
-➡️ [Deployment guide](docs/deployment/azure.md) | [Production checklist](docs/deployment/production-checklist.md)
-
----
-
-## 🔒 Security
-
-- ✅ **Dual Authentication**: Microsoft Entra ID (SSO) + OTP fallback (Argon2id hashing with pepper)
-- ✅ **Multi-Tenant Support**: AllowedTenants validation, UPN-based authorization
-- ✅ **CORS Protection**: Origin validation on SignalR hub, prevents CSRF attacks
-- ✅ **CSP Headers**: Nonce-based Content Security Policy, prevents XSS
-- ✅ **HSTS**: HTTP Strict Transport Security in production
-- ✅ **Rate Limiting**: Adaptive throttling for auth endpoints, 5 OTP attempts per 15 minutes
-- ✅ **Input Sanitization**: Log forgery prevention (CWE-117)
-- ✅ **Private Endpoints**: VNet integration, no public database access
-
-### CORS Configuration
-
-The SignalR hub endpoint (`/chatHub`) enforces origin validation to prevent CSRF attacks. Configure allowed origins in `appsettings.json`:
-
-**Development** (`appsettings.Development.json`):
-```json
-{
-  "Cors": {
-    "AllowAllOrigins": true,
-    "AllowedOrigins": [
-      "http://localhost:5099",
-      "https://localhost:5099"
-    ]
-  }
-}
-```
-
-**Production** (`appsettings.Production.json`):
-```json
-{
-  "Cors": {
-    "AllowAllOrigins": false,
-    "AllowedOrigins": [
-      "https://signalrchat-prod-plc.azurewebsites.net"
-    ]
-  }
-}
-```
-
-**Azure App Service** (set via environment variables):
-```bash
-Cors__AllowedOrigins__0=https://yourdomain.com
-Cors__AllowAllOrigins=false
-```
-
-> ⚠️ **Security**: `AllowAllOrigins` MUST be `false` in production. The application will throw an exception if set to `true` in non-Development environments.
-
-➡️ [Security architecture](docs/architecture/security.md) | [Authentication guide](docs/features/authentication.md)
-
----
-
-## 🌍 Localization
-
-Supports 8 languages with both server-side (.resx) and client-side (API) translations:
-
-**Languages**: English, Polish, German, Czech, Slovak, Ukrainian, Lithuanian, Russian
-
-```bash
-# Add new language key
-# 1. Edit Resources/SharedResources.resx (English default)
-# 2. Add to Resources/SharedResources.[culture].resx
-# 3. Rebuild to embed resources
-
-# Verify translations
-dotnet test tests/Chat.Tests/ --filter "Category=Localization"
-```
-
-➡️ [Localization guide](docs/features/localization.md)
-
----
-
-## 📊 Observability
-
-**Metrics, Traces, Logs** via OpenTelemetry → Azure Application Insights (when configured)
-
-**Custom Metrics**:
-- `chat.otp.requests` - OTP generation count
-- `chat.otp.verifications` - OTP verification attempts
-- `chat.messages.sent` - Messages sent per room
-- `chat.connections.active` - Active SignalR connections
-
-**Health Checks**:
-- `/healthz` - Liveness probe (responds 200 OK)
-- `/healthz/ready` - Readiness probe (checks Cosmos + Redis)
-- `/healthz/metrics` - Lightweight in-process metrics snapshot
-
-➡️ [Monitoring guide](docs/operations/monitoring.md)
-
----
-
-## 🤝 Contributing
-
-We welcome contributions! Please read [CONTRIBUTING.md](CONTRIBUTING.md) for:
-- Code of conduct
-- How to set up your development environment
-- Running tests and linters
-- Commit message conventions
-- Pull request process
-
-**Quick start for contributors**:
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature/my-feature`
-3. Make changes and add tests
-4. Run tests: `dotnet test src/Chat.sln`
-5. Commit: `git commit -m "feat: add my feature"`
-6. Push and create a pull request
-
----
-
-## 📝 License
-
-This project is licensed under the MIT License - see [LICENSE](LICENSE) file for details.
-
----
-
-## 🔗 Links
-
-- **Documentation**: [docs/](docs/)
-- **Issues**: [GitHub Issues](https://github.com/smereczynski/SignalR-Chat/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/smereczynski/SignalR-Chat/discussions)
-- **Changelog**: [CHANGELOG.md](CHANGELOG.md)
-- **Original README**: [README.old.md](README.old.md) (archived, detailed reference)
-
----
-
-## ⭐ Key Features Breakdown
-
-| Feature | Description | Implementation |
-|---------|-------------|----------------|
-| **Async Translation** | Real-time AI translation of messages | Redis queue → Background workers → Azure AI Translator → SignalR broadcast |
-| **Translation Cache** | Reduce API costs with 1-hour caching | Redis cache with translation results |
-| **Translation Retry** | Automatic retry with exponential backoff | Max 3 attempts, high priority requeue |
-| **Optimistic Send** | Messages appear instantly, confirmed async | SignalR invoke + server broadcast |
-| **Read Receipts** | Per-user read status per message | Cosmos DB `ReadReceipts` container |
-| **Typing Indicators** | "X is typing…" shown to room | SignalR `NotifyTyping` with debounce |
-| **Presence Tracking** | Online/offline status | Redis cache with TTL + SignalR events |
-| **Reconnection** | Auto-reconnect with exponential backoff | SignalR.js with custom retry policy |
-| **Pagination** | Load 50 messages, scroll to load more | Cosmos DB continuation token |
-| **Unread Badges** | "5 unread in Tech" notifications | Redis counter + SignalR updates |
-| **Rate Limiting** | Prevent OTP spam, abuse | ASP.NET Core rate limiter |
-
----
-
-<p align="center">
-  Made with ❤️ using ASP.NET Core 10 & SignalR
-</p>
+- This repository may still contain unrelated in-progress branch changes outside the work summarized above.
+- Some historical docs and test fixtures still mention generic room names for isolated examples; current product behavior is dispatch-center pair chat only.

@@ -15,11 +15,13 @@ public class DispatchCentersAssignUsersModel : PageModel
 {
     private readonly IDispatchCentersRepository _dispatchCenters;
     private readonly IUsersRepository _users;
+    private readonly Services.DispatchCenterTopologyService _topology;
 
-    public DispatchCentersAssignUsersModel(IDispatchCentersRepository dispatchCenters, IUsersRepository users)
+    public DispatchCentersAssignUsersModel(IDispatchCentersRepository dispatchCenters, IUsersRepository users, Services.DispatchCenterTopologyService topology)
     {
         _dispatchCenters = dispatchCenters;
         _users = users;
+        _topology = topology;
     }
 
     [BindProperty(SupportsGet = true)]
@@ -53,38 +55,20 @@ public class DispatchCentersAssignUsersModel : PageModel
         var dispatchCenter = await _dispatchCenters.GetByIdAsync(Id);
         if (dispatchCenter == null) return RedirectToPage("Index");
 
-        var allUsers = (await _users.GetAllAsync()).ToList();
         var selectedSet = new HashSet<string>((SelectedUsers ?? new List<string>()).Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()), StringComparer.OrdinalIgnoreCase);
         var currentSet = new HashSet<string>(dispatchCenter.Users ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
 
-        foreach (var userName in selectedSet.Except(currentSet))
+        var toAdd = selectedSet.Except(currentSet).ToList();
+        var toRemove = currentSet.Except(selectedSet).ToList();
+
+        if (toAdd.Count > 0)
         {
-            await _dispatchCenters.AssignUserAsync(Id, userName);
-
-            var user = allUsers.FirstOrDefault(u => string.Equals(u.UserName, userName, StringComparison.OrdinalIgnoreCase));
-            if (user == null) continue;
-
-            var memberships = new HashSet<string>(user.DispatchCenterIds ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
-            if (memberships.Add(Id))
-            {
-                user.DispatchCenterIds = memberships.ToList();
-                await _users.UpsertAsync(user);
-            }
+            await _topology.AssignUsersAsync(Id, toAdd);
         }
 
-        foreach (var userName in currentSet.Except(selectedSet))
+        if (toRemove.Count > 0)
         {
-            await _dispatchCenters.UnassignUserAsync(Id, userName);
-
-            var user = allUsers.FirstOrDefault(u => string.Equals(u.UserName, userName, StringComparison.OrdinalIgnoreCase));
-            if (user == null) continue;
-
-            var memberships = new HashSet<string>(user.DispatchCenterIds ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
-            if (memberships.Remove(Id))
-            {
-                user.DispatchCenterIds = memberships.ToList();
-                await _users.UpsertAsync(user);
-            }
+            await _topology.RemoveUsersFromDispatchCenterAsync(Id, toRemove);
         }
 
         return RedirectToPage("Edit", new { id = Id });

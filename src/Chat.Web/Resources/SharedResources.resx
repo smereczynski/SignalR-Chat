@@ -422,9 +422,6 @@
   <data name="Disable" xml:space="preserve">
     <value>Disable</value>
   </data>
-  <data name="AssignRooms" xml:space="preserve">
-    <value>Assign Rooms</value>
-  </data>
   <data name="RoomName" xml:space="preserve">
     <value>Room Name</value>
   </data>
@@ -442,9 +439,6 @@
   </data>
   <data name="CreateUser" xml:space="preserve">
     <value>Create User</value>
-  </data>
-  <data name="AssignRoomsToUser" xml:space="preserve">
-    <value>Assign Rooms to {0}</value>
   </data>
   <data name="EnabledQuestion" xml:space="preserve">
     <value>Enabled?</value>
@@ -487,6 +481,21 @@
   </data>
   <data name="AssignUsersToDispatchCenter" xml:space="preserve">
     <value>Assign Users to Dispatch Office {0}</value>
+  </data>
+  <data name="DispatchCenter" xml:space="preserve">
+    <value>Dispatch Center</value>
+  </data>
+  <data name="AssignDispatchCenter" xml:space="preserve">
+    <value>Assign Dispatch Center</value>
+  </data>
+  <data name="SelectDispatchCenter" xml:space="preserve">
+    <value>Select dispatch center</value>
+  </data>
+  <data name="NoDispatchCenter" xml:space="preserve">
+    <value>No dispatch center</value>
+  </data>
+  <data name="EscalationOfficers" xml:space="preserve">
+    <value>Escalation Officers</value>
   </data>
   <data name="Delete" xml:space="preserve">
     <value>Delete</value>

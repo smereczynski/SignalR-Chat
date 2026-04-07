@@ -26,6 +26,17 @@
                 <span asp-validation-for="Input.MobileNumber" class="text-danger"></span>
             </div>
             <div class="mb-3">
+                <label for="Input_DispatchCenterId" class="form-label">@Localizer["DispatchCenter"]</label>
+                <select asp-for="Input.DispatchCenterId" class="form-select">
+                    <option value="">@Localizer["SelectDispatchCenter"]</option>
+                    @foreach (var dispatchCenter in Model.DispatchCenters)
+                    {
+                        <option value="@dispatchCenter.Id">@dispatchCenter.Name (@dispatchCenter.Country)</option>
+                    }
+                </select>
+                <span asp-validation-for="Input.DispatchCenterId" class="text-danger"></span>
+            </div>
+            <div class="mb-3">
                 <label for="Input_Upn" class="form-label">UPN (Entra ID)</label>
                 <input asp-for="Input.Upn" type="email" class="form-control" placeholder="user@domain.com (optional)" />
                 <span asp-validation-for="Input.Upn" class="text-danger"></span>

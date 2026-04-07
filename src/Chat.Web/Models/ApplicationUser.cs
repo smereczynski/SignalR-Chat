@@ -4,8 +4,7 @@ namespace Chat.Web.Models
 {
     /// <summary>
     /// Lightweight user profile used for authentication, presence display and message attribution.
-    /// Extended with fixed channel membership and basic contact details (email/mobile) to support notifications.
-    /// Supports dual authentication: Entra ID (enterprise) and OTP (guest/fallback).
+    /// Supports dual authentication: Entra ID (enterprise) and OTP (fallback).
     /// </summary>
     public class ApplicationUser
     {
@@ -65,20 +64,9 @@ namespace Chat.Web.Models
         public string Region { get; set; }
         
         /// <summary>
-        /// Fixed list of room names this user is allowed to join. Enforced server-side.
+        /// Authoritative dispatch center assignment used by chat authorization and escalation routing.
         /// </summary>
-        public ICollection<string> FixedRooms { get; set; } = new List<string>();
-
-        /// <summary>
-        /// List of dispatch center IDs this user belongs to.
-        /// </summary>
-        public ICollection<string> DispatchCenterIds { get; set; } = new List<string>();
-
-        /// <summary>
-        /// Preferred starting room. If user has more than one FixedRoom this selects which to auto-join.
-        /// If null/empty and only one FixedRoom exists that one is auto-selected; otherwise first FixedRoom alphabetically.
-        /// </summary>
-        public string DefaultRoom { get; set; }
+        public string DispatchCenterId { get; set; }
 
         public ICollection<Room> Rooms { get; set; }
         public ICollection<Message> Messages { get; set; }

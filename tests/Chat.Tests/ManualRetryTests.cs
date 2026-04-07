@@ -11,7 +11,6 @@ using Chat.Web.Services;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
@@ -37,7 +36,6 @@ public class ManualRetryTests
     private readonly Mock<IClientProxy> _mockClientProxy;
     private readonly Mock<ITranslationJobQueue> _mockQueue;
     private readonly Mock<ILogger<MessagesController>> _mockControllerLogger;
-    private readonly Mock<IConfiguration> _mockConfiguration;
     private readonly TranslationOptions _translationOptions;
 
     public ManualRetryTests()
@@ -50,7 +48,6 @@ public class ManualRetryTests
         _mockClientProxy = new Mock<IClientProxy>();
         _mockQueue = new Mock<ITranslationJobQueue>();
         _mockControllerLogger = new Mock<ILogger<MessagesController>>();
-        _mockConfiguration = new Mock<IConfiguration>();
 
         // Setup HubContext to return mocked clients
         _mockHubContext.Setup(h => h.Clients).Returns(_mockClients.Object);
@@ -71,10 +68,10 @@ public class ManualRetryTests
     {
         // Arrange
         var disabledOptions = new TranslationOptions { Enabled = false };
-        var controller = CreateController(disabledOptions);
+        var controller = CreateController();
 
         // Act
-        var result = await controller.RetryTranslation(123);
+        var result = await controller.RetryTranslation(123, _mockQueue.Object, Options.Create(disabledOptions));
 
         // Assert
         var badRequestResult = Assert.IsType<BadRequestObjectResult>(result);
@@ -88,11 +85,11 @@ public class ManualRetryTests
         _mockMessages.Setup(m => m.GetByIdAsync(It.IsAny<int>()))
             .ReturnsAsync((Message?)null);
 
-        var controller = CreateController(_translationOptions);
+        var controller = CreateController();
         SetupUserContext(controller, "user1", "general");
 
         // Act
-        var result = await controller.RetryTranslation(999);
+        var result = await controller.RetryTranslation(999, _mockQueue.Object, Options.Create(_translationOptions));
 
         // Assert
         var notFoundResult = Assert.IsType<NotFoundObjectResult>(result);
@@ -103,11 +100,11 @@ public class ManualRetryTests
     public async Task RetryTranslation_WithUnauthorizedUser_ReturnsForbidden()
     {
         // Arrange
-        var room = new Room { Id = 1, Name = "general" };
+        var room = CreatePairRoom();
         var user = new ApplicationUser
         {
             UserName = "user1",
-            FixedRooms = new List<string> { "different-room" } // User not in general
+            DispatchCenterId = "dc-z"
         };
         
         var message = new Message
@@ -121,15 +118,17 @@ public class ManualRetryTests
 
         _mockMessages.Setup(m => m.GetByIdAsync(123))
             .ReturnsAsync(message);
+        _mockRooms.Setup(r => r.GetByNameAsync(room.Name))
+            .ReturnsAsync(room);
         
         _mockUsers.Setup(u => u.GetByUserNameAsync("user1"))
             .ReturnsAsync(user);
 
-        var controller = CreateController(_translationOptions);
-        SetupUserContext(controller, "user1", "different-room");
+        var controller = CreateController();
+        SetupUserContext(controller, "user1", room.Name);
 
         // Act
-        var result = await controller.RetryTranslation(123);
+        var result = await controller.RetryTranslation(123, _mockQueue.Object, Options.Create(_translationOptions));
 
         // Assert
         var forbidResult = Assert.IsType<ForbidResult>(result);
@@ -140,11 +139,11 @@ public class ManualRetryTests
     public async Task RetryTranslation_WithNonFailedStatus_ReturnsBadRequest()
     {
         // Arrange
-        var room = new Room { Id = 1, Name = "general" };
+        var room = CreatePairRoom();
         var user = new ApplicationUser
         {
             UserName = "user1",
-            FixedRooms = new List<string> { "general" }
+            DispatchCenterId = "dc-a"
         };
         
         var message = new Message
@@ -158,15 +157,17 @@ public class ManualRetryTests
 
         _mockMessages.Setup(m => m.GetByIdAsync(123))
             .ReturnsAsync(message);
+        _mockRooms.Setup(r => r.GetByNameAsync(room.Name))
+            .ReturnsAsync(room);
         
         _mockUsers.Setup(u => u.GetByUserNameAsync("user1"))
             .ReturnsAsync(user);
 
-        var controller = CreateController(_translationOptions);
-        SetupUserContext(controller, "user1", "general");
+        var controller = CreateController();
+        SetupUserContext(controller, "user1", room.Name);
 
         // Act
-        var result = await controller.RetryTranslation(123);
+        var result = await controller.RetryTranslation(123, _mockQueue.Object, Options.Create(_translationOptions));
 
         // Assert
         var badRequestResult = Assert.IsType<BadRequestObjectResult>(result);
@@ -177,11 +178,11 @@ public class ManualRetryTests
     public async Task RetryTranslation_WithValidRequest_RequeuesToFrontAndReturnsSuccess()
     {
         // Arrange
-        var room = new Room { Id = 1, Name = "general" };
+        var room = CreatePairRoom();
         var user = new ApplicationUser
         {
             UserName = "user1",
-            FixedRooms = new List<string> { "general" }
+            DispatchCenterId = "dc-a"
         };
         
         var message = new Message
@@ -196,6 +197,8 @@ public class ManualRetryTests
 
         _mockMessages.Setup(m => m.GetByIdAsync(123))
             .ReturnsAsync(message);
+        _mockRooms.Setup(r => r.GetByNameAsync(room.Name))
+            .ReturnsAsync(room);
         
         _mockUsers.Setup(u => u.GetByUserNameAsync("user1"))
             .ReturnsAsync(user);
@@ -216,11 +219,11 @@ public class ManualRetryTests
             })
             .Returns(Task.CompletedTask);
 
-        var controller = CreateController(_translationOptions);
-        SetupUserContext(controller, "user1", "general");
+        var controller = CreateController();
+        SetupUserContext(controller, "user1", room.Name);
 
         // Act
-        var result = await controller.RetryTranslation(123);
+        var result = await controller.RetryTranslation(123, _mockQueue.Object, Options.Create(_translationOptions));
 
         // Assert
         var okResult = Assert.IsType<OkObjectResult>(result);
@@ -233,7 +236,7 @@ public class ManualRetryTests
         Assert.Equal(10, capturedJob.Priority); // High priority
         Assert.Equal(0, capturedJob.RetryCount); // Reset retry count
         Assert.Equal(123, capturedJob.MessageId);
-        Assert.Equal("general", capturedJob.RoomName);
+        Assert.Equal(room.Name, capturedJob.RoomName);
 
         // Verify status update
         _mockMessages.Verify(m => m.UpdateTranslationAsync(
@@ -254,7 +257,7 @@ public class ManualRetryTests
 
     #region Helper Methods
 
-    private MessagesController CreateController(TranslationOptions options)
+    private MessagesController CreateController()
     {
         return new MessagesController(
             _mockMessages.Object,
@@ -262,8 +265,21 @@ public class ManualRetryTests
             _mockUsers.Object,
             _mockHubContext.Object,
             _mockControllerLogger.Object,
-            _mockQueue.Object,
-            Options.Create(options));
+            null);
+    }
+
+    private static Room CreatePairRoom()
+    {
+        return new Room
+        {
+            Id = 1,
+            Name = "pair:dc-a::dc-b",
+            DisplayName = "Alpha <-> Beta",
+            PairKey = "dc-a::dc-b",
+            DispatchCenterAId = "dc-a",
+            DispatchCenterBId = "dc-b",
+            IsActive = true
+        };
     }
 
     private void SetupUserContext(MessagesController controller, string userId, string roomName)

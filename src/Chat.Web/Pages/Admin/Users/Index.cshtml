@@ -16,7 +16,7 @@
                 <th>@Localizer["Email"]</th>
                 <th>@Localizer["Mobile"]</th>
                 <th>@Localizer["Enabled"]</th>
-                <th>@Localizer["AssignedRooms"]</th>
+                <th>@Localizer["DispatchCenter"]</th>
                 <th>@Localizer["Actions"]</th>
             </tr>
         </thead>
@@ -37,7 +37,7 @@
                             <span class="badge bg-secondary">@Localizer["No"]</span>
                         }
                     </td>
-                    <td class="text-muted">@string.Join(", ", u.FixedRooms)</td>
+                    <td class="text-muted">@u.DispatchCenterId</td>
                     <td>
                         <form method="post" asp-page-handler="ToggleEnabled" class="d-inline">
                             <input type="hidden" name="userName" value="@u.UserName" />
@@ -45,7 +45,7 @@
                                 @(u.Enabled ? Localizer["Disable"] : Localizer["Enable"])
                             </button>
                         </form>
-                        <a asp-page="AssignRooms" asp-route-userName="@u.UserName" class="btn btn-sm btn-outline-primary">@Localizer["AssignRooms"]</a>
+                        <a asp-page="AssignDispatchCenter" asp-route-userName="@u.UserName" class="btn btn-sm btn-outline-primary">@Localizer["AssignDispatchCenter"]</a>
                     </td>
                 </tr>
             }

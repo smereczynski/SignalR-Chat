@@ -602,18 +602,18 @@ public static class TestUsers
 }
 ```
 
-### Fixed Rooms
+### Pair Room Test Fixtures
 
-Tests use predefined rooms:
+Tests may use synthetic room names when exercising generic message or translation behavior:
 ```csharp
 public static class TestRooms
 {
-    public const string General = "general";
-    public const string Tech = "tech";
-    public const string Random = "random";
-    public const string Sports = "sports";
+    public const string PairAlphaBeta = "pair:dc-alpha::dc-beta";
+    public const string PairNorthSouth = "pair:dc-north::dc-south";
 }
 ```
+
+Current product behavior is still dispatch-center based. Legacy standard-room names are useful only as isolated test fixture values, not as product configuration.
 
 ### Test OTP Codes
 

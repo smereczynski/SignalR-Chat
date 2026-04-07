@@ -11,10 +11,14 @@ namespace Chat.Web.ViewModels
         public int Id { get; set; }
 
         [Required]
-    // Minimum length lowered from 5 -> 2 to allow seeded short room names like "ops".
-    [StringLength(100, ErrorMessageResourceName = "ValidationRoomNameLength", ErrorMessageResourceType = typeof(Resources.SharedResources), MinimumLength = 2)]
-        [RegularExpression(@"^\w+( \w+)*$", ErrorMessageResourceName = "ValidationRoomNamePattern", ErrorMessageResourceType = typeof(Resources.SharedResources))]
+        [StringLength(100, ErrorMessageResourceName = "ValidationRoomNameLength", ErrorMessageResourceType = typeof(Resources.SharedResources), MinimumLength = 2)]
         public string Name { get; set; }
+
+        public string DisplayName { get; set; }
+        public string PairKey { get; set; }
+        public string DispatchCenterAId { get; set; }
+        public string DispatchCenterBId { get; set; }
+        public bool IsActive { get; set; } = true;
 
         /// <summary>
         /// Language codes enabled for this room (e.g., "en", "pl").

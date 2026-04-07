@@ -12,8 +12,10 @@ using Chat.Web.ViewModels;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
-using System.Text.Json;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
+using Chat.Web.Services;
+using Microsoft.Extensions.Options;
 
 namespace Chat.Web.Controllers
 {
@@ -32,9 +34,7 @@ namespace Chat.Web.Controllers
         private readonly IUsersRepository _users;
         private readonly IHubContext<ChatHub> _hubContext;
         private readonly ILogger<MessagesController> _logger;
-        private readonly IConfiguration _configuration;
-        private readonly Services.ITranslationJobQueue _translationQueue;
-        private readonly Microsoft.Extensions.Options.IOptions<Options.TranslationOptions> _translationOptions;
+        private readonly EscalationService _escalations;
 
         /// <summary>
         /// DI constructor for messages API.
@@ -44,34 +44,14 @@ namespace Chat.Web.Controllers
             IUsersRepository users,
             IHubContext<ChatHub> hubContext,
             ILogger<MessagesController> logger,
-            Services.ITranslationJobQueue translationQueue,
-            Microsoft.Extensions.Options.IOptions<Options.TranslationOptions> translationOptions)
+            EscalationService escalations)
         {
             _messages = messages;
             _rooms = rooms;
             _users = users;
             _hubContext = hubContext;
             _logger = logger;
-            _configuration = null; // Removed IConfiguration dependency
-            _translationQueue = translationQueue;
-            _translationOptions = translationOptions;
-        }
-
-        private bool UseManualSerialization => false; // Always false - use normal JSON serialization
-
-        private ContentResult ManualJson(object obj, int statusCode = StatusCodes.Status200OK, string location = null)
-        {
-            var json = JsonSerializer.Serialize(obj, new JsonSerializerOptions
-            {
-                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                WriteIndented = false
-            });
-            if (!string.IsNullOrEmpty(location))
-            {
-                Response.Headers["Location"] = location;
-            }
-            Response.StatusCode = statusCode;
-            return Content(json, "application/json");
+            _escalations = escalations;
         }
 
         /// <summary>
@@ -83,6 +63,14 @@ namespace Chat.Web.Controllers
             var message = await _messages.GetByIdAsync(id);
             if (message == null)
                 return NotFound();
+            var user = await _users.GetByUserNameAsync(User?.Identity?.Name);
+            var room = await _rooms.GetByNameAsync(message.ToRoom?.Name);
+            if (!RoomAccessPolicy.CanAccessRoom(user, room))
+            {
+                return Forbid();
+            }
+
+            message.ToRoom = room;
 
             var vm = new MessageViewModel
             {
@@ -91,9 +79,13 @@ namespace Chat.Web.Controllers
                 FromUserName = message.FromUser?.UserName,
                 FromFullName = message.FromUser?.FullName,
                 Avatar = message.FromUser?.Avatar,
+                FromDispatchCenterId = message.FromDispatchCenterId,
                 Room = message.ToRoom?.Name,
                 Timestamp = message.Timestamp,
                 ReadBy = message.ReadBy != null ? message.ReadBy.ToArray() : Array.Empty<string>(),
+                ReadByDispatchCenterIds = message.ReadByDispatchCenterIds != null ? message.ReadByDispatchCenterIds.ToArray() : Array.Empty<string>(),
+                EscalationStatus = message.EscalationStatus.ToString(),
+                OpenEscalationId = message.OpenEscalationId,
                 TranslationStatus = message.TranslationStatus.ToString(),
                 SourceLanguage = Chat.Web.Utilities.LanguageCode.NormalizeToLanguageCode(message.FromUser?.PreferredLanguage, allowAuto: true) ?? "auto",
                 Translations = message.Translations ?? new System.Collections.Generic.Dictionary<string, string>(),
@@ -111,8 +103,9 @@ namespace Chat.Web.Controllers
             if (take <= 0) take = 1;
             if (take > 100) take = 100; // cap
             var room = await _rooms.GetByNameAsync(roomName);
-            if (room == null)
-                return BadRequest();
+            var user = await _users.GetByUserNameAsync(User?.Identity?.Name);
+            if (!RoomAccessPolicy.CanAccessRoom(user, room))
+                return Forbid();
 
             IEnumerable<Message> source = before.HasValue
                 ? await _messages.GetBeforeByRoomAsync(room.Name, before.Value, take)
@@ -125,18 +118,18 @@ namespace Chat.Web.Controllers
                 FromUserName = m.FromUser?.UserName,
                 FromFullName = m.FromUser?.FullName,
                 Avatar = m.FromUser?.Avatar,
+                FromDispatchCenterId = m.FromDispatchCenterId,
                 Room = room.Name,
                 Timestamp = m.Timestamp,
                 ReadBy = m.ReadBy != null ? m.ReadBy.ToArray() : Array.Empty<string>(),
+                ReadByDispatchCenterIds = m.ReadByDispatchCenterIds != null ? m.ReadByDispatchCenterIds.ToArray() : Array.Empty<string>(),
+                EscalationStatus = m.EscalationStatus.ToString(),
+                OpenEscalationId = m.OpenEscalationId,
                 TranslationStatus = m.TranslationStatus.ToString(),
                 SourceLanguage = Chat.Web.Utilities.LanguageCode.NormalizeToLanguageCode(m.FromUser?.PreferredLanguage, allowAuto: true) ?? "auto",
                 Translations = m.Translations ?? new System.Collections.Generic.Dictionary<string, string>(),
                 IsTranslated = m.IsTranslated
             });
-            if (UseManualSerialization)
-            {
-                return ManualJson(items);
-            }
             return Ok(items);
         }
 
@@ -154,10 +147,10 @@ namespace Chat.Web.Controllers
         [HttpPost]
         public async Task<IActionResult> Post([FromBody] CreateMessageDto dto,
             [FromServices] Services.IInProcessMetrics metrics,
-            [FromServices] Services.UnreadNotificationScheduler unreadScheduler)
+            [FromServices] IConfiguration configuration,
+            [FromServices] Microsoft.Extensions.Hosting.IHostEnvironment environment)
         {
-            // Feature flag: disable REST creation path unless explicitly enabled (tests / emergency fallback)
-            var enabled = _configuration != null && string.Equals(_configuration["Features:EnableRestPostMessages"], "true", StringComparison.OrdinalIgnoreCase);
+            var enabled = environment.IsDevelopment() || configuration.GetValue<bool>("Messages:EnableRestCreate");
             if (!enabled)
             {
                 return NotFound(); // Pretend endpoint absent in production
@@ -169,12 +162,13 @@ namespace Chat.Web.Controllers
             if (room == null)
                 return NotFound();
 
-            // Basic authz: ensure user profile allows this room when FixedRooms is defined.
             var user = await _users.GetByUserNameAsync(User?.Identity?.Name);
-            if (user?.FixedRooms != null && user.FixedRooms.Any() && !user.FixedRooms.Contains(room.Name))
+            if (!RoomAccessPolicy.CanAccessRoom(user, room))
             {
                 return Forbid();
             }
+
+            var senderDispatchCenterId = RoomAccessPolicy.ResolveDispatchCenterIdForRoom(user, room);
 
             // Sanitize (strip tags) similar to hub path.
             var sanitized = Regex.Replace(dto.Content, @"<.*?>", string.Empty);
@@ -182,12 +176,14 @@ namespace Chat.Web.Controllers
             {
                 Content = sanitized,
                 FromUser = user,
+                FromDispatchCenterId = senderDispatchCenterId,
                 ToRoom = room,
                 Timestamp = DateTime.UtcNow
             };
             try
             {
                 message = await _messages.CreateAsync(message);
+                await _escalations.ScheduleAutomaticAsync(message);
             }
             catch (Exception ex)
             {
@@ -202,10 +198,14 @@ namespace Chat.Web.Controllers
                 FromUserName = message.FromUser?.UserName,
                 FromFullName = message.FromUser?.FullName,
                 Avatar = message.FromUser?.Avatar,
+                FromDispatchCenterId = message.FromDispatchCenterId,
                 Room = room.Name,
                 Timestamp = message.Timestamp,
                 CorrelationId = dto.CorrelationId,
                 ReadBy = message.ReadBy != null ? message.ReadBy.ToArray() : Array.Empty<string>(),
+                ReadByDispatchCenterIds = message.ReadByDispatchCenterIds != null ? message.ReadByDispatchCenterIds.ToArray() : Array.Empty<string>(),
+                EscalationStatus = message.EscalationStatus.ToString(),
+                OpenEscalationId = message.OpenEscalationId,
                 TranslationStatus = message.TranslationStatus.ToString(),
                 SourceLanguage = Chat.Web.Utilities.LanguageCode.NormalizeToLanguageCode(message.FromUser?.PreferredLanguage, allowAuto: true) ?? "auto",
                 Translations = message.Translations ?? new System.Collections.Generic.Dictionary<string, string>(),
@@ -214,20 +214,7 @@ namespace Chat.Web.Controllers
 
             // Fire-and-forget hub broadcast (do not block API latency on network fan-out)
             _ = _hubContext.Clients.Group(room.Name).SendAsync("newMessage", vm);
-            try
-            {
-                unreadScheduler?.Schedule(message);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Unread notification scheduling failed for message {Id} in room {Room}", message.Id, room.Name);
-            }
             metrics?.IncMessagesSent();
-
-            if (UseManualSerialization)
-            {
-                return ManualJson(vm, StatusCodes.Status201Created, $"/api/Messages/{vm.Id}");
-            }
             return Created($"/api/Messages/{vm.Id}", vm);
         }
 
@@ -237,11 +224,33 @@ namespace Chat.Web.Controllers
         [HttpPost("{id}/read")]
         public async Task<IActionResult> MarkRead(int id)
         {
-            var updated = await _messages.MarkReadAsync(id, User?.Identity?.Name);
+            var user = await _users.GetByUserNameAsync(User?.Identity?.Name);
+            if (user == null)
+            {
+                return Forbid();
+            }
+
+            var message = await _messages.GetByIdAsync(id);
+            var room = await _rooms.GetByNameAsync(message?.ToRoom?.Name);
+            if (!RoomAccessPolicy.CanAccessRoom(user, room))
+            {
+                return NotFound();
+            }
+
+            var readDispatchCenterId = RoomAccessPolicy.ResolveDispatchCenterIdForRoom(user, room);
+            user.DispatchCenterId = readDispatchCenterId;
+
+            var updated = await _messages.MarkReadAsync(id, user.UserName, readDispatchCenterId);
             if (updated == null) return NotFound();
+            await _escalations.ResolveIfAcknowledgedAsync(updated, user);
             // Fire-and-forget broadcast of readers list to the room
             _ = _hubContext.Clients.Group(updated.ToRoom?.Name ?? string.Empty)
-                .SendAsync("messageRead", new { id = updated.Id, readers = updated.ReadBy?.ToArray() ?? Array.Empty<string>() });
+                .SendAsync("messageRead", new
+                {
+                    id = updated.Id,
+                    readers = updated.ReadBy?.ToArray() ?? Array.Empty<string>(),
+                    readByDispatchCenterIds = updated.ReadByDispatchCenterIds?.ToArray() ?? Array.Empty<string>()
+                });
             return NoContent();
         }
 
@@ -250,13 +259,17 @@ namespace Chat.Web.Controllers
         /// Requires translation feature to be enabled and message to be in Failed state.
         /// </summary>
         [HttpPost("{id}/retry-translation")]
-        public async Task<IActionResult> RetryTranslation(int id)
+        public async Task<IActionResult> RetryTranslation(
+            int id,
+            [FromServices] ITranslationJobQueue translationQueue,
+            [FromServices] IOptions<Options.TranslationOptions> translationOptions)
         {
             using var activity = Observability.Tracing.ActivitySource.StartActivity("api.messages.retry-translation");
             activity?.SetTag("message.id", id);
+            var translationSettings = translationOptions.Value;
             
             // Check if translation is enabled
-            if (_translationOptions?.Value?.Enabled != true || _translationQueue == null)
+            if (!translationSettings.Enabled)
             {
                 return BadRequest(new { error = "Translation feature is not enabled" });
             }
@@ -265,9 +278,9 @@ namespace Chat.Web.Controllers
             if (message == null)
                 return NotFound(new { error = "Message not found" });
             
-            // Authorization: user must be in the same room
             var user = await _users.GetByUserNameAsync(User?.Identity?.Name);
-            if (user?.FixedRooms != null && user.FixedRooms.Any() && !user.FixedRooms.Contains(message.ToRoom?.Name))
+            var room = await _rooms.GetByNameAsync(message.ToRoom?.Name);
+            if (!RoomAccessPolicy.CanAccessRoom(user, room))
             {
                 return Forbid();
             }
@@ -278,7 +291,6 @@ namespace Chat.Web.Controllers
             var senderProfile = await _users.GetByUserNameAsync(message.FromUser?.UserName);
             var sourceLanguage = Chat.Web.Utilities.LanguageCode.NormalizeToLanguageCode(senderProfile?.PreferredLanguage) ?? "auto";
 
-            var room = await _rooms.GetByNameAsync(message.ToRoom?.Name);
             var targets = Chat.Web.Utilities.LanguageCode.BuildTargetLanguages(room?.Languages, sourceLanguage);
             
             // Create new job with high priority
@@ -289,14 +301,14 @@ namespace Chat.Web.Controllers
                 Content = message.Content,
                 SourceLanguage = sourceLanguage,
                 TargetLanguages = targets,
-                DeploymentName = _translationOptions.Value.DeploymentName,
+                DeploymentName = translationSettings.DeploymentName,
                 CreatedAt = DateTime.UtcNow,
                 RetryCount = 0,
                 Priority = 10, // High priority for manual retries
                 JobId = $"transjob:{message.Id}:{DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}"
             };
             
-            await _translationQueue.RequeueAsync(job, highPriority: true);
+            await translationQueue.RequeueAsync(job, highPriority: true);
             await _messages.UpdateTranslationAsync(
                 message.Id,
                 new MessageTranslationUpdate(
@@ -314,12 +326,58 @@ namespace Chat.Web.Controllers
                     status = "Pending",
                     timestamp = DateTime.UtcNow
                 });
-            
-            if (UseManualSerialization)
-            {
-                return ManualJson(new { success = true, jobId = job.JobId });
-            }
+
             return Ok(new { success = true, jobId = job.JobId });
+        }
+
+        public class CreateEscalationDto
+        {
+            public int[] MessageIds { get; set; } = Array.Empty<int>();
+        }
+
+        [HttpPost("/api/escalations")]
+        public async Task<IActionResult> Escalate([FromBody] CreateEscalationDto dto)
+        {
+            var user = await _users.GetByUserNameAsync(User?.Identity?.Name);
+            if (user == null)
+            {
+                return Forbid();
+            }
+
+            var messageIds = dto?.MessageIds ?? Array.Empty<int>();
+            if (messageIds.Length == 0)
+            {
+                return BadRequest(new { error = "At least one message must be selected." });
+            }
+
+            var firstMessage = await _messages.GetByIdAsync(messageIds[0]);
+            if (firstMessage?.ToRoom?.Name == null)
+            {
+                return NotFound();
+            }
+
+            var room = await _rooms.GetByNameAsync(firstMessage.ToRoom.Name);
+            var escalationDispatchCenterId = RoomAccessPolicy.ResolveDispatchCenterIdForRoom(user, room);
+            if (string.IsNullOrWhiteSpace(escalationDispatchCenterId))
+            {
+                return Forbid();
+            }
+
+            user.DispatchCenterId = escalationDispatchCenterId;
+
+            var escalation = await _escalations.CreateManualAsync(user, firstMessage.ToRoom.Name, messageIds);
+            if (escalation == null)
+            {
+                return BadRequest(new { error = "Escalation could not be created for the selected messages." });
+            }
+
+            return Ok(new
+            {
+                escalationId = escalation.Id,
+                status = escalation.Status.ToString(),
+                triggerType = escalation.TriggerType.ToString(),
+                messageIds = escalation.MessageIds.ToArray()
+            });
         }
     }
 }

@@ -5,6 +5,15 @@ using System.Threading.Tasks;
 
 namespace Chat.Web.Models
 {
+    public enum MessageEscalationStatus
+    {
+        None = 0,
+        Scheduled = 1,
+        Escalated = 2,
+        Resolved = 3,
+        Cancelled = 4
+    }
+
     /// <summary>
     /// Represents a chat message posted to a room (FromUser -> Room) with a server-side timestamp.
     /// Supports asynchronous translation with status tracking.
@@ -17,8 +26,12 @@ namespace Chat.Web.Models
         public ApplicationUser FromUser { get; set; }
         public int ToRoomId { get; set; }
         public Room ToRoom { get; set; }
+        public string FromDispatchCenterId { get; set; }
         // Users who have read this message (usernames)
         public ICollection<string> ReadBy { get; set; } = new List<string>();
+        public ICollection<string> ReadByDispatchCenterIds { get; set; } = new List<string>();
+        public MessageEscalationStatus EscalationStatus { get; set; } = MessageEscalationStatus.None;
+        public string OpenEscalationId { get; set; }
         
         /// <summary>
         /// Current translation status (None, Pending, InProgress, Completed, Failed).
