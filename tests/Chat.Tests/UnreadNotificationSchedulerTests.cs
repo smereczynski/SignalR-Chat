@@ -16,19 +16,6 @@ namespace Chat.Tests
 {
     public class UnreadNotificationSchedulerTests
     {
-        private class FakeNotificationSender : INotificationSender
-        {
-            public readonly ConcurrentBag<(string User, string Room, Message Msg)> Calls = new();
-            public readonly TaskCompletionSource<(string User, string Room, Message Msg)> FirstCall = new(TaskCreationOptions.RunContinuationsAsynchronously);
-            public Task NotifyAsync(ApplicationUser user, string roomName, Message message)
-            {
-                var entry = (user?.UserName ?? "", roomName, message);
-                Calls.Add(entry);
-                FirstCall.TrySetResult(entry);
-                return Task.CompletedTask;
-            }
-        }
-
         private class FakeOtpSender : IOtpSender
         {
             public readonly ConcurrentBag<(string UserNames, string Dest, string Body)> Calls = new();
@@ -88,10 +75,9 @@ namespace Chat.Tests
                 Timestamp = DateTime.UtcNow
             });
 
-            var fake = new FakeNotificationSender();
             var fakeOtp = new FakeOtpSender();
             var opts = Options.Create(new NotificationOptions { UnreadDelaySeconds = 1 });
-            var scheduler = new UnreadNotificationScheduler(rooms, users, messages, fake, fakeOtp, opts, NullLogger<UnreadNotificationScheduler>.Instance);
+            var scheduler = new UnreadNotificationScheduler(rooms, users, messages, fakeOtp, opts, NullLogger<UnreadNotificationScheduler>.Instance);
             try
             {
                 scheduler.Schedule(msg);
@@ -140,10 +126,9 @@ namespace Chat.Tests
                 Timestamp = DateTime.UtcNow
             });
 
-            var fake = new FakeNotificationSender();
             var fakeOtp = new FakeOtpSender();
             var opts = Options.Create(new NotificationOptions { UnreadDelaySeconds = 1 });
-            var scheduler = new UnreadNotificationScheduler(rooms, users, messages, fake, fakeOtp, opts, NullLogger<UnreadNotificationScheduler>.Instance);
+            var scheduler = new UnreadNotificationScheduler(rooms, users, messages, fakeOtp, opts, NullLogger<UnreadNotificationScheduler>.Instance);
             try
             {
                 scheduler.Schedule(msg);
@@ -152,7 +137,7 @@ namespace Chat.Tests
 
                 // Wait longer than delay and assert no notifications were sent
                 await Task.Delay(TimeSpan.FromMilliseconds(1300));
-                Assert.True(fake.Calls.IsEmpty, "No notifications should be sent when message is read");
+                Assert.True(fakeOtp.Calls.IsEmpty, "No notifications should be sent when message is read");
             }
             finally
             {
