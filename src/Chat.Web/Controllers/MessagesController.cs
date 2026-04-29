@@ -29,6 +29,8 @@ namespace Chat.Web.Controllers
     /// </summary>
     public class MessagesController : ControllerBase
     {
+        private static readonly Regex StripTagsRegex = new Regex(@"<.*?>", RegexOptions.Compiled, TimeSpan.FromMilliseconds(500));
+
         private readonly IMessagesRepository _messages;
         private readonly IRoomsRepository _rooms;
         private readonly IUsersRepository _users;
@@ -171,7 +173,7 @@ namespace Chat.Web.Controllers
             var senderDispatchCenterId = RoomAccessPolicy.ResolveDispatchCenterIdForRoom(user, room);
 
             // Sanitize (strip tags) similar to hub path.
-            var sanitized = Regex.Replace(dto.Content, @"<.*?>", string.Empty);
+            var sanitized = StripTagsRegex.Replace(dto.Content, string.Empty);
             var message = new Message
             {
                 Content = sanitized,

@@ -25,6 +25,7 @@ namespace Chat.Web.Hubs
     {
         // Track active connection counts per user to avoid removing presence when alternate connections remain
         private static readonly ConcurrentDictionary<string, int> _UserConnectionCounts = new ConcurrentDictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        private static readonly Regex StripTagsRegex = new Regex(@"<.*?>", RegexOptions.Compiled, TimeSpan.FromMilliseconds(500));
 
     private readonly Repositories.IUsersRepository _users;
     private readonly Repositories.IMessagesRepository _messages;
@@ -405,7 +406,7 @@ namespace Chat.Web.Hubs
             }
             var senderDispatchCenterId = Services.RoomAccessPolicy.ResolveDispatchCenterIdForRoom(domainUser, room);
             // Basic sanitization (strip tags)
-            var sanitized = System.Text.RegularExpressions.Regex.Replace(content, @"<.*?>", string.Empty);
+            var sanitized = StripTagsRegex.Replace(content, string.Empty);
             activity?.SetTag("chat.room", room.Name);
             activity?.SetTag("chat.sanitized.length", sanitized.Length);
             var msg = new Models.Message
