@@ -9,27 +9,26 @@ namespace Chat.Web.Services
 {
     public class EscalationBackgroundService : BackgroundService
     {
-        private readonly IServiceProvider _serviceProvider;
+        private readonly IServiceScopeFactory _scopeFactory;
         private readonly ILogger<EscalationBackgroundService> _logger;
-        private EscalationService _escalations;
 
-        public EscalationBackgroundService(IServiceProvider serviceProvider, ILogger<EscalationBackgroundService> logger)
+        public EscalationBackgroundService(IServiceScopeFactory scopeFactory, ILogger<EscalationBackgroundService> logger)
         {
-            _serviceProvider = serviceProvider;
+            _scopeFactory = scopeFactory;
             _logger = logger;
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            // Resolve lazily so Cosmos-backed repositories are available after initialization.
-            _escalations = _serviceProvider.GetRequiredService<EscalationService>();
             _logger.LogInformation("EscalationBackgroundService started");
 
             while (!stoppingToken.IsCancellationRequested)
             {
                 try
                 {
-                    await _escalations.ProcessDueScheduledAsync(stoppingToken).ConfigureAwait(false);
+                    using var scope = _scopeFactory.CreateScope();
+                    var escalations = scope.ServiceProvider.GetRequiredService<EscalationService>();
+                    await escalations.ProcessDueScheduledAsync(stoppingToken).ConfigureAwait(false);
                     await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)

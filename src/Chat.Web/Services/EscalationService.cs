@@ -112,6 +112,7 @@ namespace Chat.Web.Services
                 return null;
             }
 
+            var counterpartId = DispatchCenterPairing.GetCounterpartDispatchCenterId(room, user.DispatchCenterId);
             var messages = new List<Message>();
             foreach (var id in ids)
             {
@@ -126,13 +127,12 @@ namespace Chat.Web.Services
                     return null;
                 }
 
-                var targetDispatchCenterId = DispatchCenterPairing.GetCounterpartDispatchCenterId(room, user.DispatchCenterId);
-                if ((message.ReadByDispatchCenterIds ?? Array.Empty<string>()).Contains(targetDispatchCenterId, StringComparer.OrdinalIgnoreCase))
+                if ((message.ReadByDispatchCenterIds ?? Array.Empty<string>()).Contains(counterpartId, StringComparer.OrdinalIgnoreCase))
                 {
                     return null;
                 }
 
-                var openEscalation = await _escalations.GetOpenByMessageIdAsync(message.Id).ConfigureAwait(false);
+                var openEscalation = await _escalations.GetOpenByMessageIdAsync(message.Id, room.Name).ConfigureAwait(false);
                 if (openEscalation != null)
                 {
                     return null;
@@ -141,7 +141,6 @@ namespace Chat.Web.Services
                 messages.Add(message);
             }
 
-            var counterpartId = DispatchCenterPairing.GetCounterpartDispatchCenterId(room, user.DispatchCenterId);
             var counterpart = await _dispatchCenters.GetByIdAsync(counterpartId).ConfigureAwait(false);
             var counterpartOfficerUserNames = counterpart?.OfficerUserNames?
                 .Where(x => !string.IsNullOrWhiteSpace(x))
@@ -180,10 +179,9 @@ namespace Chat.Web.Services
             };
 
             await _escalations.CreateAsync(escalation).ConfigureAwait(false);
-            foreach (var message in messages)
-            {
-                await _messages.UpdateEscalationAsync(message.Id, MessageEscalationStatus.Escalated, escalation.Id).ConfigureAwait(false);
-            }
+            await Task.WhenAll(messages.Select(m =>
+                _messages.UpdateEscalationAsync(m.Id, MessageEscalationStatus.Escalated, escalation.Id)))
+                .ConfigureAwait(false);
 
             await PublishEscalationChangedAsync(escalation, room, messages.First()).ConfigureAwait(false);
             return escalation;
@@ -203,7 +201,7 @@ namespace Chat.Web.Services
 
             var escalation = !string.IsNullOrWhiteSpace(message.OpenEscalationId)
                 ? await _escalations.GetByIdAsync(message.OpenEscalationId, message.ToRoom?.Name).ConfigureAwait(false)
-                : await _escalations.GetOpenByMessageIdAsync(message.Id).ConfigureAwait(false);
+                : await _escalations.GetOpenByMessageIdAsync(message.Id, message.ToRoom?.Name).ConfigureAwait(false);
             if (escalation == null || escalation.Status == Models.EscalationStatus.Resolved)
             {
                 return;
@@ -214,10 +212,9 @@ namespace Chat.Web.Services
             escalation.CancelledAt = null;
             await _escalations.UpsertAsync(escalation).ConfigureAwait(false);
 
-            foreach (var messageId in escalation.MessageIds)
-            {
-                await _messages.UpdateEscalationAsync(messageId, MessageEscalationStatus.Resolved, null).ConfigureAwait(false);
-            }
+            await Task.WhenAll(escalation.MessageIds.Select(id =>
+                _messages.UpdateEscalationAsync(id, MessageEscalationStatus.Resolved, null)))
+                .ConfigureAwait(false);
 
             var room = await _rooms.GetByNameAsync(escalation.RoomName).ConfigureAwait(false);
             if (room != null)
@@ -247,15 +244,8 @@ namespace Chat.Web.Services
                     continue;
                 }
 
-                var messages = new List<Message>();
-                foreach (var messageId in escalation.MessageIds)
-                {
-                    var message = await _messages.GetByIdAsync(messageId).ConfigureAwait(false);
-                    if (message != null)
-                    {
-                        messages.Add(message);
-                    }
-                }
+                var fetched = await Task.WhenAll(escalation.MessageIds.Select(id => _messages.GetByIdAsync(id))).ConfigureAwait(false);
+                var messages = fetched.Where(m => m != null).ToList();
 
                 var acknowledged = messages.Any(x =>
                     (x.ReadByDispatchCenterIds ?? Array.Empty<string>())
@@ -267,10 +257,9 @@ namespace Chat.Web.Services
                     escalation.ResolvedAt = DateTime.UtcNow;
                     await _escalations.UpsertAsync(escalation).ConfigureAwait(false);
 
-                    foreach (var messageId in escalation.MessageIds)
-                    {
-                        await _messages.UpdateEscalationAsync(messageId, MessageEscalationStatus.Resolved, null).ConfigureAwait(false);
-                    }
+                    await Task.WhenAll(escalation.MessageIds.Select(id =>
+                        _messages.UpdateEscalationAsync(id, MessageEscalationStatus.Resolved, null)))
+                        .ConfigureAwait(false);
 
                     continue;
                 }
@@ -279,10 +268,9 @@ namespace Chat.Web.Services
                 escalation.EscalatedAt = DateTime.UtcNow;
                 await _escalations.UpsertAsync(escalation).ConfigureAwait(false);
 
-                foreach (var messageId in escalation.MessageIds)
-                {
-                    await _messages.UpdateEscalationAsync(messageId, MessageEscalationStatus.Escalated, escalation.Id).ConfigureAwait(false);
-                }
+                await Task.WhenAll(escalation.MessageIds.Select(id =>
+                    _messages.UpdateEscalationAsync(id, MessageEscalationStatus.Escalated, escalation.Id)))
+                    .ConfigureAwait(false);
 
                 var referenceMessage = messages.FirstOrDefault();
                 if (referenceMessage != null)
@@ -309,14 +297,11 @@ namespace Chat.Web.Services
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList()
                 ?? new List<string>();
-            foreach (var officerUserName in officerUserNames)
-            {
-                var officer = await _users.GetByUserNameAsync(officerUserName).ConfigureAwait(false);
-                if (officer != null)
-                {
-                    await _notifications.NotifyAsync(officer, room.DisplayName ?? room.Name, referenceMessage).ConfigureAwait(false);
-                }
-            }
+            var officers = await Task.WhenAll(officerUserNames.Select(u => _users.GetByUserNameAsync(u))).ConfigureAwait(false);
+            await Task.WhenAll(officers
+                .Where(o => o != null)
+                .Select(o => _notifications.NotifyAsync(o, room.DisplayName ?? room.Name, referenceMessage)))
+                .ConfigureAwait(false);
 
             _logger.LogInformation(
                 "Escalation {EscalationId} transitioned to {Status} for room {Room}",

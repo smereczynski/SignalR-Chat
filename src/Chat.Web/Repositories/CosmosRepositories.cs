@@ -1168,14 +1168,17 @@ namespace Chat.Web.Repositories
             return await CosmosQueryHelper.ExecutePaginatedQueryAsync(q, MapEscalation, activity, _logger, "cosmos.escalations.duescheduled").ConfigureAwait(false);
         }
 
-        public async Task<Escalation> GetOpenByMessageIdAsync(int messageId)
+        public async Task<Escalation> GetOpenByMessageIdAsync(int messageId, string roomName = null)
         {
             using var activity = Tracing.ActivitySource.StartActivity("cosmos.escalations.openbymessage", ActivityKind.Client);
-            var q = _escalations.GetItemQueryIterator<EscalationDoc>(
-                new QueryDefinition("SELECT TOP 1 * FROM c WHERE ARRAY_CONTAINS(c.messageIds, @messageId) AND (c.status = @scheduled OR c.status = @escalated)")
-                    .WithParameter("@messageId", messageId)
-                    .WithParameter("@scheduled", Models.EscalationStatus.Scheduled.ToString())
-                    .WithParameter("@escalated", Models.EscalationStatus.Escalated.ToString()));
+            var queryDef = new QueryDefinition("SELECT TOP 1 * FROM c WHERE ARRAY_CONTAINS(c.messageIds, @messageId) AND (c.status = @scheduled OR c.status = @escalated)")
+                .WithParameter("@messageId", messageId)
+                .WithParameter("@scheduled", Models.EscalationStatus.Scheduled.ToString())
+                .WithParameter("@escalated", Models.EscalationStatus.Escalated.ToString());
+            var requestOptions = !string.IsNullOrWhiteSpace(roomName)
+                ? new QueryRequestOptions { PartitionKey = new PartitionKey(roomName) }
+                : null;
+            var q = _escalations.GetItemQueryIterator<EscalationDoc>(queryDef, requestOptions: requestOptions);
             return await CosmosQueryHelper.ExecuteSingleResultQueryAsync(q, MapEscalation, activity, _logger, "cosmos.escalations.openbymessage").ConfigureAwait(false);
         }
 

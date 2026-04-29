@@ -260,7 +260,7 @@ namespace Chat.Web.Repositories
             return Task.FromResult<IEnumerable<Escalation>>(items);
         }
 
-        public Task<Escalation> GetOpenByMessageIdAsync(int messageId)
+        public Task<Escalation> GetOpenByMessageIdAsync(int messageId, string roomName = null)
         {
             var escalation = _escalations.Values
                 .FirstOrDefault(x =>
