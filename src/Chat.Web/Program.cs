@@ -140,7 +140,7 @@ namespace Chat.Web
             }
             finally
             {
-                Log.CloseAndFlush();
+                await Log.CloseAndFlushAsync().ConfigureAwait(false);
             }
         }
 

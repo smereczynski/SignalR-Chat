@@ -256,7 +256,7 @@ namespace Chat.Web.Hubs
                         .ToList();
                     if (accessibleRooms.Any())
                     {
-                        var target = accessibleRooms.First().Name;
+                        var target = accessibleRooms[0].Name;
                         Tracing.ActivitySource.StartActivity("autoJoin.firstAccessiblePair")?.Dispose();
                         await Join(target);
                     }

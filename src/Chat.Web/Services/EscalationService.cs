@@ -183,7 +183,7 @@ namespace Chat.Web.Services
                 _messages.UpdateEscalationAsync(m.Id, MessageEscalationStatus.Escalated, escalation.Id)))
                 .ConfigureAwait(false);
 
-            await PublishEscalationChangedAsync(escalation, room, messages.First()).ConfigureAwait(false);
+            await PublishEscalationChangedAsync(escalation, room, messages[0]).ConfigureAwait(false);
             return escalation;
         }
 
