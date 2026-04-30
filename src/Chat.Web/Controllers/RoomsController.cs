@@ -82,7 +82,11 @@ namespace Chat.Web.Controllers
 
             if (rooms.Count == 0)
             {
-                Response.Headers[EmptyStateReasonHeader] = await DetermineEmptyStateReasonAsync(profile, candidateRooms).ConfigureAwait(false);
+                // For diagnostics we need all rooms including inactive ones (candidateRooms only has active rooms).
+                var diagnosticRooms = string.IsNullOrWhiteSpace(profile.DispatchCenterId)
+                    ? candidateRooms
+                    : (await _rooms.GetAllAsync()).ToList();
+                Response.Headers[EmptyStateReasonHeader] = await DetermineEmptyStateReasonAsync(profile, diagnosticRooms).ConfigureAwait(false);
             }
 
             var json = JsonSerializer.Serialize(rooms, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });

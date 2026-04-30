@@ -105,6 +105,8 @@ namespace Chat.Web.Controllers
             if (take <= 0) take = 1;
             if (take > 100) take = 100; // cap
             var room = await _rooms.GetByNameAsync(roomName);
+            if (room == null)
+                return NotFound();
             var user = await _users.GetByUserNameAsync(User?.Identity?.Name);
             if (!RoomAccessPolicy.CanAccessRoom(user, room))
                 return Forbid();

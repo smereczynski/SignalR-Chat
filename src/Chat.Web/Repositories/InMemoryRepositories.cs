@@ -265,7 +265,8 @@ namespace Chat.Web.Repositories
             var escalation = _escalations.Values
                 .FirstOrDefault(x =>
                     (x.Status == Models.EscalationStatus.Scheduled || x.Status == Models.EscalationStatus.Escalated) &&
-                    (x.MessageIds?.Contains(messageId) ?? false));
+                    (x.MessageIds?.Contains(messageId) ?? false) &&
+                    (string.IsNullOrWhiteSpace(roomName) || string.Equals(x.RoomName, roomName, StringComparison.OrdinalIgnoreCase)));
             return Task.FromResult(escalation);
         }
 
