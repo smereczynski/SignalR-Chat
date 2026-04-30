@@ -422,3 +422,6 @@ infra/bicep/**/*.json
 
 ## MCP
 .github/instructions/sonarqube_mcp.instructions.md
+
+# Agents
+CLAUDE.md
