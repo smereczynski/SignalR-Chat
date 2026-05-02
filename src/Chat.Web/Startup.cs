@@ -412,7 +412,9 @@ namespace Chat.Web
                         logger.LogError(ex, "Failed to connect to Redis. Endpoints: {Endpoints}, SSL: {UseSsl}",
                             string.Join(", ", redisConfig.EndPoints.Select(ep => ep.ToString())),
                             redisConfig.Ssl);
-                        throw;
+                        throw new InvalidOperationException(
+                            $"Failed to connect to Redis using endpoints '{string.Join(", ", redisConfig.EndPoints.Select(ep => ep.ToString()))}'.",
+                            ex);
                     }
                 });
                 services.AddSingleton<IOtpStore, RedisOtpStore>();
@@ -684,7 +686,7 @@ namespace Chat.Web
                                 OnTokenValidated = async context =>
                                 {
                                     var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Startup>>();
-                                    logger.LogWarning("===== OnTokenValidated START =====");
+                                    logger.LogDebug("OnTokenValidated started");
                                     
                                     var usersRepo = context.HttpContext.RequestServices.GetRequiredService<IUsersRepository>();
                                     
@@ -697,7 +699,7 @@ namespace Chat.Web
                                     var country = context.Principal?.FindFirst("country")?.Value;
                                     var region = context.Principal?.FindFirst("state")?.Value;
                                     
-                                    logger.LogWarning("===== OnTokenValidated: Extracted UPN={Upn}, TenantId={TenantId} =====", upn ?? "<null>", tenantId ?? "<null>");
+                                    logger.LogDebug("OnTokenValidated: Extracted UPN={Upn}, TenantId={TenantId}", upn ?? "<null>", tenantId ?? "<null>");
 
                                     // Fallback: derive tenantId from issuer when tid claim missing (some account types / older tokens)
                                     if (string.IsNullOrWhiteSpace(tenantId))

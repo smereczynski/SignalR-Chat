@@ -224,37 +224,8 @@ namespace Chat.Web.Services
                         continue;
                     }
 
-                    var orderedIds = pairKey.Split("::", StringSplitOptions.None);
-                    var leftCenter = centerById[orderedIds[0]];
-                    var rightCenter = centerById[orderedIds[1]];
-                    var roomUsers = allUsers
-                        .Where(x =>
-                            string.Equals(x.DispatchCenterId, leftCenter.Id, StringComparison.OrdinalIgnoreCase) ||
-                            string.Equals(x.DispatchCenterId, rightCenter.Id, StringComparison.OrdinalIgnoreCase))
-                        .Select(x => x.UserName)
-                        .Where(x => !string.IsNullOrWhiteSpace(x))
-                        .Distinct(StringComparer.OrdinalIgnoreCase)
-                        .ToList();
-                    var roomLanguages = allUsers
-                        .Where(x =>
-                            string.Equals(x.DispatchCenterId, leftCenter.Id, StringComparison.OrdinalIgnoreCase) ||
-                            string.Equals(x.DispatchCenterId, rightCenter.Id, StringComparison.OrdinalIgnoreCase))
-                        .Select(x => LanguageCode.NormalizeToLanguageCode(x.PreferredLanguage))
-                        .Where(x => !string.IsNullOrWhiteSpace(x))
-                        .Distinct(StringComparer.OrdinalIgnoreCase)
-                        .ToList();
-
-                    var room = allRooms.FirstOrDefault(x => string.Equals(x.PairKey, pairKey, StringComparison.OrdinalIgnoreCase))
-                        ?? new Room();
-                    room.Name = DispatchCenterPairing.BuildRoomName(pairKey);
-                    room.DisplayName = DispatchCenterPairing.BuildRoomDisplayName(leftCenter, rightCenter);
-                    room.RoomType = RoomType.DispatchCenterPair;
-                    room.PairKey = pairKey;
-                    room.DispatchCenterAId = leftCenter.Id;
-                    room.DispatchCenterBId = rightCenter.Id;
-                    room.IsActive = (leftCenter.OfficerUserNames?.Count ?? 0) > 0 && (rightCenter.OfficerUserNames?.Count ?? 0) > 0;
-                    room.Users = roomUsers;
-                    room.Languages = roomLanguages;
+                    var (leftCenter, rightCenter) = ResolveOrderedCenters(pairKey, centerById);
+                    var room = BuildPairRoom(pairKey, leftCenter, rightCenter, allUsers, allRooms);
 
                     await _rooms.UpsertAsync(room).ConfigureAwait(false);
                 }
@@ -271,6 +242,59 @@ namespace Chat.Web.Services
                 await _rooms.UpsertAsync(room).ConfigureAwait(false);
                 _logger.LogInformation("Archived pair room {Room}", LogSanitizer.Sanitize(room.Name));
             }
+        }
+
+        private static (DispatchCenter LeftCenter, DispatchCenter RightCenter) ResolveOrderedCenters(
+            string pairKey,
+            IReadOnlyDictionary<string, DispatchCenter> centerById)
+        {
+            var orderedIds = pairKey.Split("::", StringSplitOptions.None);
+            return (centerById[orderedIds[0]], centerById[orderedIds[1]]);
+        }
+
+        private static Room BuildPairRoom(
+            string pairKey,
+            DispatchCenter leftCenter,
+            DispatchCenter rightCenter,
+            IEnumerable<ApplicationUser> allUsers,
+            IEnumerable<Room> allRooms)
+        {
+            var room = allRooms.FirstOrDefault(x => string.Equals(x.PairKey, pairKey, StringComparison.OrdinalIgnoreCase))
+                ?? new Room();
+            room.Name = DispatchCenterPairing.BuildRoomName(pairKey);
+            room.DisplayName = DispatchCenterPairing.BuildRoomDisplayName(leftCenter, rightCenter);
+            room.RoomType = RoomType.DispatchCenterPair;
+            room.PairKey = pairKey;
+            room.DispatchCenterAId = leftCenter.Id;
+            room.DispatchCenterBId = rightCenter.Id;
+            room.IsActive = (leftCenter.OfficerUserNames?.Count ?? 0) > 0 && (rightCenter.OfficerUserNames?.Count ?? 0) > 0;
+            room.Users = GetUsersForPairCenters(allUsers, leftCenter.Id, rightCenter.Id);
+            room.Languages = GetLanguagesForPairCenters(allUsers, leftCenter.Id, rightCenter.Id);
+            return room;
+        }
+
+        private static List<string> GetUsersForPairCenters(IEnumerable<ApplicationUser> allUsers, string leftCenterId, string rightCenterId)
+        {
+            return allUsers
+                .Where(x =>
+                    string.Equals(x.DispatchCenterId, leftCenterId, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(x.DispatchCenterId, rightCenterId, StringComparison.OrdinalIgnoreCase))
+                .Select(x => x.UserName)
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        private static List<string> GetLanguagesForPairCenters(IEnumerable<ApplicationUser> allUsers, string leftCenterId, string rightCenterId)
+        {
+            return allUsers
+                .Where(x =>
+                    string.Equals(x.DispatchCenterId, leftCenterId, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(x.DispatchCenterId, rightCenterId, StringComparison.OrdinalIgnoreCase))
+                .Select(x => LanguageCode.NormalizeToLanguageCode(x.PreferredLanguage))
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
         }
     }
 }

@@ -228,7 +228,7 @@ namespace Chat.Web.Repositories
             {
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                 logger.LogError(ex, "{Operation} failed", operationName);
-                throw;
+                throw new InvalidOperationException($"Cosmos query failed during '{operationName}'.", ex);
             }
         }
 
@@ -263,7 +263,7 @@ namespace Chat.Web.Repositories
             {
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                 logger.LogError(ex, "{Operation} failed", operationName);
-                throw;
+                throw new InvalidOperationException($"Cosmos single-result query failed during '{operationName}'.", ex);
             }
         }
     }
@@ -394,7 +394,7 @@ namespace Chat.Web.Repositories
             {
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                 _logger.LogError(ex, "Cosmos user upsert failed {User}", LogSanitizer.Sanitize(user.UserName));
-                throw;
+                throw new InvalidOperationException($"Failed to upsert Cosmos user '{LogSanitizer.Sanitize(user.UserName)}'.", ex);
             }
         }
     }
@@ -699,7 +699,7 @@ namespace Chat.Web.Repositories
             {
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                 _logger.LogError(ex, "Cosmos message create failed {Room}", LogSanitizer.Sanitize(pk));
-                throw;
+                throw new InvalidOperationException($"Failed to create Cosmos message in room '{LogSanitizer.Sanitize(pk)}'.", ex);
             }
             return message;
         }
@@ -726,7 +726,7 @@ namespace Chat.Web.Repositories
             {
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                 _logger.LogError(ex, "Cosmos message delete failed {Id}", id); // id is integer; no sanitization needed
-                throw;
+                throw new InvalidOperationException($"Failed to delete Cosmos message with id '{id}'.", ex);
             }
         }
 
@@ -999,7 +999,7 @@ namespace Chat.Web.Repositories
             {
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                 _logger.LogError(ex, "Cosmos dispatch center upsert failed {DispatchCenterId}", LogSanitizer.Sanitize(dispatchCenter.Id));
-                throw;
+                throw new InvalidOperationException($"Failed to upsert dispatch center '{LogSanitizer.Sanitize(dispatchCenter.Id)}' in Cosmos DB.", ex);
             }
         }
 
@@ -1026,7 +1026,7 @@ namespace Chat.Web.Repositories
             {
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                 _logger.LogError(ex, "Cosmos dispatch center delete failed {DispatchCenterId}", LogSanitizer.Sanitize(id));
-                throw;
+                throw new InvalidOperationException($"Failed to delete dispatch center '{LogSanitizer.Sanitize(id)}' from Cosmos DB.", ex);
             }
         }
 
