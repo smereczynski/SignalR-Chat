@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
+using System.Security.Cryptography;
 using System.Threading.Tasks;
 using Microsoft.Azure.Cosmos;
 using Chat.Web.Models;
@@ -624,6 +625,9 @@ namespace Chat.Web.Repositories
     {
         private const string MessageIdTagName = "app.message.id";
         private const string SelectMessageByIdQuery = "SELECT TOP 1 * FROM c WHERE c.id = @id";
+        private const string SelectMessagesByRoomQuery = "SELECT * FROM c WHERE c.roomName = @n ORDER BY c.timestamp DESC";
+        private const string SelectMessagesBeforeByRoomQuery = "SELECT * FROM c WHERE c.roomName = @n AND c.timestamp < @b ORDER BY c.timestamp DESC";
+        private const int MaxRecentMessagesTake = 200;
         private readonly Container _messages;
         private readonly IRoomsRepository _roomsRepo;
         private readonly ILogger<CosmosMessagesRepository> _logger;
@@ -665,7 +669,7 @@ namespace Chat.Web.Repositories
             using var activity = Tracing.ActivitySource.StartActivity("cosmos.messages.create", ActivityKind.Client);
             var room = message.ToRoom ?? await _roomsRepo.GetByIdAsync(message.ToRoomId).ConfigureAwait(false);
             var pk = room?.Name ?? "global";
-            message.Id = message.Id == 0 ? new Random().Next(1, int.MaxValue) : message.Id;
+            message.Id = message.Id == 0 ? RandomNumberGenerator.GetInt32(1, int.MaxValue) : message.Id;
             var doc = new MessageDoc 
             { 
                 id = message.Id.ToString(), 
@@ -742,9 +746,12 @@ namespace Chat.Web.Repositories
         {
             using var activity = Tracing.ActivitySource.StartActivity("cosmos.messages.recent", ActivityKind.Client);
             activity?.SetTag("app.room", roomName);
-            var q = _messages.GetItemQueryIterator<MessageDoc>(new QueryDefinition($"SELECT TOP {take} * FROM c WHERE c.roomName = @n ORDER BY c.timestamp DESC").WithParameter("@n", roomName), requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey(roomName) });
+            var normalizedTake = NormalizeMessageQueryTake(take);
+            var q = _messages.GetItemQueryIterator<MessageDoc>(
+                new QueryDefinition(SelectMessagesByRoomQuery).WithParameter("@n", roomName),
+                requestOptions: CreateMessageQueryOptions(roomName, normalizedTake));
             var list = await CosmosQueryHelper.ExecutePaginatedQueryAsync(q, MapMessage, activity, _logger, "cosmos.messages.recent").ConfigureAwait(false);
-            return list.OrderBy(m => m.Timestamp).ToList();
+            return list.Take(normalizedTake).OrderBy(m => m.Timestamp).ToList();
         }
 
     public async Task<IEnumerable<Message>> GetBeforeByRoomAsync(string roomName, DateTime before, int take = 20)
@@ -752,15 +759,30 @@ namespace Chat.Web.Repositories
             using var activity = Tracing.ActivitySource.StartActivity("cosmos.messages.before", ActivityKind.Client);
             activity?.SetTag("app.room", roomName);
             activity?.SetTag("app.before", before);
+            var normalizedTake = NormalizeMessageQueryTake(take);
             // Query older messages strictly before provided timestamp
             var q = _messages.GetItemQueryIterator<MessageDoc>(
-                new QueryDefinition($"SELECT TOP {take} * FROM c WHERE c.roomName = @n AND c.timestamp < @b ORDER BY c.timestamp DESC")
+                new QueryDefinition(SelectMessagesBeforeByRoomQuery)
                     .WithParameter("@n", roomName)
                     .WithParameter("@b", before),
-                requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey(roomName) });
+                requestOptions: CreateMessageQueryOptions(roomName, normalizedTake));
             var list = await CosmosQueryHelper.ExecutePaginatedQueryAsync(q, MapMessage, activity, _logger, "cosmos.messages.before").ConfigureAwait(false);
             // Keep only the newest 'take' items and return ascending order
-            return list.OrderByDescending(m => m.Timestamp).Take(take).OrderBy(m => m.Timestamp).ToList();
+            return list.OrderByDescending(m => m.Timestamp).Take(normalizedTake).OrderBy(m => m.Timestamp).ToList();
+        }
+
+        private static int NormalizeMessageQueryTake(int take)
+        {
+            return Math.Clamp(take, 1, MaxRecentMessagesTake);
+        }
+
+        private static QueryRequestOptions CreateMessageQueryOptions(string roomName, int take)
+        {
+            return new QueryRequestOptions
+            {
+                PartitionKey = new PartitionKey(roomName),
+                MaxItemCount = take
+            };
         }
 
         public async Task<Message> MarkReadAsync(int id, string userName, string dispatchCenterId)
