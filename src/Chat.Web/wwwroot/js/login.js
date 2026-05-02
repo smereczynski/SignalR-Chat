@@ -32,7 +32,7 @@
       window.__otpFlow = window.__otpFlow || {};
       const flow = window.__otpFlow;
       const container = document.getElementById('otpContainer');
-      const resendDelayMs = parseInt(container?.getAttribute('data-otp-resend-delay-ms')||'300000',10);
+      const resendDelayMs = Number.parseInt(container?.getAttribute('data-otp-resend-delay-ms')||'300000',10);
       if (!isResend) {
         flow.firstSendAt = Date.now();
       } else {
@@ -52,9 +52,9 @@
       const sendBtn = document.getElementById('btn-send-otp');
       if (!isResend && sendBtn) sendBtn.disabled = true; if (isResend && resendBtn) resendBtn.disabled = true;
 
-      const rawTimeoutMs = parseInt(container?.getAttribute('data-otp-timeout-ms')||'29000',10);
+      const rawTimeoutMs = Number.parseInt(container?.getAttribute('data-otp-timeout-ms')||'29000',10);
       const countdownTotalMs = 30000;
-      const retryCooldownMs = parseInt(container?.getAttribute('data-otp-retry-cooldown-ms')||'5000',10);
+      const retryCooldownMs = Number.parseInt(container?.getAttribute('data-otp-retry-cooldown-ms')||'5000',10);
 
       if (indicator) {
         indicator.classList.remove('d-none','fade-hidden');
