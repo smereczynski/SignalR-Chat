@@ -2,7 +2,7 @@
 
 SignalR Chat supports **dual authentication modes**:
 - **Microsoft Entra ID (Azure AD)** - Enterprise single sign-on for organizational users
-- **OTP (One-Time Password)** - Fallback authentication for guest users or when Entra ID is unavailable
+- **OTP (One-Time Password)** - Fallback authentication for existing enabled application users when Entra ID is unavailable or denied
 
 Both methods use cookie-based authentication for session management.
 
@@ -26,7 +26,7 @@ Both methods use cookie-based authentication for session management.
 | Method | Use Case | User Experience | Security Features |
 |--------|----------|-----------------|-------------------|
 | **Entra ID** | Enterprise users | SSO (single sign-on), no OTP codes | OAuth 2.0/OIDC, tenant validation, UPN-based authorization |
-| **OTP** | Guest users, fallback | 6-digit code via SMS/email/console | Argon2id hashing, rate limiting, pepper |
+| **OTP** | Existing provisioned users, fallback | 6-digit code via SMS/email/console | Argon2id hashing, verification-attempt limits, auth endpoint rate limiting, pepper |
 
 ### Login Flow
 
@@ -55,7 +55,7 @@ flowchart TD
   P -->|true| Q[OTP sign-in available]
   P -->|false| R[Access denied]
 
-  I -->|OTP| S[POST /api/auth/start<br/>Issue OTP]
+  I -->|OTP| S[POST /api/auth/start<br/>Issue OTP for existing enabled user]
   S --> T[User enters code]
   T --> U[POST /api/auth/verify<br/>Verify OTP]
   U --> N
@@ -185,21 +185,23 @@ await usersRepo.Upsert(user);
 
 ### Overview
 
-Guest users or users without Entra ID access can authenticate using **One-Time Password (OTP)** codes.
+Users without Entra ID access can authenticate using **One-Time Password (OTP)** codes, but only if they already exist in the application user store and are enabled.
 
 **Key Features:**
 - **6-digit codes**: Sent via SMS, email, or console (local development)
 - **Argon2id hashing**: Memory-hard, pepper + salt protection
-- **Rate limiting**: 5 attempts per 15 minutes per user
+- **Verification-attempt limit**: Default 5 failed verification attempts per OTP lifetime window
+- **Request rate limiting**: Auth endpoints are also protected by a fixed-window HTTP rate limiter
 - **TTL**: Codes expire after 5 minutes
 - **Constant-time verification**: Prevents timing attacks
 
 ### OTP Flow
 
 1. **Request**: User enters username → POST `/api/auth/start`
+  - Username must resolve to an existing enabled user record
 2. **Code Generation**: Random 6-digit code (100000-999999)
-3. **Hashing**: `Argon2id(pepper || userName || salt || code)`
-4. **Storage**: Redis `otp:{user}` → `OtpHash:v2:argon2id:m=65536,t=4,p=4:{saltB64}:{hashB64}` (TTL: 300s)
+3. **Hashing**: `Argon2id(pepperBytes || userName || ':' || salt || ':' || code)`
+4. **Storage**: Redis `otp:{user}` -> `OtpHash:v2:argon2id:m={kb},t={it},p={par}:{saltB64}:{phcEncodedHash}` (TTL: 300s)
 5. **Delivery**: SMS/Email via Azure Communication Services (or console in dev)
 6. **Verification**: User enters code → POST `/api/auth/verify` → Argon2.Verify() with constant-time comparison
 
@@ -216,12 +218,13 @@ Guest users or users without Entra ID access can authenticate using **One-Time P
 - Exhaustive offline brute force of 6-digit code (~1,000,000 possibilities) if hash function is fast and unkeyed
 
 **Security Measures:**
-1. ✅ **Argon2id hashing**: Memory-hard KDF (64 MB, 4 iterations, 4 threads)
+1. ✅ **Argon2id hashing**: Memory-hard KDF (code defaults: 64 MB, 3 iterations, parallelism 1; configurable)
 2. ✅ **Pepper**: Server-side secret (`Otp__Pepper` environment variable)
 3. ✅ **Random salt**: 16 bytes per OTP
-4. ✅ **Rate limiting**: Max 5 verification attempts per 15 minutes
-5. ✅ **Constant-time comparison**: `Argon2.Verify()` built-in protection
-6. ✅ **No plaintext logging**: Codes never appear in logs
+4. ✅ **Attempt limiting**: Max 5 failed verification attempts per OTP lifetime by default
+5. ✅ **HTTP rate limiting**: Auth endpoints are also protected by the ASP.NET rate limiter
+6. ✅ **Constant-time comparison**: `Argon2.Verify()` built-in protection
+7. ✅ **No plaintext logging**: Codes never appear in logs
 
 ---
 
@@ -229,75 +232,72 @@ Guest users or users without Entra ID access can authenticate using **One-Time P
 
 ### Argon2id Configuration
 
-**Hash Format**: `OtpHash:v2:argon2id:m=65536,t=4,p=4:{saltB64}:{hashB64}`
+**Hash Format**: `OtpHash:v2:argon2id:m={kb},t={it},p={par}:{saltB64}:{phcEncodedHash}`
 
-**Parameters**:
+**Code Defaults**:
 - **Memory**: 64 MB (65536 KB)
-- **Iterations**: 4
-- **Parallelism**: 4 threads
+- **Iterations**: 3
+- **Parallelism**: 1
 - **Output**: 32 bytes
 - **Pepper**: Environment variable `Otp__Pepper` (Base64, 32+ bytes)
 - **Salt**: Random 16 bytes per OTP
+
+These values can be raised with `Otp__MemoryKB`, `Otp__Iterations`, and `Otp__Parallelism`.
 
 **Implementation** (`Argon2OtpHasher.cs`):
 ```csharp
 public string Hash(string userName, string code)
 {
-    // Generate random 16-byte salt
-    byte[] salt = RandomNumberGenerator.GetBytes(16);
-    
-    // Combine: pepper || userName || salt || code
-    string input = $"{_pepper}{userName}{Convert.ToBase64String(salt)}{code}";
-    byte[] inputBytes = Encoding.UTF8.GetBytes(input);
-    
-    // Hash with Argon2id
-    var config = new Argon2Config
+  var salt = RandomNumberGenerator.GetBytes(16);
+  var preimage = BuildPreimage(userName, code, salt);
+  var cfg = new Argon2Config
     {
-        Type = Argon2Type.DataIndependentAddressing,
-        Version = Argon2Version.Nineteen,
-        MemoryCost = 65536,  // 64 MB
-        TimeCost = 4,
-        Lanes = 4,
-        Threads = 4,
-        HashLength = 32,
+    Type = Argon2Type.HybridAddressing,
+    MemoryCost = Math.Max(8 * 1024, _options.MemoryKB),
+    TimeCost = Math.Max(1, _options.Iterations),
+    Lanes = Math.Max(1, _options.Parallelism),
+    Threads = Math.Max(1, _options.Parallelism),
+    HashLength = Math.Max(16, _options.OutputLength),
         Salt = salt,
-        Password = inputBytes
+    Password = preimage
     };
-    
-    using var argon2 = new Argon2(config);
-    using var hash = argon2.Hash();
-    
-    return $"OtpHash:v2:argon2id:m=65536,t=4,p=4:{Convert.ToBase64String(salt)}:{Convert.ToBase64String(hash.Buffer)}";
+
+  var encoded = Argon2.Hash(cfg);
+  return $"OtpHash:v2:argon2id:m={cfg.MemoryCost},t={cfg.TimeCost},p={cfg.Lanes}:{Convert.ToBase64String(salt)}:{encoded}";
 }
 ```
 
 **Verification** (constant-time):
 ```csharp
-public bool Verify(string userName, string code, string storedHash)
+public VerificationResult Verify(string userName, string code, string stored)
 {
-    // Parse: OtpHash:v2:argon2id:m=65536,t=4,p=4:{saltB64}:{hashB64}
-    var parts = storedHash.Split(':');
-    byte[] salt = Convert.FromBase64String(parts[5]);
-    byte[] expectedHash = Convert.FromBase64String(parts[6]);
-    
-    // Reconstruct input
-    string input = $"{_pepper}{userName}{Convert.ToBase64String(salt)}{code}";
-    
-    // Verify with constant-time comparison
-    return Argon2.Verify(expectedHash, Encoding.UTF8.GetBytes(input), config);
+  var parts = stored.Split(':');
+  var salt = Convert.FromBase64String(parts[4]);
+  var preimage = BuildPreimage(userName, code, salt);
+  var encoded = parts[5];
+  var isMatch = Argon2.Verify(encoded, preimage, Math.Max(1, p));
+
+  return new VerificationResult(isMatch, needsRehash);
 }
 ```
 
 ### Rate Limiting
 
-**Implementation**: Redis-backed counter `otp_attempts:{user}`
+OTP protection uses two different controls:
 
-**Flow**:
+1. **Verification-attempt limiting** via Redis-backed counter `otp_attempts:{user}`
+2. **HTTP request rate limiting** on `/api/auth/start` and `/api/auth/verify`
+
+**Verification-attempt flow**:
 1. **Attempt Check**: `INCR otp_attempts:{user}` (atomic increment)
 2. **TTL Sync**: Set expiry to match OTP lifetime (300 seconds)
-3. **Threshold**: If count > 5 → Return 429 Too Many Requests
-4. **Reset**: Counter auto-expires after 15 minutes
+3. **Threshold**: If attempts reach configured maximum (default 5) -> Return 401 Unauthorized
+4. **Reset**: Counter auto-expires with the OTP window
 5. **Metrics**: `chat.otp.verifications.ratelimited` counter incremented
+
+**HTTP rate limiter**:
+- Default fixed window: 5 requests per 60 seconds per remote IP for auth endpoints
+- Response when exceeded: 429 Too Many Requests
 
 **Fail-Open Behavior**: On Redis errors, allow verification (log error, don't block users)
 
@@ -347,8 +347,9 @@ See the `Otp`, `Acs`, and `Redis` sections in the configuration guide.
 | Pepper configured | ✅ Required | Verify `Otp__Pepper` env var (32+ bytes) |
 | Random salt | ✅ Implemented | Check hash format includes `{saltB64}` |
 | Constant-time verify | ✅ Built-in | `Argon2.Verify()` method |
-| Rate limiting | ✅ Implemented | Test 6 failed attempts → 429 response |
-| Secure RNG | ⚠️ **VERIFY** | **Issue #62** - Check `RandomNumberGenerator.GetInt32()` |
+| Verification attempt limiting | ✅ Implemented | Repeated bad codes eventually return 401 and do not sign in |
+| Request rate limiting | ✅ Implemented | Burst auth requests can return 429 |
+| Secure RNG | ✅ Implemented | `RandomNumberGenerator.GetInt32()` |
 | No plaintext logging | ✅ Implemented | Search logs for "OTP", "code", digits |
 
 ---
@@ -362,26 +363,24 @@ See the `Otp`, `Acs`, and `Redis` sections in the configuration guide.
 dotnet test tests/Chat.Tests/ --filter "OtpHasher"
 ```
 
-**User Repositories** (`Chat.Tests/CosmosRepositoriesTests.cs`):
+**OTP Controller** (`Chat.Tests/AuthControllerTests.cs`):
 ```bash
-dotnet test tests/Chat.Tests/ --filter "CosmosRepositories"
+dotnet test tests/Chat.Tests/ --filter "AuthController"
 ```
 
 ### Remaining Automated Tests
 
 The repository now keeps only fast tests that provide direct development value.
 
-**OTP Hashing** (`Chat.Tests/OtpHasherTests.cs`):
-```bash
-dotnet test tests/Chat.Tests/ --filter "OtpHasher"
-```
-
 **Configuration Guards** (`Chat.Tests/ConfigurationGuardsTests.cs`):
 ```bash
 dotnet test tests/Chat.Tests/ --filter "ConfigurationGuards"
 ```
 
-Broader OTP controller and rate-limiting tests are currently not part of the active suite. Reintroduce them only as deterministic app-level tests with a clear local execution model.
+**Solution-level fast suite**:
+```bash
+dotnet test src/Chat.sln --no-build --nologo
+```
 
 **Entra ID Auth** (Manual Testing Required):
 1. Configure Entra ID app registration
@@ -395,13 +394,14 @@ Broader OTP controller and rate-limiting tests are currently not part of the act
 
 **Rate Limiting Verification**:
 ```bash
-# Attempt 6 OTP verifications (should rate limit on 6th)
+# Attempt repeated OTP verifications with an invalid code
 for i in {1..6}; do
   curl -X POST https://localhost:5099/api/auth/verify \
     -H "Content-Type: application/json" \
     -d '{"username":"alice","code":"000000"}'
 done
-# Expected: First 5 return 401 Unauthorized, 6th returns 429 Too Many Requests
+# Expected: invalid verification attempts return 401 Unauthorized
+# Note: a burst of auth requests can separately trigger the HTTP rate limiter and return 429
 ```
 
 **Argon2id Verification**:

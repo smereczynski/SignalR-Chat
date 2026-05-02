@@ -15,7 +15,7 @@ Following [Diátaxis framework](https://diataxis.fr/):
 - **Reference** (information-oriented): reference/, architecture/
 - **Explanation** (understanding-oriented): architecture/decisions/
 
-## Current Structure (as of 2025-12-17)
+## Current Structure (as of 2026-05-02)
 
 ```
 docs/
@@ -59,8 +59,7 @@ docs/
 │   ├── local-setup.md
 │   ├── testing.md
 │   ├── entra-id-multi-tenant-setup.md
-│   ├── admin-panel-app-role-integration.md
-│   └── integration-tests-improvements.md
+│   └── admin-panel-app-role-integration.md
 ├── operations/
 │   ├── monitoring.md
 │   └── disaster-recovery.md
@@ -75,7 +74,7 @@ docs/
 2. ✅ Create CONTRIBUTING.md
 3. ✅ Update CHANGELOG.md
 4. ✅ Create docs/ directory structure
-5. ⚠️ Create placeholder README.md in each section (partially complete)
+5. ✅ Create placeholder README.md in each section
 
 ### Phase 2: Migrate Existing Content
 1. **ARCHITECTURE.md** → `docs/architecture/README.md` + split into:
@@ -85,7 +84,7 @@ docs/
 2. **docs/GUIDE-OTP-hashing.md** → `docs/features/authentication.md`
 3. **docs/GUIDE-Session-handling.md** → `docs/features/sessions.md`
 6. **docs/GUIDE-Visibility.md** → `docs/features/presence.md`
-7. **docs/BOOTSTRAP.md** → `docs/development/local-setup.md` (section)
+7. **docs/BOOTSTRAP.md** → `docs/deployment/bootstrap.md` and `docs/development/local-setup.md`
 8. ✅ **.github/workflows/README.md** → `docs/deployment/github-actions.md` (CONSOLIDATED Dec 2, 2025)
 9. ✅ **infra/bicep/README.md** → `docs/deployment/azure/bicep-templates.md` (MIGRATED Dec 2, 2025)
 
@@ -134,9 +133,6 @@ docs/
 - Clear navigation path for newcomers
 - Easy to maintain (logical grouping)
 
-## Timeline
+## Notes
 
-- **Week 1**: Structure + placeholders
-- **Week 2**: Migrate existing content
-- **Week 3**: Create new content
-- **Week 4**: Visual assets + polish
+This plan is a living restructuring document. Treat the completed checklist items as historical milestones and verify the current repository tree before using the file list as a source of truth.

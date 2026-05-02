@@ -44,13 +44,13 @@ APPLICATIONINSIGHTS_CONNECTION_STRING=InstrumentationKey=...;IngestionEndpoint=h
 # === OTP Configuration ===
 Otp__OtpTtlSeconds=300
 Otp__MaxAttempts=5
-Otp__MemCost=65536
-Otp__TimeCost=4
+Otp__MemoryKB=65536
+Otp__Iterations=3
 Otp__Parallelism=4
 
 # === Notification Configuration (if using ACS) ===
-Communication__EmailSender=noreply@your-domain.com
-Communication__SmsSender=+1234567890
+Acs__EmailFrom=noreply@your-domain.com
+Acs__SmsFrom=+1234567890
 Notifications__UnreadDelaySeconds=60
 
 # === Cosmos DB Configuration ===
@@ -165,7 +165,7 @@ openssl rand -base64 32
 - ✅ Azure Key Vault (recommended for production)
 - ❌ Never commit to source control
 
-**Rotation**: See [Authentication Guide](../features/authentication.md#pepper-rotation)
+**Rotation**: Keep pepper rotation coordinated with OTP expiry windows and deployment rollout plans.
 
 #### OTP Time-to-Live
 
@@ -193,23 +193,23 @@ Otp__MaxAttempts=3
 
 #### Argon2id Parameters
 
-**Memory Cost** (`Otp__MemCost`):
+**Memory Cost** (`Otp__MemoryKB`):
 - Default: `65536` (64 MB)
 - Range: `32768` - `131072` (32 MB - 128 MB)
 
-**Time Cost** (`Otp__TimeCost`):
-- Default: `4` iterations
+**Time Cost** (`Otp__Iterations`):
+- Default: `3` iterations
 - Range: `2` - `8`
 
 **Parallelism** (`Otp__Parallelism`):
-- Default: `4` threads
+- Default: `1` thread
 - Range: `1` - `8`
 
 **Example**:
 ```bash
 # Increase security (slower hashing)
-Otp__MemCost=131072
-Otp__TimeCost=6
+Otp__MemoryKB=131072
+Otp__Iterations=6
 Otp__Parallelism=4
 ```
 
@@ -331,12 +331,14 @@ See [Authentication Guide](../features/authentication.md) for complete Entra ID 
 - `EntraId__AutomaticSso__AttemptCookieName`
 
 **Defaults**:
-- Enable: `true`
+- Code default: `false`
 - AttemptOncePerSession: `true`
-- AttemptCookieName: `sso_attempted_v2`
+- Cookie name code default: `sso_attempted`
+
+The repository `appsettings.*.json` files currently enable Automatic SSO and override the cookie name to `sso_attempted_v2`.
 
 ```bash
-# Enable automatic silent SSO
+# Enable automatic silent SSO using the repository override values
 EntraId__AutomaticSso__Enable=true
 EntraId__AutomaticSso__AttemptOncePerSession=true
 EntraId__AutomaticSso__AttemptCookieName=sso_attempted_v2
@@ -455,11 +457,11 @@ Use defaults unless you have a migration/namespace requirement.
 
 #### Email Sender
 
-**Environment Variable**: `Communication__EmailSender`  
+**Environment Variable**: `Acs__EmailFrom`  
 **Required if**: Using Azure Communication Services for email
 
 ```bash
-Communication__EmailSender=noreply@your-domain.com
+Acs__EmailFrom=noreply@your-domain.com
 ```
 
 **Requirements**:
@@ -468,11 +470,11 @@ Communication__EmailSender=noreply@your-domain.com
 
 #### SMS Sender
 
-**Environment Variable**: `Communication__SmsSender`  
+**Environment Variable**: `Acs__SmsFrom`  
 **Required if**: Using Azure Communication Services for SMS
 
 ```bash
-Communication__SmsSender=+1234567890
+Acs__SmsFrom=+1234567890
 ```
 
 **Requirements**:
@@ -774,7 +776,7 @@ dotnet run --project ./src/Chat.Web --urls=http://localhost:5099
 - [Installation Guide](installation.md) - Set up Azure resources
 - [Authentication Guide](../features/authentication.md) - OTP and pepper details
 - [Production Checklist](../deployment/production-checklist.md) - Pre-deployment config
-- [Troubleshooting](../deployment/troubleshooting.md) - Common issues
+- [Monitoring & Observability](../operations/monitoring.md) - Health, logs, and diagnostics
 
 ---
 
