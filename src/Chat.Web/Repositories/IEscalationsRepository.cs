@@ -12,6 +12,7 @@ namespace Chat.Web.Repositories
         Task<IEnumerable<Escalation>> GetByRoomAsync(string roomName, int take = 50);
         Task<IEnumerable<Escalation>> GetDueScheduledAsync(DateTime dueBeforeUtc, int take = 100);
         Task<Escalation> GetOpenByMessageIdAsync(int messageId, string roomName = null);
+        Task<IEnumerable<Escalation>> GetRecentAsync(int take = 100, Models.EscalationStatus? status = null, string roomName = null);
         Task UpsertAsync(Escalation escalation);
     }
 }

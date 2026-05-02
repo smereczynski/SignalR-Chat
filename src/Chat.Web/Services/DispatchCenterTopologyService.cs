@@ -177,8 +177,8 @@ namespace Chat.Web.Services
                 return;
             }
 
-            var users = await _users.GetAllAsync().ConfigureAwait(false);
-            foreach (var user in users.Where(x => string.Equals(x.DispatchCenterId, dispatchCenterId, StringComparison.OrdinalIgnoreCase)))
+            var users = await _users.GetByDispatchCenterIdAsync(dispatchCenterId).ConfigureAwait(false);
+            foreach (var user in users)
             {
                 user.DispatchCenterId = null;
                 await _users.UpsertAsync(user).ConfigureAwait(false);

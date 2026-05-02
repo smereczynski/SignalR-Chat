@@ -6,64 +6,144 @@
     ViewData["Title"] = Localizer["AdminDashboard"];
 }
 
+@if (TempData["SyncSuccess"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+        @Localizer["TopologySyncedSuccessfully"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+
 <div class="row">
-    <div class="col-md-4 mb-4">
+    <div class="col-md-3 mb-4">
         <div class="card">
             <div class="card-body">
                 <h5 class="card-title">@Localizer["Users"]</h5>
                 <p class="card-text">@Localizer["ManageUserAccounts"]</p>
-                <a href="/Admin/Users" class="btn btn-primary">@Localizer["ManageUsers"]</a>
+                <a href="/Admin/Users" class="btn btn-primary btn-sm">@Localizer["ManageUsers"]</a>
             </div>
         </div>
     </div>
-    
-    <div class="col-md-4 mb-4">
+    <div class="col-md-3 mb-4">
         <div class="card">
             <div class="card-body">
                 <h5 class="card-title">@Localizer["DispatchCenters"]</h5>
                 <p class="card-text">@Localizer["ManageDispatchCentersAndAssignments"]</p>
-                <a href="/Admin/DispatchCenters" class="btn btn-primary">@Localizer["ManageDispatchCenters"]</a>
+                <a href="/Admin/DispatchCenters" class="btn btn-primary btn-sm">@Localizer["ManageDispatchCenters"]</a>
             </div>
         </div>
     </div>
-    
-    <div class="col-md-4 mb-4">
+    <div class="col-md-3 mb-4">
         <div class="card">
             <div class="card-body">
-                <h5 class="card-title">@Localizer["SystemStatus"]</h5>
-                <p class="card-text">@Localizer["ViewSystemHealth"]</p>
-                <a href="/health" class="btn btn-secondary">@Localizer["HealthCheck"]</a>
+                <h5 class="card-title">@Localizer["RoomDiagnostics"]</h5>
+                <p class="card-text">@Localizer["ViewManageChatRooms"]</p>
+                <a href="/Admin/Rooms" class="btn btn-secondary btn-sm">@Localizer["ManageRooms"]</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-4">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">@Localizer["EscalationExplorer"]</h5>
+                <p class="card-text">@Localizer["Escalations"]</p>
+                <a href="/Admin/Escalations" class="btn btn-secondary btn-sm">@Localizer["Escalations"]</a>
             </div>
         </div>
     </div>
 </div>
 
-<div class="row mt-4">
+<div class="row mt-2">
     <div class="col-12">
-        <h3>@Localizer["QuickStats"]</h3>
-        <div class="table-responsive">
-            <table class="table table-striped">
-                <thead>
-                    <tr>
-                        <th>@Localizer["Metric"]</th>
-                        <th>@Localizer["Value"]</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td>@Localizer["TotalUsers"]</td>
-                        <td>Managed from the user directory and dispatch center assignments.</td>
-                    </tr>
-                    <tr>
-                        <td>@Localizer["YourTenant"]</td>
-                        <td><code>@(User.FindFirst("http://schemas.microsoft.com/identity/claims/tenantid")?.Value ?? User.FindFirst("tid")?.Value ?? Localizer["NotAvailable"].Value)</code></td>
-                    </tr>
-                    <tr>
-                        <td>@Localizer["YourRole"]</td>
-                        <td><span class="badge bg-primary">@(User.IsInRole("Admin.ReadWrite") ? "Admin.ReadWrite" : "Admin.Read")</span></td>
-                    </tr>
-                </tbody>
-            </table>
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h3>@Localizer["Warnings"]</h3>
+            <form method="post" asp-page-handler="Sync">
+                <button type="submit" class="btn btn-outline-secondary btn-sm">
+                    <i class="bi bi-arrow-repeat"></i> @Localizer["SyncTopology"]
+                </button>
+            </form>
         </div>
+
+        @if (!Model.Stats.HasWarnings)
+        {
+            <div class="alert alert-success">
+                <i class="bi bi-check-circle"></i> @Localizer["NoWarnings"]
+            </div>
+        }
+        else
+        {
+            <div class="row g-3">
+                @if (Model.Stats.UsersWithoutDispatchCenter > 0)
+                {
+                    <div class="col-md-4">
+                        <div class="card border-warning">
+                            <div class="card-body">
+                                <h5 class="card-title text-warning">
+                                    <i class="bi bi-person-x"></i> @Model.Stats.UsersWithoutDispatchCenter
+                                </h5>
+                                <p class="card-text small">@Localizer["UsersWithoutDispatchCenter"]</p>
+                                <a href="/Admin/Users" class="btn btn-outline-warning btn-sm">@Localizer["ManageUsers"]</a>
+                            </div>
+                        </div>
+                    </div>
+                }
+                @if (Model.Stats.DispatchCentersWithoutOfficers > 0)
+                {
+                    <div class="col-md-4">
+                        <div class="card border-warning">
+                            <div class="card-body">
+                                <h5 class="card-title text-warning">
+                                    <i class="bi bi-shield-x"></i> @Model.Stats.DispatchCentersWithoutOfficers
+                                </h5>
+                                <p class="card-text small">@Localizer["DispatchCentersWithoutOfficers"]</p>
+                                <a href="/Admin/DispatchCenters" class="btn btn-outline-warning btn-sm">@Localizer["ManageDispatchCenters"]</a>
+                            </div>
+                        </div>
+                    </div>
+                }
+                @if (Model.Stats.DispatchCentersWithoutPairs > 0)
+                {
+                    <div class="col-md-4">
+                        <div class="card border-warning">
+                            <div class="card-body">
+                                <h5 class="card-title text-warning">
+                                    <i class="bi bi-diagram-3"></i> @Model.Stats.DispatchCentersWithoutPairs
+                                </h5>
+                                <p class="card-text small">@Localizer["DispatchCentersWithoutPairs"]</p>
+                                <a href="/Admin/DispatchCenters" class="btn btn-outline-warning btn-sm">@Localizer["ManageDispatchCenters"]</a>
+                            </div>
+                        </div>
+                    </div>
+                }
+                @if (Model.Stats.InactivePairRooms > 0)
+                {
+                    <div class="col-md-4">
+                        <div class="card border-warning">
+                            <div class="card-body">
+                                <h5 class="card-title text-warning">
+                                    <i class="bi bi-door-closed"></i> @Model.Stats.InactivePairRooms
+                                </h5>
+                                <p class="card-text small">@Localizer["InactivePairRooms"]</p>
+                                <a href="/Admin/Rooms" class="btn btn-outline-warning btn-sm">@Localizer["RoomDiagnostics"]</a>
+                            </div>
+                        </div>
+                    </div>
+                }
+                @if (Model.Stats.OpenEscalations > 0)
+                {
+                    <div class="col-md-4">
+                        <div class="card border-danger">
+                            <div class="card-body">
+                                <h5 class="card-title text-danger">
+                                    <i class="bi bi-exclamation-triangle"></i> @Model.Stats.OpenEscalations
+                                </h5>
+                                <p class="card-text small">@Localizer["OpenEscalations"]</p>
+                                <a href="/Admin/Escalations" class="btn btn-outline-danger btn-sm">@Localizer["EscalationExplorer"]</a>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
     </div>
 </div>

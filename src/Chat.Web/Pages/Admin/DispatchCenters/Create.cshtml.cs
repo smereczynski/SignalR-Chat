@@ -105,6 +105,7 @@ public class DispatchCentersCreateModel : PageModel
         };
 
         await _topology.SaveDispatchCenterAsync(dispatchCenter, dispatchCenter.CorrespondingDispatchCenterIds);
+        TempData["SuccessMessage"] = "DispatchCenterCreated";
         return RedirectToPage("Index");
     }
 

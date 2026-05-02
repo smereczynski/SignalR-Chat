@@ -270,6 +270,17 @@ namespace Chat.Web.Repositories
             return Task.FromResult(escalation);
         }
 
+        public Task<IEnumerable<Escalation>> GetRecentAsync(int take = 100, Models.EscalationStatus? status = null, string roomName = null)
+        {
+            var q = _escalations.Values.AsEnumerable();
+            if (status.HasValue)
+                q = q.Where(x => x.Status == status.Value);
+            if (!string.IsNullOrWhiteSpace(roomName))
+                q = q.Where(x => string.Equals(x.RoomName, roomName, StringComparison.OrdinalIgnoreCase));
+            var result = q.OrderByDescending(x => x.CreatedAt).Take(take).ToList();
+            return Task.FromResult<IEnumerable<Escalation>>(result);
+        }
+
         public Task UpsertAsync(Escalation escalation)
         {
             if (escalation == null) return Task.CompletedTask;

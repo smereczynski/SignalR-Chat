@@ -70,7 +70,7 @@ public class DispatchCentersAdminPageTests
             OfficerUserNames = new List<string> { "officer-main" }
         });
 
-        var page = new DispatchCentersEditModel(dispatchRepo, usersRepo, topology)
+        var page = new DispatchCentersEditModel(dispatchRepo, usersRepo, roomsRepo, topology)
         {
             Id = "dc-1",
             Input = new DispatchCenterInputModel

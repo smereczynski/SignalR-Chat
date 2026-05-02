@@ -1182,6 +1182,22 @@ namespace Chat.Web.Repositories
             return await CosmosQueryHelper.ExecuteSingleResultQueryAsync(q, MapEscalation, activity, _logger, "cosmos.escalations.openbymessage").ConfigureAwait(false);
         }
 
+        public async Task<IEnumerable<Escalation>> GetRecentAsync(int take = 100, Models.EscalationStatus? status = null, string roomName = null)
+        {
+            using var activity = Tracing.ActivitySource.StartActivity("cosmos.escalations.recent", ActivityKind.Client);
+            var sql = status.HasValue
+                ? $"SELECT TOP {take} * FROM c WHERE c.status = @status ORDER BY c.createdAt DESC"
+                : $"SELECT TOP {take} * FROM c ORDER BY c.createdAt DESC";
+            var queryDef = new QueryDefinition(sql);
+            if (status.HasValue)
+                queryDef = queryDef.WithParameter("@status", status.Value.ToString());
+            var requestOptions = !string.IsNullOrWhiteSpace(roomName)
+                ? new QueryRequestOptions { PartitionKey = new PartitionKey(roomName) }
+                : null;
+            var q = _escalations.GetItemQueryIterator<EscalationDoc>(queryDef, requestOptions: requestOptions);
+            return await CosmosQueryHelper.ExecutePaginatedQueryAsync(q, MapEscalation, activity, _logger, "cosmos.escalations.recent").ConfigureAwait(false);
+        }
+
         public async Task UpsertAsync(Escalation escalation)
         {
             if (escalation == null) return;

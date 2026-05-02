@@ -56,6 +56,7 @@ public class DispatchCentersIndexModel : PageModel
         if (string.IsNullOrWhiteSpace(id)) return RedirectToPage();
 
         await _topology.DeleteDispatchCenterAsync(id);
+        TempData["SuccessMessage"] = "DispatchCenterDeleted";
         return RedirectToPage();
     }
 }

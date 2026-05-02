@@ -425,3 +425,4 @@ infra/bicep/**/*.json
 
 # Agents
 CLAUDE.md
+AGENTS.md

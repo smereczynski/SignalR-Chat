@@ -11,7 +11,8 @@
         <h2 class="mb-4">@Localizer["CreateDispatchCenter"]</h2>
 
         <form method="post">
-            <partial name="_DispatchCenterBasicFields" model="Model.Input" />
+            <partial name="_DispatchCenterBasicFields" model="Model.Input"
+                view-data='new ViewDataDictionary(ViewData) { TemplateInfo = { HtmlFieldPrefix = "Input" } }' />
 
             <partial
                 name="_CorrespondingDispatchCentersChecklist"

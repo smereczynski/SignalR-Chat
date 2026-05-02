@@ -16,12 +16,14 @@ public class DispatchCentersEditModel : PageModel
 {
     private readonly IDispatchCentersRepository _dispatchCenters;
     private readonly IUsersRepository _users;
+    private readonly IRoomsRepository _rooms;
     private readonly Services.DispatchCenterTopologyService _topology;
 
-    public DispatchCentersEditModel(IDispatchCentersRepository dispatchCenters, IUsersRepository users, Services.DispatchCenterTopologyService topology)
+    public DispatchCentersEditModel(IDispatchCentersRepository dispatchCenters, IUsersRepository users, IRoomsRepository rooms, Services.DispatchCenterTopologyService topology)
     {
         _dispatchCenters = dispatchCenters;
         _users = users;
+        _rooms = rooms;
         _topology = topology;
     }
 
@@ -33,6 +35,11 @@ public class DispatchCentersEditModel : PageModel
 
     public List<DispatchCenter> AllDispatchCenters { get; set; } = new();
     public List<SelectListItem> OfficerUsers { get; set; } = new();
+
+    // Impact section (read-only)
+    public List<ApplicationUser> AssignedUsers { get; set; } = new();
+    public List<DispatchCenter> ReciprocalPairs { get; set; } = new();
+    public List<Room> DerivedPairRooms { get; set; } = new();
 
     public async Task<IActionResult> OnGetAsync()
     {
@@ -50,11 +57,8 @@ public class DispatchCentersEditModel : PageModel
             CorrespondingDispatchCenterIds = current.CorrespondingDispatchCenterIds?.ToList() ?? new List<string>()
         };
 
-        AllDispatchCenters = (await _dispatchCenters.GetAllAsync())
-            .Where(d => !string.Equals(d.Id, Id, StringComparison.OrdinalIgnoreCase))
-            .OrderBy(d => d.Name)
-            .ToList();
-        await LoadOfficerUsersAsync().ConfigureAwait(false);
+        await LoadFormDataAsync().ConfigureAwait(false);
+        await LoadImpactDataAsync().ConfigureAwait(false);
 
         return Page();
     }
@@ -66,18 +70,19 @@ public class DispatchCentersEditModel : PageModel
         var current = await _dispatchCenters.GetByIdAsync(Id);
         if (current == null) return RedirectToPage("Index");
 
-        AllDispatchCenters = (await _dispatchCenters.GetAllAsync())
-            .Where(d => !string.Equals(d.Id, Id, StringComparison.OrdinalIgnoreCase))
-            .OrderBy(d => d.Name)
-            .ToList();
-        await LoadOfficerUsersAsync().ConfigureAwait(false);
+        await LoadFormDataAsync().ConfigureAwait(false);
 
-        if (!ModelState.IsValid) return Page();
+        if (!ModelState.IsValid)
+        {
+            await LoadImpactDataAsync().ConfigureAwait(false);
+            return Page();
+        }
 
         var existingByName = await _dispatchCenters.GetByNameAsync(Input.Name.Trim());
         if (existingByName != null && !string.Equals(existingByName.Id, Id, StringComparison.OrdinalIgnoreCase))
         {
             ModelState.AddModelError(nameof(Input.Name), "Dispatch center with this name already exists.");
+            await LoadImpactDataAsync().ConfigureAwait(false);
             return Page();
         }
 
@@ -85,6 +90,7 @@ public class DispatchCentersEditModel : PageModel
         if (normalizedCorresponding.Any(x => string.Equals(x, Id, StringComparison.OrdinalIgnoreCase)))
         {
             ModelState.AddModelError(nameof(Input.CorrespondingDispatchCenterIds), "Self-reference is not allowed.");
+            await LoadImpactDataAsync().ConfigureAwait(false);
             return Page();
         }
 
@@ -94,6 +100,7 @@ public class DispatchCentersEditModel : PageModel
             if (existing == null)
             {
                 ModelState.AddModelError(nameof(Input.CorrespondingDispatchCenterIds), $"Invalid corresponding dispatch center id: {correspondingId}");
+                await LoadImpactDataAsync().ConfigureAwait(false);
                 return Page();
             }
         }
@@ -102,6 +109,7 @@ public class DispatchCentersEditModel : PageModel
         if (officerUserNames.Count == 0)
         {
             ModelState.AddModelError(nameof(Input.OfficerUserNames), "Select at least one escalation officer.");
+            await LoadImpactDataAsync().ConfigureAwait(false);
             return Page();
         }
 
@@ -111,6 +119,7 @@ public class DispatchCentersEditModel : PageModel
             if (officer == null)
             {
                 ModelState.AddModelError(nameof(Input.OfficerUserNames), $"Officer user was not found: {officerUserName}");
+                await LoadImpactDataAsync().ConfigureAwait(false);
                 return Page();
             }
         }
@@ -122,11 +131,16 @@ public class DispatchCentersEditModel : PageModel
         current.CorrespondingDispatchCenterIds = normalizedCorresponding;
 
         await _topology.SaveDispatchCenterAsync(current, current.CorrespondingDispatchCenterIds);
+        TempData["SuccessMessage"] = "DispatchCenterSaved";
         return RedirectToPage("Index");
     }
 
-    private async Task LoadOfficerUsersAsync()
+    private async Task LoadFormDataAsync()
     {
+        AllDispatchCenters = (await _dispatchCenters.GetAllAsync())
+            .Where(d => !string.Equals(d.Id, Id, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(d => d.Name)
+            .ToList();
         OfficerUsers = (await _users.GetAllAsync())
             .Where(x => x.Enabled)
             .OrderBy(x => x.FullName ?? x.UserName)
@@ -136,6 +150,29 @@ public class DispatchCentersEditModel : PageModel
         {
             PageContext.ViewData["OfficerUsers"] = OfficerUsers;
         }
+    }
+
+    private async Task LoadImpactDataAsync()
+    {
+        var usersTask = _users.GetByDispatchCenterIdAsync(Id);
+        var allDcsTask = _dispatchCenters.GetAllAsync();
+        var allRoomsTask = _rooms.GetAllAsync();
+
+        await Task.WhenAll(usersTask, allDcsTask, allRoomsTask).ConfigureAwait(false);
+
+        AssignedUsers = (await usersTask).OrderBy(u => u.UserName).ToList();
+
+        ReciprocalPairs = (await allDcsTask)
+            .Where(d => !string.Equals(d.Id, Id, StringComparison.OrdinalIgnoreCase) &&
+                        (d.CorrespondingDispatchCenterIds?.Contains(Id, StringComparer.OrdinalIgnoreCase) ?? false))
+            .OrderBy(d => d.Name)
+            .ToList();
+
+        DerivedPairRooms = (await allRoomsTask)
+            .Where(r => string.Equals(r.DispatchCenterAId, Id, StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(r.DispatchCenterBId, Id, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(r => r.Name)
+            .ToList();
     }
 
     private static List<string> NormalizeDistinct(IEnumerable<string> values)

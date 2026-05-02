@@ -1,0 +1,116 @@
+@page
+@using Microsoft.Extensions.Localization
+@inject IStringLocalizer<Chat.Web.Resources.SharedResources> Localizer
+@model Chat.Web.Pages.Admin.Rooms.RoomsIndexModel
+@{
+    ViewData["Title"] = Localizer["RoomDiagnostics"];
+}
+
+@if (TempData["SyncSuccess"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+        @Localizer["TopologySyncedSuccessfully"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <p class="text-muted mb-0">@Localizer["RoomDiagnostics"] — @Localizer["AllRooms"] (@Model.Rooms.Count)</p>
+    <form method="post" asp-page-handler="Sync">
+        <button type="submit" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-arrow-repeat"></i> @Localizer["SyncTopology"]
+        </button>
+    </form>
+</div>
+
+<div class="table-responsive">
+    <table class="table table-striped table-hover table-sm">
+        <thead class="table-dark">
+            <tr>
+                <th>@Localizer["RoomName"]</th>
+                <th>@Localizer["DispatchCenterA"]</th>
+                <th>@Localizer["DispatchCenterB"]</th>
+                <th>Languages</th>
+                <th>@Localizer["Active"]</th>
+                <th>@Localizer["InactiveReason"]</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var r in Model.Rooms)
+            {
+                var dcA = !string.IsNullOrWhiteSpace(r.DispatchCenterAId) && Model.DispatchCenters.TryGetValue(r.DispatchCenterAId, out var a) ? a : null;
+                var dcB = !string.IsNullOrWhiteSpace(r.DispatchCenterBId) && Model.DispatchCenters.TryGetValue(r.DispatchCenterBId, out var b) ? b : null;
+                <tr class="@(!r.IsActive ? "table-warning" : "")">
+                    <td>
+                        <strong>@(r.DisplayName ?? r.Name)</strong>
+                        @if (!string.IsNullOrWhiteSpace(r.DisplayName))
+                        {
+                            <br /><small class="text-muted">@r.Name</small>
+                        }
+                    </td>
+                    <td>
+                        @if (dcA != null)
+                        {
+                            <a href="/Admin/DispatchCenters/Edit/@dcA.Id" class="text-decoration-none" title="@dcA.Id">@dcA.Name</a>
+                        }
+                        else if (!string.IsNullOrWhiteSpace(r.DispatchCenterAId))
+                        {
+                            <span class="text-muted">@r.DispatchCenterAId</span>
+                        }
+                    </td>
+                    <td>
+                        @if (dcB != null)
+                        {
+                            <a href="/Admin/DispatchCenters/Edit/@dcB.Id" class="text-decoration-none" title="@dcB.Id">@dcB.Name</a>
+                        }
+                        else if (!string.IsNullOrWhiteSpace(r.DispatchCenterBId))
+                        {
+                            <span class="text-muted">@r.DispatchCenterBId</span>
+                        }
+                    </td>
+                    <td><small>@(r.Languages != null && r.Languages.Count > 0 ? string.Join(", ", r.Languages) : "—")</small></td>
+                    <td>
+                        @if (r.IsActive)
+                        {
+                            <span class="badge bg-success">@Localizer["Active"]</span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-warning text-dark">@Localizer["Inactive"]</span>
+                        }
+                    </td>
+                    <td>
+                        @if (!r.IsActive)
+                        {
+                            var pairRemoved = dcA == null || dcB == null
+                                || !(dcA.CorrespondingDispatchCenterIds?.Contains(r.DispatchCenterBId ?? "", System.StringComparer.OrdinalIgnoreCase) ?? false)
+                                && !(dcB.CorrespondingDispatchCenterIds?.Contains(r.DispatchCenterAId ?? "", System.StringComparer.OrdinalIgnoreCase) ?? false);
+
+                            if (pairRemoved)
+                            {
+                                <small class="text-muted">@Localizer["PairRelationshipRemoved"]</small>
+                            }
+                            else
+                            {
+                                var aMissingOfficers = (dcA?.OfficerUserNames?.Count ?? 0) == 0;
+                                var bMissingOfficers = (dcB?.OfficerUserNames?.Count ?? 0) == 0;
+                                <small>
+                                    @Localizer["MissingOfficers"]:
+                                    @if (aMissingOfficers && dcA != null)
+                                    {
+                                        <a href="/Admin/DispatchCenters/Edit/@dcA.Id" class="text-warning">@dcA.Name</a>
+                                        @if (bMissingOfficers){ <text>,</text> }
+                                    }
+                                    @if (bMissingOfficers && dcB != null)
+                                    {
+                                        <a href="/Admin/DispatchCenters/Edit/@dcB.Id" class="text-warning">@dcB.Name</a>
+                                    }
+                                </small>
+                            }
+                        }
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>

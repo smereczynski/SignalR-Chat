@@ -42,7 +42,7 @@ public class DispatchCentersAssignUsersModel : PageModel
         if (dispatchCenter == null) return RedirectToPage("Index");
 
         DispatchCenterName = dispatchCenter.Name;
-        AllUsers = (await _users.GetAllAsync()).OrderBy(u => u.UserName).ToList();
+        AllUsers = (await _users.GetAllAsync()).Where(u => u.Enabled).OrderBy(u => u.UserName).ToList();
         SelectedUsers = dispatchCenter.Users?.ToList() ?? new List<string>();
 
         return Page();
@@ -71,6 +71,7 @@ public class DispatchCentersAssignUsersModel : PageModel
             await _topology.RemoveUsersFromDispatchCenterAsync(Id, toRemove);
         }
 
+        TempData["SuccessMessage"] = "UsersAssignedSuccessfully";
         return RedirectToPage("Edit", new { id = Id });
     }
 }

@@ -26,6 +26,16 @@
                             <i class="bi bi-diagram-3"></i> @Localizer["DispatchCenters"]
                         </a>
                     </li>
+                    <li class="nav-item">
+                        <a class="nav-link @(ViewContext.RouteData.Values["Page"]?.ToString()?.Contains("/Admin/Rooms") == true ? "active" : "")" href="/Admin/Rooms">
+                            <i class="bi bi-chat-dots"></i> @Localizer["Rooms"]
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link @(ViewContext.RouteData.Values["Page"]?.ToString()?.Contains("/Admin/Escalations") == true ? "active" : "")" href="/Admin/Escalations">
+                            <i class="bi bi-exclamation-triangle"></i> @Localizer["Escalations"]
+                        </a>
+                    </li>
                 </ul>
                 
                 <hr class="my-3">
@@ -51,12 +61,22 @@
                 </div>
             </div>
 
+            @{ var successKey = TempData["SuccessMessage"] as string; }
+            @if (!string.IsNullOrEmpty(successKey))
+            {
+                <div class="alert alert-success alert-dismissible fade show" role="alert">
+                    @Localizer[successKey]
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            }
+
             @RenderBody()
         </main>
     </div>
 </div>
 
 @section Scripts {
+    <script src="~/lib/bootstrap/js/bootstrap.bundle.min.js"></script>
     <style>
         .sidebar {
             position: sticky;

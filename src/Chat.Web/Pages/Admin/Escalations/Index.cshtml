@@ -1,0 +1,115 @@
+@page
+@using Microsoft.Extensions.Localization
+@using Chat.Web.Models
+@inject IStringLocalizer<Chat.Web.Resources.SharedResources> Localizer
+@model Chat.Web.Pages.Admin.Escalations.EscalationsIndexModel
+@{
+    ViewData["Title"] = Localizer["EscalationExplorer"];
+}
+
+<form method="get" class="row g-2 mb-4">
+    <div class="col-md-2">
+        <select name="status" class="form-select form-select-sm">
+            <option value="">@Localizer["AllStatuses"]</option>
+            @foreach (var s in System.Enum.GetValues<EscalationStatus>())
+            {
+                <option value="@s" selected="@(Model.StatusFilter == s ? "selected" : null)">@Localizer[s.ToString()]</option>
+            }
+        </select>
+    </div>
+    <div class="col-md-2">
+        <select name="triggerType" class="form-select form-select-sm">
+            <option value="">@Localizer["AllTriggerTypes"]</option>
+            @foreach (var t in System.Enum.GetValues<EscalationTriggerType>())
+            {
+                <option value="@t" selected="@(Model.TriggerTypeFilter == t ? "selected" : null)">@Localizer[t.ToString()]</option>
+            }
+        </select>
+    </div>
+    <div class="col-md-2">
+        <select name="sourceDispatchCenterId" class="form-select form-select-sm">
+            <option value="">@Localizer["AllSources"]</option>
+            @foreach (var kv in Model.DispatchCenterNames.OrderBy(x => x.Value))
+            {
+                <option value="@kv.Key" selected="@(Model.SourceDispatchCenterIdFilter == kv.Key ? "selected" : null)">@kv.Value</option>
+            }
+        </select>
+    </div>
+    <div class="col-md-2">
+        <select name="targetDispatchCenterId" class="form-select form-select-sm">
+            <option value="">@Localizer["AllTargets"]</option>
+            @foreach (var kv in Model.DispatchCenterNames.OrderBy(x => x.Value))
+            {
+                <option value="@kv.Key" selected="@(Model.TargetDispatchCenterIdFilter == kv.Key ? "selected" : null)">@kv.Value</option>
+            }
+        </select>
+    </div>
+    <div class="col-md-3">
+        <input type="text" name="roomName" class="form-control form-control-sm"
+               placeholder="@Localizer["AllRooms"]" value="@Model.RoomNameFilter" />
+    </div>
+    <div class="col-md-1">
+        <button type="submit" class="btn btn-outline-primary btn-sm w-100">@Localizer["Filter"]</button>
+    </div>
+</form>
+
+<p class="text-muted small">@Localizer["EscalationExplorer"] — @Model.Escalations.Count @Localizer["Escalations"].Value.ToLower()</p>
+
+<div class="table-responsive">
+    <table class="table table-sm table-striped table-hover">
+        <thead class="table-dark">
+            <tr>
+                <th>ID</th>
+                <th>@Localizer["RoomName"]</th>
+                <th>@Localizer["TriggerType"]</th>
+                <th>@Localizer["Status"]</th>
+                <th>@Localizer["Source"]</th>
+                <th>@Localizer["Target"]</th>
+                <th>@Localizer["CreatedAt"]</th>
+                <th>@Localizer["EscalatedAt"]</th>
+                <th>@Localizer["ResolvedAt"]</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var e in Model.Escalations)
+            {
+                <tr>
+                    <td><code class="small" title="@e.Id">@e.Id[..8]…</code></td>
+                    <td><small>@e.RoomName</small></td>
+                    <td>
+                        @if (e.TriggerType == EscalationTriggerType.Automatic)
+                        {
+                            <span class="badge bg-secondary">@Localizer["Automatic"]</span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-primary">@Localizer["Manual"]</span>
+                        }
+                    </td>
+                    <td>
+                        @switch (e.Status)
+                        {
+                            case EscalationStatus.Scheduled:
+                                <span class="badge bg-info text-dark">@Localizer["Scheduled"]</span>
+                                break;
+                            case EscalationStatus.Escalated:
+                                <span class="badge bg-danger">@Localizer["Escalated"]</span>
+                                break;
+                            case EscalationStatus.Resolved:
+                                <span class="badge bg-success">@Localizer["Resolved"]</span>
+                                break;
+                            case EscalationStatus.Cancelled:
+                                <span class="badge bg-secondary">@Localizer["Cancelled"]</span>
+                                break;
+                        }
+                    </td>
+                    <td><small title="@e.SourceDispatchCenterId">@(Model.DispatchCenterNames.TryGetValue(e.SourceDispatchCenterId ?? "", out var srcName) ? srcName : e.SourceDispatchCenterId)</small></td>
+                    <td><small title="@e.TargetDispatchCenterId">@(Model.DispatchCenterNames.TryGetValue(e.TargetDispatchCenterId ?? "", out var tgtName) ? tgtName : e.TargetDispatchCenterId)</small></td>
+                    <td><small>@e.CreatedAt.ToString("yyyy-MM-dd HH:mm")</small></td>
+                    <td><small>@(e.EscalatedAt.HasValue ? e.EscalatedAt.Value.ToString("yyyy-MM-dd HH:mm") : "—")</small></td>
+                    <td><small>@(e.ResolvedAt.HasValue ? e.ResolvedAt.Value.ToString("yyyy-MM-dd HH:mm") : "—")</small></td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>

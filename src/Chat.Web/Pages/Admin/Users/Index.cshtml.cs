@@ -13,12 +13,26 @@ namespace Chat.Web.Pages.Admin.Users;
 public class UsersIndexModel : PageModel
 {
     private readonly IUsersRepository _users;
-    public UsersIndexModel(IUsersRepository users) => _users = users;
+    private readonly IDispatchCentersRepository _dispatchCenters;
+
+    public UsersIndexModel(IUsersRepository users, IDispatchCentersRepository dispatchCenters)
+    {
+        _users = users;
+        _dispatchCenters = dispatchCenters;
+    }
+
     public IEnumerable<ApplicationUser> Users { get; set; } = Enumerable.Empty<ApplicationUser>();
+    public IReadOnlyDictionary<string, string> DispatchCenterNames { get; private set; } = new Dictionary<string, string>();
 
     public async Task OnGetAsync()
     {
-        Users = await _users.GetAllAsync();
+        var usersTask = _users.GetAllAsync();
+        var dcsTask = _dispatchCenters.GetAllAsync();
+        await Task.WhenAll(usersTask, dcsTask).ConfigureAwait(false);
+
+        Users = await usersTask;
+        DispatchCenterNames = (await dcsTask)
+            .ToDictionary(d => d.Id, d => d.Name ?? d.Id, System.StringComparer.OrdinalIgnoreCase);
     }
 
     public async Task<IActionResult> OnPostToggleEnabled(string userName)

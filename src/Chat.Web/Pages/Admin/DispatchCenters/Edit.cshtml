@@ -13,7 +13,8 @@
         <form method="post">
             <input type="hidden" asp-for="Id" />
 
-            <partial name="_DispatchCenterBasicFields" model="Model.Input" />
+            <partial name="_DispatchCenterBasicFields" model="Model.Input"
+                view-data='new ViewDataDictionary(ViewData) { TemplateInfo = { HtmlFieldPrefix = "Input" } }' />
 
             <partial
                 name="_CorrespondingDispatchCentersChecklist"
@@ -28,5 +29,80 @@
                 <a asp-page="Index" class="btn btn-secondary">@Localizer["Cancel"]</a>
             </div>
         </form>
+
+        <hr class="my-4" />
+
+        <h4>@Localizer["ImpactSummary"]</h4>
+
+        <div class="row g-3">
+            <div class="col-md-4">
+                <h6 class="text-muted">@Localizer["AssignedUsers"] (@Model.AssignedUsers.Count)</h6>
+                @if (Model.AssignedUsers.Count == 0)
+                {
+                    <p class="text-muted small">—</p>
+                }
+                else
+                {
+                    <ul class="list-unstyled small">
+                        @foreach (var u in Model.AssignedUsers)
+                        {
+                            <li>
+                                <i class="bi bi-person"></i>
+                                @(u.FullName ?? u.UserName)
+                                @if (!u.Enabled)
+                                {
+                                    <span class="badge bg-secondary ms-1">@Localizer["Inactive"]</span>
+                                }
+                            </li>
+                        }
+                    </ul>
+                }
+            </div>
+
+            <div class="col-md-4">
+                <h6 class="text-muted">@Localizer["ReciprocalPairs"] (@Model.ReciprocalPairs.Count)</h6>
+                @if (Model.ReciprocalPairs.Count == 0)
+                {
+                    <p class="text-muted small">—</p>
+                }
+                else
+                {
+                    <ul class="list-unstyled small">
+                        @foreach (var dc in Model.ReciprocalPairs)
+                        {
+                            <li><i class="bi bi-diagram-3"></i> @dc.Name (@dc.Country)</li>
+                        }
+                    </ul>
+                }
+            </div>
+
+            <div class="col-md-4">
+                <h6 class="text-muted">@Localizer["DerivedPairRooms"] (@Model.DerivedPairRooms.Count)</h6>
+                @if (Model.DerivedPairRooms.Count == 0)
+                {
+                    <p class="text-muted small">—</p>
+                }
+                else
+                {
+                    <ul class="list-unstyled small">
+                        @foreach (var r in Model.DerivedPairRooms)
+                        {
+                            <li>
+                                <i class="bi bi-chat-dots"></i>
+                                @(r.DisplayName ?? r.Name)
+                                @if (r.IsActive)
+                                {
+                                    <span class="badge bg-success ms-1">@Localizer["Active"]</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-warning text-dark ms-1">@Localizer["Inactive"]</span>
+                                }
+                            </li>
+                        }
+                    </ul>
+                }
+            </div>
+        </div>
     </div>
 </div>
