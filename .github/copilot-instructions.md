@@ -529,3 +529,60 @@ Examples:
 
 **Last Updated**: 2025-11-13  
 **Version**: 0.9.5
+
+---
+
+# Repository Code Review Standards
+
+## Purpose
+These instructions guide GitHub Copilot when reviewing pull requests and code in this repository.
+Prioritize correctness, security, architecture, and maintainability over style nitpicks.
+
+## Review Priorities
+Review in this order:
+1. Security vulnerabilities and trust-boundary mistakes
+2. Correctness bugs and hidden edge cases
+3. Concurrency, async, cancellation, and resource-lifetime issues
+4. Architecture and design problems
+5. Performance issues with measurable impact
+6. Test gaps and observability gaps
+7. Maintainability and readability
+
+## Review Expectations
+- Be skeptical of assumptions and implicit behavior.
+- Look for misconceptions in business logic, framework usage, async flow, and dependency lifetimes.
+- Prefer findings that explain user impact, exploitability, failure mode, or operational risk.
+- Avoid low-value style comments unless they affect correctness, maintainability, or team standards.
+- If intent is unclear, say what assumption you are making.
+
+## Required Output Style
+For each finding provide:
+- Severity: Critical, High, Medium, Low
+- Confidence: High, Medium, Low
+- File and line or nearest symbol
+- Why it is a problem
+- Realistic impact
+- Specific fix
+- Short code example when useful
+
+## Security
+- Check all external inputs: HTTP, messaging, files, environment variables, config, headers, claims, deserialized payloads.
+- Look for broken authorization, insecure defaults, over-trusting client input, IDOR, SSRF, injection risks, path traversal, unsafe deserialization, open redirects, secret exposure, insecure crypto, and sensitive logging.
+- Verify secrets are not hardcoded and sensitive values are not returned in error responses or logs.
+- Flag missing validation and normalization at trust boundaries.
+
+## Correctness
+- Look for null-handling bugs, culture/timezone issues, integer overflow, precision errors, cancellation not propagated, retry misuse, swallowed exceptions, partial updates, and incorrect assumptions about ordering or uniqueness.
+- Check whether async code actually awaits, whether fire-and-forget is safe, and whether disposal/lifetime rules are correct.
+
+## Architecture
+- Flag violations of separation of concerns, domain leakage into controllers, infrastructure leakage into domain logic, and hidden coupling.
+- Check whether abstractions are justified and whether patterns add complexity without value.
+
+## Testing
+- Identify missing unit, integration, and authorization tests for risky paths.
+- Prefer tests for edge cases, failure modes, and regression-prone logic.
+
+## What to avoid
+- Do not spend review budget on cosmetic renames or formatting unless they hide a real issue.
+- Do not praise code unless it demonstrates a concrete good practice worth preserving.
