@@ -33,7 +33,10 @@ jobs:
         cache: 'npm'
     
     - name: Restore npm dependencies
-      run: npm ci
+      run: npm ci --ignore-scripts
+
+    - name: Restore trusted npm install scripts
+      run: npm rebuild esbuild
     
     - name: Build frontend assets
       run: npm run build:prod

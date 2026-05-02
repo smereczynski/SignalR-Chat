@@ -54,14 +54,15 @@ See [GitHub Variables Guide](github-variables.md) for detailed configuration.
 ### 3.1 Steps Summary
 1. Checkout
 2. Setup .NET 10 / Node.js 20
-3. Install npm dependencies (`npm ci`)
-4. Build frontend assets (`npm run build:prod`)
-5. Clean Chat.Web build artifacts (ensures fresh resource compilation – translations)
-6. Restore & build .NET solution (Release)
-7. List test assemblies for diagnostics
-8. Run tests (in-memory mode with `Testing__InMemory=true`)
-9. Upload test results artifact (trx)
-10. Publish & upload build artifacts when pushing to `main` or tags
+3. Install npm dependencies without lifecycle scripts (`npm ci --ignore-scripts`)
+4. Rebuild the trusted `esbuild` native package (`npm rebuild esbuild`)
+5. Build frontend assets (`npm run build:prod`)
+6. Clean Chat.Web build artifacts (ensures fresh resource compilation – translations)
+7. Restore & build .NET solution (Release)
+8. List test assemblies for diagnostics
+9. Run tests (in-memory mode with `Testing__InMemory=true`)
+10. Upload test results artifact (trx)
+11. Publish & upload build artifacts when pushing to `main` or tags
 
 ### 3.2 Test Mode
 Forced in-memory dependencies ensure deterministic test behavior:
@@ -213,7 +214,8 @@ DNS zones must be created manually and linked to the VNet. See [Post-Deployment 
 Simulate build locally:
 ```bash
 # Frontend
-npm ci
+npm ci --ignore-scripts
+npm rebuild esbuild
 npm run build:prod
 
 # .NET build & tests
