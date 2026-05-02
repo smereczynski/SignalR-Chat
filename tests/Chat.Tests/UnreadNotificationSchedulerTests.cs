@@ -2,6 +2,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using Chat.Web.Models;
@@ -16,19 +17,6 @@ namespace Chat.Tests
 {
     public class UnreadNotificationSchedulerTests
     {
-        private class FakeNotificationSender : INotificationSender
-        {
-            public readonly ConcurrentBag<(string User, string Room, Message Msg)> Calls = new();
-            public readonly TaskCompletionSource<(string User, string Room, Message Msg)> FirstCall = new(TaskCreationOptions.RunContinuationsAsynchronously);
-            public Task NotifyAsync(ApplicationUser user, string roomName, Message message)
-            {
-                var entry = (user?.UserName ?? "", roomName, message);
-                Calls.Add(entry);
-                FirstCall.TrySetResult(entry);
-                return Task.CompletedTask;
-            }
-        }
-
         private class FakeOtpSender : IOtpSender
         {
             public readonly ConcurrentBag<(string UserNames, string Dest, string Body)> Calls = new();
@@ -47,7 +35,7 @@ namespace Chat.Tests
             return (rooms, users, messages);
         }
 
-        private static ApplicationUser MkUser(string name, params string[] fixedRooms)
+        private static ApplicationUser MkUser(string name)
         {
             return new ApplicationUser
             {
@@ -55,24 +43,31 @@ namespace Chat.Tests
                 FullName = name,
                 Email = $"{name}@test.com",
                 MobileNumber = $"+1234567{name.GetHashCode() % 10000:0000}",
-                Enabled = true,
-                FixedRooms = fixedRooms?.ToList() ?? new List<string>()
+                Enabled = true
             };
         }
 
-        [Fact(Timeout = 6000)]
-        public async Task Sends_notifications_to_room_members_except_sender()
+        [Fact]
+        public async Task OnTimerAsync_SendsNotificationsToRoomMembersExceptSender()
         {
             var (rooms, users, messages) = SetupRepos();
-            // Prepare users assigned to #general via FixedRooms
-            await users.UpsertAsync(MkUser("alice", "general"));
-            await users.UpsertAsync(MkUser("bob", "general"));
-            await users.UpsertAsync(MkUser("charlie")); // not in general -> should not get notified
+            await users.UpsertAsync(MkUser("alice"));
+            await users.UpsertAsync(MkUser("bob"));
+            await users.UpsertAsync(MkUser("charlie"));
 
-            var room = await rooms.GetByNameAsync("general");
-            Assert.NotNull(room);
+            var room = new Room
+            {
+                Name = "pair:dc-a::dc-b",
+                DisplayName = "A <-> B",
+                PairKey = "dc-a::dc-b",
+                DispatchCenterAId = "dc-a",
+                DispatchCenterBId = "dc-b",
+                IsActive = true,
+                Users = new List<string> { "alice", "bob" }
+            };
+            await rooms.UpsertAsync(room);
 
-            // Create message from alice in #general
+            // Create message from alice in the pair room
             var msg = await messages.CreateAsync(new Message
             {
                 Content = "Hello",
@@ -81,24 +76,18 @@ namespace Chat.Tests
                 Timestamp = DateTime.UtcNow
             });
 
-            var fake = new FakeNotificationSender();
             var fakeOtp = new FakeOtpSender();
             var opts = Options.Create(new NotificationOptions { UnreadDelaySeconds = 1 });
-            var scheduler = new UnreadNotificationScheduler(rooms, users, messages, fake, fakeOtp, opts, NullLogger<UnreadNotificationScheduler>.Instance);
+            var scheduler = new UnreadNotificationScheduler(rooms, users, messages, fakeOtp, opts, NullLogger<UnreadNotificationScheduler>.Instance);
             try
             {
-                scheduler.Schedule(msg);
-                // Wait for the first notification - scheduler now sends via IOtpSender
-                await Task.Delay(TimeSpan.FromMilliseconds(1300));
-                
-                // Ensure notifications were sent via IOtpSender (not INotificationSender)
-                Assert.NotEmpty(fakeOtp.Calls);
-                
-                // Verify bob was notified (alice excluded as sender)
-                // Note: UserNames parameter may contain "bob" if only one user or be a joined string
+                await InvokeOnTimerAsync(scheduler, msg.Id);
+
                 var otpCalls = fakeOtp.Calls.ToList();
-                var bobNotifications = otpCalls.Where(c => c.UserNames.Contains("bob")).ToList();
-                Assert.NotEmpty(bobNotifications);
+                Assert.Equal(2, otpCalls.Count);
+                Assert.All(otpCalls, call => Assert.Equal("bob", call.UserNames));
+                Assert.All(otpCalls, call => Assert.Contains("New message in #pair:dc-a::dc-b", call.Body));
+                Assert.DoesNotContain(otpCalls, call => call.UserNames.Contains("alice", StringComparison.OrdinalIgnoreCase));
             }
             finally
             {
@@ -107,14 +96,24 @@ namespace Chat.Tests
             }
         }
 
-        [Fact(Timeout = 6000)]
-        public async Task Skips_notifications_if_message_marked_read_before_delay()
+        [Fact]
+        public async Task OnTimerAsync_SkipsNotificationsWhenMessageAlreadyRead()
         {
             var (rooms, users, messages) = SetupRepos();
-            await users.UpsertAsync(MkUser("alice", "general"));
-            await users.UpsertAsync(MkUser("bob", "general"));
+            await users.UpsertAsync(MkUser("alice"));
+            await users.UpsertAsync(MkUser("bob"));
 
-            var room = await rooms.GetByNameAsync("general");
+            var room = new Room
+            {
+                Name = "pair:dc-a::dc-b",
+                DisplayName = "A <-> B",
+                PairKey = "dc-a::dc-b",
+                DispatchCenterAId = "dc-a",
+                DispatchCenterBId = "dc-b",
+                IsActive = true,
+                Users = new List<string> { "alice", "bob" }
+            };
+            await rooms.UpsertAsync(room);
             var msg = await messages.CreateAsync(new Message
             {
                 Content = "Check read",
@@ -123,25 +122,75 @@ namespace Chat.Tests
                 Timestamp = DateTime.UtcNow
             });
 
-            var fake = new FakeNotificationSender();
             var fakeOtp = new FakeOtpSender();
             var opts = Options.Create(new NotificationOptions { UnreadDelaySeconds = 1 });
-            var scheduler = new UnreadNotificationScheduler(rooms, users, messages, fake, fakeOtp, opts, NullLogger<UnreadNotificationScheduler>.Instance);
+            var scheduler = new UnreadNotificationScheduler(rooms, users, messages, fakeOtp, opts, NullLogger<UnreadNotificationScheduler>.Instance);
             try
             {
-                scheduler.Schedule(msg);
-                // Mark as read by bob before the delay elapses
-                await messages.MarkReadAsync(msg.Id, "bob");
+                await messages.MarkReadAsync(msg.Id, "bob", null);
 
-                // Wait longer than delay and assert no notifications were sent
-                await Task.Delay(TimeSpan.FromMilliseconds(1300));
-                Assert.True(fake.Calls.IsEmpty, "No notifications should be sent when message is read");
+                await InvokeOnTimerAsync(scheduler, msg.Id);
+
+                Assert.True(fakeOtp.Calls.IsEmpty, "No notifications should be sent when message is read");
             }
             finally
             {
                 await scheduler.StopAsync(CancellationToken.None);
                 scheduler.Dispose();
             }
+        }
+
+        [Fact]
+        public async Task OnTimerAsync_DoesNotSendDuplicateNotificationsForSameMessage()
+        {
+            var (rooms, users, messages) = SetupRepos();
+            await users.UpsertAsync(MkUser("alice"));
+            await users.UpsertAsync(MkUser("bob"));
+
+            var room = new Room
+            {
+                Name = "pair:dc-a::dc-b",
+                DisplayName = "A <-> B",
+                PairKey = "dc-a::dc-b",
+                DispatchCenterAId = "dc-a",
+                DispatchCenterBId = "dc-b",
+                IsActive = true,
+                Users = new List<string> { "alice", "bob" }
+            };
+            await rooms.UpsertAsync(room);
+            var msg = await messages.CreateAsync(new Message
+            {
+                Content = "Hello again",
+                FromUser = await users.GetByUserNameAsync("alice"),
+                ToRoom = room,
+                Timestamp = DateTime.UtcNow
+            });
+
+            var fakeOtp = new FakeOtpSender();
+            var opts = Options.Create(new NotificationOptions { UnreadDelaySeconds = 1 });
+            var scheduler = new UnreadNotificationScheduler(rooms, users, messages, fakeOtp, opts, NullLogger<UnreadNotificationScheduler>.Instance);
+            try
+            {
+                await InvokeOnTimerAsync(scheduler, msg.Id);
+                await InvokeOnTimerAsync(scheduler, msg.Id);
+
+                Assert.Equal(2, fakeOtp.Calls.Count);
+            }
+            finally
+            {
+                await scheduler.StopAsync(CancellationToken.None);
+                scheduler.Dispose();
+            }
+        }
+
+        private static async Task InvokeOnTimerAsync(UnreadNotificationScheduler scheduler, int messageId)
+        {
+            var method = typeof(UnreadNotificationScheduler).GetMethod("OnTimerAsync", BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.NotNull(method);
+
+            var task = method!.Invoke(scheduler, new object[] { messageId }) as Task;
+            Assert.NotNull(task);
+            await task!;
         }
     }
 }

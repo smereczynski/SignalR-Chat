@@ -29,7 +29,7 @@ const connection = new signalR.HubConnectionBuilder()
   .build();
 
 await connection.start(); // Uses victim's cookies automatically
-await connection.invoke("SendMessage", "general", "I love evil.com!"); // Sent as victim
+await connection.invoke("SendMessage", "pair:dc-a::dc-b", "I love evil.com!"); // Sent as victim
 ```
 
 ### Requirements
@@ -233,7 +233,6 @@ app.Use(async (context, next) =>
 - `src/Chat.Web/Options/CorsOptions.cs` - Configuration class
 - `src/Chat.Web/Hubs/OriginValidationFilter.cs` - Hub filter
 - `src/Chat.Web/appsettings.Staging.json` - Staging configuration
-- `tests/Chat.IntegrationTests/CorsValidationTests.cs` - Integration tests
 
 **Files Modified**:
 - `src/Chat.Web/Startup.cs` - CORS policy and middleware

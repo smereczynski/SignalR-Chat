@@ -1,6 +1,6 @@
 # Installation Guide
 
-This guide covers setting up SignalR Chat with full Azure resources for complete functionality including persistence, scalability, and email OTP delivery.
+This guide covers setting up SignalR Chat with full Azure resources for the current dispatch-center pair model, including persistence, topology-derived rooms, and OTP or Entra-based access.
 
 ## Overview
 
@@ -8,10 +8,12 @@ SignalR Chat can run in two modes:
 
 | Mode | Setup Time | Azure Required | Persistence | Use Case |
 |------|-----------|----------------|-------------|----------|
-| **In-Memory** | 5 minutes | ❌ No | ❌ No | Quick testing, UI development |
-| **Azure (Full)** | 30-45 minutes | ✅ Yes | ✅ Yes | Production, full feature testing |
+| **In-Memory** | 5 minutes | ❌ No | ❌ No | App bring-up and lightweight UI validation |
+| **Azure (Full)** | 30-45 minutes | ✅ Yes | ✅ Yes | Production and full dispatch-center workflow validation |
 
-**This guide covers Azure (Full) mode**. For in-memory mode, see [Quickstart Guide](quickstart.md).
+Important: neither mode seeds users, rooms, or dispatch-center topology on this branch.
+
+**This guide covers Azure (Full) mode**. For in-memory bring-up, see [Quickstart Guide](quickstart.md).
 
 ---
 
@@ -192,7 +194,7 @@ az ad sp create-for-rbac \
   - App Service
   - Monitoring (App Insights, Log Analytics)
 ✓ Post-Deployment Validation
-✓ Database Seeding (automatic on first startup)
+  ✓ Manual bootstrap of first user and dispatch-center topology
 ```
 
 ### Step 6: Verify Deployment
@@ -206,13 +208,15 @@ Environment: dev
 Location: polandcentral
 ```
 
-**Test the application**:
+**Complete the application bootstrap**:
 1. Open the App URL in browser
-2. Login as **alice** (check email for OTP)
-3. Join **General** room
-4. Send a message
-5. Open incognito window, login as **bob**
-6. See real-time message delivery
+2. Provision the first user record with `userName`, `upn`, `dispatchCenterId`, and `enabled = true`
+3. Create at least two dispatch centers
+4. Link them through `correspondingDispatchCenterIds`
+5. Assign at least one officer on both dispatch centers
+6. Login as the provisioned user and verify that a derived pair room appears
+
+See [Bootstrap](../deployment/bootstrap.md) for the canonical post-deployment sequence.
 
 ---
 
@@ -347,15 +351,13 @@ bash -lc "set -a; source .env.local; dotnet run --project ./src/Chat.Web --urls=
 # Or use VS Code task: "Run Chat (Azure local env)"
 ```
 
-**First startup will automatically seed database**:
-```
-info: Chat.Web.Services.DataSeederService[0]
-      Checking if database needs seeding...
-info: Chat.Web.Services.DataSeederService[0]
-      Database is empty - starting seed process
-info: Chat.Web.Services.DataSeederService[0]
-      ✓ Database seeding completed successfully
-```
+After startup, complete the manual bootstrap described in [Bootstrap](../deployment/bootstrap.md):
+
+1. insert the first user record
+2. create dispatch centers
+3. assign officers on both sides
+4. configure corresponding dispatch-center pairs
+5. verify that the user sees a derived pair room
 
 ---
 
@@ -457,7 +459,7 @@ az webapp config appsettings set \
 ### Step 4: Test Email Delivery
 
 1. Run application
-2. Login as **alice**
+2. Login as a provisioned user that already exists in the `users` container
 3. Check email for OTP code
 4. Enter code to complete authentication
 
@@ -542,20 +544,21 @@ az signalr show \
 
 **Solution**: This is expected. Production deployments with zone redundancy are slower.
 
-#### Issue: "Database not seeding on startup"
+#### Issue: "Login works but no rooms are visible"
 
-**Cause**: App started with existing data or seeding failed.
+**Cause**: Manual bootstrap is incomplete.
 
-**Solution**: Check App Service logs:
+**Solution**: Check application logs and verify:
 ```bash
 az webapp log tail \
   --name "signalrchat-${ENVIRONMENT}-app" \
   --resource-group "rg-signalrchat-${ENVIRONMENT}-weu"
 
-# Look for:
-# "Checking if database needs seeding..."
-# "Database is empty - starting seed process" OR
-# "Database already contains data - skipping seed"
+# Then verify:
+# - the user has dispatchCenterId
+# - both dispatch centers exist
+# - correspondingDispatchCenterIds are configured
+# - both sides have officerUserNames
 ```
 
 #### Issue: "Can't login - OTP not received"

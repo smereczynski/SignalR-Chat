@@ -17,6 +17,7 @@ namespace Chat.Web.ViewModels
         [Required]
         public string Room { get; set; }
         public string Avatar { get; set; }
+        public string FromDispatchCenterId { get; set; }
         /// <summary>
         /// Optional client-supplied unique identifier (temporary) used to reconcile optimistic messages with server echo.
         /// </summary>
@@ -25,6 +26,9 @@ namespace Chat.Web.ViewModels
         /// Optional list of usernames who have read the message.
         /// </summary>
         public string[] ReadBy { get; set; }
+        public string[] ReadByDispatchCenterIds { get; set; }
+        public string EscalationStatus { get; set; }
+        public string OpenEscalationId { get; set; }
         /// <summary>
         /// Translation status (None, Pending, InProgress, Completed, Failed).
         /// </summary>

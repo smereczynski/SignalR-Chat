@@ -177,6 +177,14 @@ var baseAppSettings = [
     value: 'users'
   }
   {
+    name: 'Cosmos__DispatchCentersContainer'
+    value: 'dispatchcenters'
+  }
+  {
+    name: 'Cosmos__EscalationsContainer'
+    value: 'escalations'
+  }
+  {
     name: 'Acs__EmailFrom'
     value: acsSenderEmailAddress
   }

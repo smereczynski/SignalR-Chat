@@ -260,7 +260,16 @@ document.addEventListener('DOMContentLoaded', () => {
         const controller = new AbortController();
         flow.startAbort = controller;
         flow.activeUser = userName;
-        const sendId = 'send_' + Date.now() + '_' + Math.random().toString(36).slice(2,8);
+        const sendEntropy = (() => {
+            if (globalThis.crypto?.getRandomValues) {
+                const bytes = new Uint8Array(3);
+                globalThis.crypto.getRandomValues(bytes);
+                return Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
+            }
+
+            return Date.now().toString(36) + Math.round(performance.now()).toString(36);
+        })();
+        const sendId = 'send_' + Date.now() + '_' + sendEntropy;
         flow.lastSendId = sendId;
         flow.lastSendStartTs = performance.now();
         flow.lastSendCompletedTs = null;

@@ -18,8 +18,11 @@ cd SignalR-Chat
 # Build the solution
 dotnet build ./src/Chat.sln
 
-# Run tests
-dotnet test src/Chat.sln
+# Run the active lean test suite
+dotnet test ./tests/Chat.Tests/Chat.Tests.csproj --no-restore --nologo
+
+# Or run the solution-level command (currently equivalent)
+dotnet test ./src/Chat.sln --no-build --nologo
 
 # Run locally (in-memory mode)
 dotnet run --project ./src/Chat.Web --urls=http://localhost:5099
@@ -43,7 +46,7 @@ See [docs/development/local-setup.md](docs/development/local-setup.md) for detai
 
 3. **Run tests**:
    ```bash
-   dotnet test src/Chat.sln
+   dotnet test ./tests/Chat.Tests/Chat.Tests.csproj --no-restore --nologo
    ```
 
 4. **Commit your changes**:
@@ -134,17 +137,16 @@ refactor: simplify message repository
 
 ### Testing
 
-- **Unit tests**: For business logic, utilities, services
-- **Integration tests**: For API endpoints, SignalR hubs, auth flows
+- **Unit tests**: For business logic, utilities, services, and other custom code with direct development value
+- **Integration tests**: Add only when they are deterministic, explicitly opt-in, and worth the maintenance cost
 - **Coverage**: Aim for >80% coverage on new code
 
 ```bash
-# Run all tests
-dotnet test src/Chat.sln
+# Run the active lean suite
+dotnet test ./tests/Chat.Tests/Chat.Tests.csproj --no-restore --nologo
 
-# Run specific test project
-dotnet test tests/Chat.Tests/
-dotnet test tests/Chat.IntegrationTests/
+# Run through the solution (currently the same active test surface)
+dotnet test ./src/Chat.sln --no-build --nologo
 
 # Run with coverage (if configured)
 dotnet test src/Chat.sln /p:CollectCoverage=true
@@ -172,9 +174,7 @@ src/Chat.Web/
 └── Utilities/         # Helpers, extensions
 
 tests/
-├── Chat.Tests/              # Unit tests
-├── Chat.IntegrationTests/   # Integration tests
-└── Chat.Web.Tests/          # Web/security tests
+└── Chat.Tests/              # Focused unit tests with development value
 ```
 
 ## Documentation

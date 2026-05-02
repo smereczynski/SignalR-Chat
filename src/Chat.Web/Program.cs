@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Serilog;
@@ -10,6 +11,7 @@ using OpenTelemetry.Trace;
 using Chat.Web.Observability;
 using System;
 using System.IO;
+using System.Threading.Tasks;
 using Microsoft.ApplicationInsights.Extensibility;
 
 namespace Chat.Web
@@ -21,65 +23,93 @@ namespace Chat.Web
     /// </summary>
     public class Program
     {
+        private sealed record BootstrapSettings(
+            string OtlpEndpoint,
+            string ApplicationInsightsConnectionString,
+            string EnvironmentName,
+            bool UseHttpProtocol,
+            bool IsDevelopment,
+            bool WriteToConsole,
+            bool WriteToFile);
+
         /// <summary>
         /// Main entry method responsible for configuring bootstrap logger, building and running the host.
         /// Ensures fatal exceptions are flushed to the sink before process exit.
         /// </summary>
         /// <param name="args">Command-line arguments.</param>
-        public static void Main(string[] args)
+        public static async Task Main(string[] args)
+        {
+            var settings = BuildBootstrapSettings();
+            var loggerConfig = CreateBootstrapLoggerConfiguration(settings);
+
+            Log.Logger = loggerConfig.CreateLogger();
+
+            try
+            {
+                Log.Information("Starting host");
+                var host = CreateHostBuilder(args).Build();
+                await AwaitCosmosInitializationAsync(host.Services).ConfigureAwait(false);
+                await host.RunAsync().ConfigureAwait(false);
+            }
+            catch (System.Exception ex)
+            {
+                Log.Fatal(ex, "Host terminated unexpectedly");
+            }
+            finally
+            {
+                await Log.CloseAndFlushAsync().ConfigureAwait(false);
+            }
+        }
+
+        private static BootstrapSettings BuildBootstrapSettings()
         {
             var otlpEndpoint = Environment.GetEnvironmentVariable("OTel__OtlpEndpoint");
             var aiConnectionString = Environment.GetEnvironmentVariable("APPLICATIONINSIGHTS_CONNECTION_STRING");
-            var envName = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT");
-            // Determine OTLP protocol from endpoint: default to gRPC unless port 4318 is used
-            var useHttpProto = !string.IsNullOrWhiteSpace(otlpEndpoint) && otlpEndpoint.Contains(":4318", StringComparison.Ordinal);
+            var envName = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? Environments.Production;
+            var isDevelopment = string.Equals(envName, Environments.Development, StringComparison.OrdinalIgnoreCase);
+            var bootstrapConfig = BuildBootstrapConfiguration(envName);
+            var writeToConsole = bootstrapConfig.GetValue<bool?>("Serilog:WriteToConsole") ?? isDevelopment;
 
-            // Development: verbose logging (Debug level) for easier troubleshooting
-            // Production: standard logging (Information level) to reduce noise
-            var isDevelopment = string.Equals(envName, "Development", StringComparison.OrdinalIgnoreCase);
+            return new BootstrapSettings(
+                otlpEndpoint,
+                aiConnectionString,
+                envName,
+                !string.IsNullOrWhiteSpace(otlpEndpoint) && otlpEndpoint.Contains(":4318", StringComparison.Ordinal),
+                isDevelopment,
+                writeToConsole,
+                IsEnabled(Environment.GetEnvironmentVariable("Serilog__WriteToFile")));
+        }
 
-            // Allow toggling console output (stdout/stderr) via configuration.
-            // This is useful for Azure App Service where stdout/stderr is forwarded to Log Analytics
-            // as AppServiceConsoleLogs (to avoid duplicating logs already sent to Application Insights).
-            //
-            // Env var override: Serilog__WriteToConsole=true|false
-            var bootstrapConfig = new ConfigurationBuilder()
+        private static IConfiguration BuildBootstrapConfiguration(string envName)
+        {
+            return new ConfigurationBuilder()
                 .SetBasePath(Directory.GetCurrentDirectory())
                 .AddJsonFile("appsettings.json", optional: true, reloadOnChange: false)
                 .AddJsonFile($"appsettings.{envName}.json", optional: true, reloadOnChange: false)
                 .AddEnvironmentVariables()
                 .Build();
+        }
 
-            var writeToConsole = bootstrapConfig.GetValue<bool?>("Serilog:WriteToConsole") ?? isDevelopment;
-            
-            // File logging: opt-in via configuration (disabled by default to avoid unnecessary disk I/O)
-            // Set Serilog__WriteToFile=true in environment variables to enable
-            var writeToFileEnv = Environment.GetEnvironmentVariable("Serilog__WriteToFile");
-            var writeToFile = !string.IsNullOrWhiteSpace(writeToFileEnv) && 
-                              (string.Equals(writeToFileEnv, "true", StringComparison.OrdinalIgnoreCase) || writeToFileEnv == "1");
-            
+        private static LoggerConfiguration CreateBootstrapLoggerConfiguration(BootstrapSettings settings)
+        {
             var loggerConfig = new LoggerConfiguration()
-                .MinimumLevel.Override("Microsoft", isDevelopment ? LogEventLevel.Information : LogEventLevel.Warning)
+                .MinimumLevel.Override("Microsoft", settings.IsDevelopment ? LogEventLevel.Information : LogEventLevel.Warning)
                 .MinimumLevel.Override("Microsoft.Azure.Cosmos", LogEventLevel.Information) // Always log Cosmos operations
                 .MinimumLevel.Override("StackExchange.Redis", LogEventLevel.Information) // Always log Redis operations
-                .MinimumLevel.Override("Azure.Core", isDevelopment ? LogEventLevel.Information : LogEventLevel.Warning)
-                .MinimumLevel.Override("Azure.Messaging", isDevelopment ? LogEventLevel.Information : LogEventLevel.Warning)
+                .MinimumLevel.Override("Azure.Core", settings.IsDevelopment ? LogEventLevel.Information : LogEventLevel.Warning)
+                .MinimumLevel.Override("Azure.Messaging", settings.IsDevelopment ? LogEventLevel.Information : LogEventLevel.Warning)
                 .MinimumLevel.Override("Azure", LogEventLevel.Warning) // Suppress Azure SDK verbose traces (Enqueued, Sent, ResponseReceived)
-                .MinimumLevel.Is(isDevelopment ? LogEventLevel.Debug : LogEventLevel.Information)
+                .MinimumLevel.Is(settings.IsDevelopment ? LogEventLevel.Debug : LogEventLevel.Information)
                 .Enrich.WithEnvironmentName()
                 .Enrich.WithMachineName()
-                .Enrich.WithThreadId()
-                ;
+                .Enrich.WithThreadId();
 
-            // Always keep Error+ on stderr. When WriteToConsole=false we suppress stdout completely
-            // (but still write errors to stderr) to reduce Log Analytics AppServiceConsoleLogs volume.
             loggerConfig = loggerConfig.WriteTo.Console(
                 outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {SourceContext} {Message:lj} {Properties:j}{NewLine}{Exception}",
-                restrictedToMinimumLevel: writeToConsole ? LogEventLevel.Verbose : LogEventLevel.Error,
+                restrictedToMinimumLevel: settings.WriteToConsole ? LogEventLevel.Verbose : LogEventLevel.Error,
                 standardErrorFromLevel: LogEventLevel.Error);
-            
-            // Conditionally enable file logging if configured
-            if (writeToFile)
+
+            if (settings.WriteToFile)
             {
                 loggerConfig = loggerConfig.WriteTo.File(
                     path: "logs/chat-.log",
@@ -90,20 +120,21 @@ namespace Chat.Web
                 );
             }
 
-            // Write to Application Insights if connection string available (both Dev and Production)
-            if (!string.IsNullOrWhiteSpace(aiConnectionString))
+            if (!string.IsNullOrWhiteSpace(settings.ApplicationInsightsConnectionString))
             {
                 var telemetryConfig = TelemetryConfiguration.CreateDefault();
-                telemetryConfig.ConnectionString = aiConnectionString;
+                telemetryConfig.ConnectionString = settings.ApplicationInsightsConnectionString;
                 loggerConfig = loggerConfig.WriteTo.ApplicationInsights(telemetryConfig, TelemetryConverter.Traces);
             }
-            // If OTLP endpoint configured, also use OpenTelemetry sink
-            if (!string.IsNullOrWhiteSpace(otlpEndpoint))
+
+            if (!string.IsNullOrWhiteSpace(settings.OtlpEndpoint))
             {
                 loggerConfig = loggerConfig.WriteTo.OpenTelemetry(options =>
                 {
-                    options.Endpoint = otlpEndpoint!;
-                    options.Protocol = useHttpProto ? Serilog.Sinks.OpenTelemetry.OtlpProtocol.HttpProtobuf : Serilog.Sinks.OpenTelemetry.OtlpProtocol.Grpc;
+                    options.Endpoint = settings.OtlpEndpoint!;
+                    options.Protocol = settings.UseHttpProtocol
+                        ? Serilog.Sinks.OpenTelemetry.OtlpProtocol.HttpProtobuf
+                        : Serilog.Sinks.OpenTelemetry.OtlpProtocol.Grpc;
                     options.ResourceAttributes = new System.Collections.Generic.Dictionary<string, object>
                     {
                         ["service.name"] = Tracing.ServiceName
@@ -111,21 +142,27 @@ namespace Chat.Web
                 });
             }
 
-            Log.Logger = loggerConfig.CreateLogger();
+            return loggerConfig;
+        }
 
-            try
+        private static bool IsEnabled(string value)
+        {
+            return !string.IsNullOrWhiteSpace(value) &&
+                   (string.Equals(value, "true", StringComparison.OrdinalIgnoreCase) || value == "1");
+        }
+
+        private static async Task AwaitCosmosInitializationAsync(IServiceProvider services)
+        {
+            var cosmosTask = services.GetService<Task<Repositories.CosmosClients>>();
+            if (cosmosTask == null)
             {
-                Log.Information("Starting host");
-                CreateHostBuilder(args).Build().Run();
+                Log.Debug("Cosmos DB initialization task not registered (in-memory mode)");
+                return;
             }
-            catch (System.Exception ex)
-            {
-                Log.Fatal(ex, "Host terminated unexpectedly");
-            }
-            finally
-            {
-                Log.CloseAndFlush();
-            }
+
+            Log.Information("Awaiting Cosmos DB initialization before accepting requests");
+            await cosmosTask.ConfigureAwait(false);
+            Log.Information("Cosmos DB initialization complete");
         }
 
         private static string ExtractInstrumentationKey(string connectionString)

@@ -434,9 +434,6 @@
   <data name="Disable" xml:space="preserve">
     <value>Wyłącz</value>
   </data>
-  <data name="AssignRooms" xml:space="preserve">
-    <value>Przypisz pokoje</value>
-  </data>
   <data name="RoomName" xml:space="preserve">
     <value>Nazwa pokoju</value>
   </data>
@@ -454,9 +451,6 @@
   </data>
   <data name="CreateUser" xml:space="preserve">
     <value>Utwórz użytkownika</value>
-  </data>
-  <data name="AssignRoomsToUser" xml:space="preserve">
-    <value>Przypisz pokoje do {0}</value>
   </data>
   <data name="EnabledQuestion" xml:space="preserve">
     <value>Włączony?</value>
@@ -505,5 +499,152 @@
     </data>
     <data name="Edit" xml:space="preserve">
       <value>Edytuj</value>
+    </data>
+    <data name="FullName" xml:space="preserve">
+      <value>Imię i nazwisko</value>
+    </data>
+    <data name="EditUser" xml:space="preserve">
+      <value>Edytuj użytkownika</value>
+    </data>
+    <data name="PreferredLanguage" xml:space="preserve">
+      <value>Preferowany język</value>
+    </data>
+    <data name="Upn" xml:space="preserve">
+      <value>UPN</value>
+    </data>
+    <data name="Warnings" xml:space="preserve">
+      <value>Ostrzeżenia</value>
+    </data>
+    <data name="NoWarnings" xml:space="preserve">
+      <value>Brak ostrzeżeń — system działa prawidłowo.</value>
+    </data>
+    <data name="OpenEscalations" xml:space="preserve">
+      <value>Otwarte eskalacje</value>
+    </data>
+    <data name="UsersWithoutDispatchCenter" xml:space="preserve">
+      <value>Użytkownicy bez dyspozytury</value>
+    </data>
+    <data name="DispatchCentersWithoutOfficers" xml:space="preserve">
+      <value>Dyspozytury bez oficerów eskalacji</value>
+    </data>
+    <data name="DispatchCentersWithoutPairs" xml:space="preserve">
+      <value>Dyspozytury bez przypisanych par</value>
+    </data>
+    <data name="InactivePairRooms" xml:space="preserve">
+      <value>Nieaktywne pokoje par</value>
+    </data>
+    <data name="SyncTopology" xml:space="preserve">
+      <value>Synchronizuj topologię</value>
+    </data>
+    <data name="Escalations" xml:space="preserve">
+      <value>Eskalacje</value>
+    </data>
+    <data name="EscalationExplorer" xml:space="preserve">
+      <value>Przeglądarka eskalacji</value>
+    </data>
+    <data name="TriggerType" xml:space="preserve">
+      <value>Typ wyzwalacza</value>
+    </data>
+    <data name="EscalatedAt" xml:space="preserve">
+      <value>Eskalowane o</value>
+    </data>
+    <data name="ResolvedAt" xml:space="preserve">
+      <value>Rozwiązane o</value>
+    </data>
+    <data name="CreatedAt" xml:space="preserve">
+      <value>Utworzone o</value>
+    </data>
+    <data name="DueAt" xml:space="preserve">
+      <value>Termin</value>
+    </data>
+    <data name="Automatic" xml:space="preserve">
+      <value>Automatyczna</value>
+    </data>
+    <data name="Manual" xml:space="preserve">
+      <value>Ręczna</value>
+    </data>
+    <data name="Resolved" xml:space="preserve">
+      <value>Rozwiązana</value>
+    </data>
+    <data name="Cancelled" xml:space="preserve">
+      <value>Anulowana</value>
+    </data>
+    <data name="Scheduled" xml:space="preserve">
+      <value>Zaplanowana</value>
+    </data>
+    <data name="Escalated" xml:space="preserve">
+      <value>Eskalowana</value>
+    </data>
+    <data name="PairKey" xml:space="preserve">
+      <value>Klucz pary</value>
+    </data>
+    <data name="DispatchCenterA" xml:space="preserve">
+      <value>Dyspozytura A</value>
+    </data>
+    <data name="DispatchCenterB" xml:space="preserve">
+      <value>Dyspozytura B</value>
+    </data>
+    <data name="Active" xml:space="preserve">
+      <value>Aktywny</value>
+    </data>
+    <data name="Inactive" xml:space="preserve">
+      <value>Nieaktywny</value>
+    </data>
+    <data name="InactiveReason" xml:space="preserve">
+      <value>Przyczyna nieaktywności</value>
+    </data>
+    <data name="PairRelationshipRemoved" xml:space="preserve">
+      <value>Powiązanie par usunięte</value>
+    </data>
+    <data name="MissingOfficers" xml:space="preserve">
+      <value>Brak oficerów</value>
+    </data>
+    <data name="RoomDiagnostics" xml:space="preserve">
+      <value>Diagnostyka pokojów</value>
+    </data>
+    <data name="ReciprocalPairs" xml:space="preserve">
+      <value>Wzajemne pary</value>
+    </data>
+    <data name="DerivedPairRooms" xml:space="preserve">
+      <value>Pochodne pokoje par</value>
+    </data>
+    <data name="ImpactSummary" xml:space="preserve">
+      <value>Podsumowanie wpływu</value>
+    </data>
+    <data name="Filter" xml:space="preserve">
+      <value>Filtruj</value>
+    </data>
+    <data name="AllStatuses" xml:space="preserve">
+      <value>Wszystkie statusy</value>
+    </data>
+    <data name="AllRooms" xml:space="preserve">
+      <value>Wszystkie pokoje</value>
+    </data>
+    <data name="AllTriggerTypes" xml:space="preserve">
+      <value>Wszystkie typy</value>
+    </data>
+    <data name="AllSources" xml:space="preserve">
+      <value>Wszystkie źródła</value>
+    </data>
+    <data name="AllTargets" xml:space="preserve">
+      <value>Wszystkie cele</value>
+    </data>
+    <data name="TopologySyncedSuccessfully" xml:space="preserve">
+      <value>Synchronizacja topologii zakończona pomyślnie.</value>
+    </data>
+    <data name="DispatchCenterCreated" xml:space="preserve">
+      <value>Dyspozytura została utworzona.</value>
+    </data>
+    <data name="DispatchCenterSaved" xml:space="preserve">
+      <value>Dyspozytura została zapisana.</value>
+    </data>
+    <data name="DispatchCenterDeleted" xml:space="preserve">
+      <value>Dyspozytura została usunięta.</value>
+    </data>
+    <data name="UsersAssignedSuccessfully" xml:space="preserve">
+      <value>Przypisanie użytkowników zostało zapisane.</value>
+    </data>
+    <data name="EscalationOfficers" xml:space="preserve">
+      <value>Oficerowie eskalacji</value>
     </data>
 </root>

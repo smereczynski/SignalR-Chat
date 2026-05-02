@@ -248,7 +248,13 @@ namespace Chat.Web.Controllers
             
             var user = await _users.GetByUserNameAsync(userName);
             if (user == null) return Unauthorized();
-            var payload = new { userName = user.UserName, fullName = user.FullName, avatar = user.Avatar };
+            var payload = new
+            {
+                userName = user.UserName,
+                fullName = user.FullName,
+                avatar = user.Avatar,
+                dispatchCenterId = RoomAccessPolicy.GetPrimaryDispatchCenterId(user)
+            };
             // WORKAROUND: Manual serialization to avoid PipeWriter UnflushedBytes issue in test harness.
             var json = JsonSerializer.Serialize(payload);
             return new ContentResult { Content = json, ContentType = "application/json", StatusCode = 200 };

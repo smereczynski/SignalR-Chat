@@ -12,6 +12,7 @@ namespace Chat.Web.Repositories
         Task<ApplicationUser> GetByUserNameAsync(string userName);
         Task<ApplicationUser> GetByUpnAsync(string upn);
         Task<IEnumerable<ApplicationUser>> GetAllAsync();
+        Task<IEnumerable<ApplicationUser>> GetByDispatchCenterIdAsync(string dispatchCenterId);
         Task UpsertAsync(ApplicationUser user);
     }
 }
