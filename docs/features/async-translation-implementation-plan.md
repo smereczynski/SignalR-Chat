@@ -674,9 +674,9 @@ Test cases:
 - Job removal
 - Serialization/deserialization
 
-### 6.2 Integration Tests
+### 6.2 Future App-Level Tests
 
-**File**: `tests/Chat.IntegrationTests/TranslationBackgroundServiceTests.cs`
+This coverage is not part of the current active suite and would need to be reintroduced as explicit app-level tests.
 
 Test cases:
 - Job processing end-to-end

@@ -308,6 +308,7 @@ namespace Chat.Web
                 services.AddSingleton<IRoomsRepository, InMemoryRoomsRepository>();
                 services.AddSingleton<IMessagesRepository, InMemoryMessagesRepository>();
                 services.AddSingleton<IDispatchCentersRepository, InMemoryDispatchCentersRepository>();
+                services.AddSingleton<IEscalationsRepository, InMemoryEscalationsRepository>();
                 services.AddSingleton<IOtpStore, InMemoryOtpStore>();
                 services.AddSingleton<Services.IPresenceTracker, Services.InMemoryPresenceTracker>();
             }
@@ -328,6 +329,7 @@ namespace Chat.Web
                     UsersContainer = Configuration["Cosmos:UsersContainer"] ?? "users",
                     RoomsContainer = Configuration["Cosmos:RoomsContainer"] ?? "rooms",
                     DispatchCentersContainer = Configuration["Cosmos:DispatchCentersContainer"] ?? "dispatchcenters",
+                    EscalationsContainer = Configuration["Cosmos:EscalationsContainer"] ?? "escalations",
                 };
                 // Configure messages TTL: set to a number (seconds), -1 to enable TTL with no expiry, or null/empty to disable TTL entirely
                 var ttlRaw = Configuration["Cosmos:MessagesTtlSeconds"];
@@ -339,28 +341,20 @@ namespace Chat.Web
                 {
                     cosmosOpts.MessagesTtlSeconds = ttlParsed;
                 }
-                // Initialize Cosmos DB clients using hosted service to avoid blocking during DI registration
-                // Store options for deferred initialization
                 services.AddSingleton(cosmosOpts);
-                
-                // Register CosmosClients as a placeholder that will be set by the initialization service
-                CosmosClients cosmosClientsInstance = null;
-                services.AddSingleton(sp => cosmosClientsInstance ?? throw new InvalidOperationException("CosmosClients not yet initialized. Ensure CosmosClientsInitializationService has started."));
-                
-                // Register initialization service that will run async initialization properly
-                services.AddHostedService(sp => new Services.CosmosClientsInitializationService(
-                    cosmosOpts,
-                    sp.GetRequiredService<ILogger<Services.CosmosClientsInitializationService>>(),
-                    clients => cosmosClientsInstance = clients
-                ));
+
+                // Start Cosmos client initialization asynchronously at DI registration time.
+                // Registering Task<CosmosClients> allows Program.Main to await it before
+                // accepting requests, so no request thread ever blocks on this.
+                var cosmosClientsTask = CosmosClients.CreateAsync(cosmosOpts);
+                services.AddSingleton(cosmosClientsTask);
+                services.AddSingleton(sp => sp.GetRequiredService<Task<CosmosClients>>().GetAwaiter().GetResult());
                 services.AddSingleton<IUsersRepository, CosmosUsersRepository>();
                 services.AddSingleton<IRoomsRepository, CosmosRoomsRepository>();
                 services.AddSingleton<IMessagesRepository, CosmosMessagesRepository>();
                 services.AddSingleton<IDispatchCentersRepository, CosmosDispatchCentersRepository>();
+                services.AddSingleton<IEscalationsRepository, CosmosEscalationsRepository>();
 
-                // Data seeder service (seeds initial data in background if database is empty)
-                services.AddHostedService<Services.DataSeederService>();
-                
                 // Translation background service (processes queued translation jobs)
                 var translationOptions = Configuration.GetSection("Translation").Get<Options.TranslationOptions>();
                 if (translationOptions?.Enabled == true)
@@ -418,7 +412,9 @@ namespace Chat.Web
                         logger.LogError(ex, "Failed to connect to Redis. Endpoints: {Endpoints}, SSL: {UseSsl}",
                             string.Join(", ", redisConfig.EndPoints.Select(ep => ep.ToString())),
                             redisConfig.Ssl);
-                        throw;
+                        throw new InvalidOperationException(
+                            $"Failed to connect to Redis using endpoints '{string.Join(", ", redisConfig.EndPoints.Select(ep => ep.ToString()))}'.",
+                            ex);
                     }
                 });
                 services.AddSingleton<IOtpStore, RedisOtpStore>();
@@ -578,6 +574,10 @@ namespace Chat.Web
             
             // Notification plumbing
             services.AddSingleton<Services.INotificationSender, Services.NotificationSender>();
+            services.AddSingleton<Services.DispatchCenterTopologyService>();
+            services.AddSingleton<Services.EscalationService>();
+            services.AddHostedService<Services.DispatchCenterTopologySyncService>();
+            services.AddHostedService<Services.EscalationBackgroundService>();
             
             // Rate limiting: protect auth endpoints (OTP request / verify) - configurable for tests vs prod
             services.AddRateLimiter(options =>
@@ -686,7 +686,7 @@ namespace Chat.Web
                                 OnTokenValidated = async context =>
                                 {
                                     var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Startup>>();
-                                    logger.LogWarning("===== OnTokenValidated START =====");
+                                    logger.LogDebug("OnTokenValidated started");
                                     
                                     var usersRepo = context.HttpContext.RequestServices.GetRequiredService<IUsersRepository>();
                                     
@@ -699,7 +699,7 @@ namespace Chat.Web
                                     var country = context.Principal?.FindFirst("country")?.Value;
                                     var region = context.Principal?.FindFirst("state")?.Value;
                                     
-                                    logger.LogWarning("===== OnTokenValidated: Extracted UPN={Upn}, TenantId={TenantId} =====", upn ?? "<null>", tenantId ?? "<null>");
+                                    logger.LogDebug("OnTokenValidated: Extracted UPN={Upn}, TenantId={TenantId}", upn ?? "<null>", tenantId ?? "<null>");
 
                                     // Fallback: derive tenantId from issuer when tid claim missing (some account types / older tokens)
                                     if (string.IsNullOrWhiteSpace(tenantId))
@@ -1132,9 +1132,6 @@ namespace Chat.Web
     /// </summary>
     public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
         {
-            // Data seeding now happens in the background via DataSeederService (IHostedService)
-            // This allows the app to start faster and respond to health checks sooner
-
             // Global exception handler with comprehensive logging (all environments)
             app.UseMiddleware<GlobalExceptionHandlerMiddleware>();
             

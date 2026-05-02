@@ -17,10 +17,11 @@ namespace Chat.Web.Repositories
         /// <summary>
         /// Marks a message as read by the specified user. Returns the updated message or null if not found.
         /// </summary>
-        Task<Message> MarkReadAsync(int id, string userName);
+        Task<Message> MarkReadAsync(int id, string userName, string dispatchCenterId);
         /// <summary>
         /// Updates translation status and translations for a message. Returns the updated message or null if not found.
         /// </summary>
         Task<Message> UpdateTranslationAsync(int id, MessageTranslationUpdate update);
+        Task<Message> UpdateEscalationAsync(int id, MessageEscalationStatus status, string escalationId);
     }
 }

@@ -13,5 +13,7 @@ public class DispatchCenterInputModel
 
     public bool IfMain { get; set; }
 
+    public List<string> OfficerUserNames { get; set; } = new();
+
     public List<string> CorrespondingDispatchCenterIds { get; set; } = new();
 }

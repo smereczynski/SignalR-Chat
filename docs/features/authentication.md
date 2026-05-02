@@ -367,17 +367,21 @@ dotnet test tests/Chat.Tests/ --filter "OtpHasher"
 dotnet test tests/Chat.Tests/ --filter "CosmosRepositories"
 ```
 
-### Integration Tests
+### Remaining Automated Tests
 
-**OTP Auth Flow** (`Chat.IntegrationTests/OtpAuthFlowTests.cs`):
+The repository now keeps only fast tests that provide direct development value.
+
+**OTP Hashing** (`Chat.Tests/OtpHasherTests.cs`):
 ```bash
-dotnet test tests/Chat.IntegrationTests/ --filter "OtpAuthFlow"
+dotnet test tests/Chat.Tests/ --filter "OtpHasher"
 ```
 
-**Rate Limiting** (`Chat.IntegrationTests/OtpAttemptLimitingTests.cs`):
+**Configuration Guards** (`Chat.Tests/ConfigurationGuardsTests.cs`):
 ```bash
-dotnet test tests/Chat.IntegrationTests/ --filter "OtpAttemptLimiting"
+dotnet test tests/Chat.Tests/ --filter "ConfigurationGuards"
 ```
+
+Broader OTP controller and rate-limiting tests are currently not part of the active suite. Reintroduce them only as deterministic app-level tests with a clear local execution model.
 
 **Entra ID Auth** (Manual Testing Required):
 1. Configure Entra ID app registration

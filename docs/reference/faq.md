@@ -18,12 +18,12 @@ Common questions about SignalR Chat development, deployment, and troubleshooting
 
 ### What is SignalR Chat?
 
-SignalR Chat is a production-ready, real-time chat application built with ASP.NET Core 10, SignalR, and Azure services. It demonstrates modern web development practices including:
-- Real-time messaging with SignalR
-- OTP-based authentication (no passwords)
-- Azure cloud infrastructure (Cosmos DB, Redis, SignalR Service)
-- OpenTelemetry observability
-- Multi-language support (8 languages)
+SignalR Chat is a production-ready, real-time dispatch-center pair chat application built with ASP.NET Core 10, SignalR, and Azure services. It demonstrates modern web development practices including:
+- real-time messaging with SignalR
+- topology-derived pair rooms between dispatch centers
+- automatic and manual escalations to counterpart officers
+- OTP failover authentication and Entra-first access patterns
+- Azure cloud infrastructure and OpenTelemetry observability
 
 ### Can I use this in production?
 
@@ -37,18 +37,20 @@ SignalR Chat is a production-ready, real-time chat application built with ASP.NE
 ### What features are included?
 
 **Core features**:
-- Real-time messaging in chat rooms
+- Real-time messaging in dispatch-center pair rooms
 - Read receipts (delivered, read by username)
 - Typing indicators (3-second timeout)
 - Presence tracking (online/offline status)
 - OTP authentication (email or console)
+- Automatic and manual escalations
 - Multi-language support (8 languages)
 - Automatic reconnection (exponential backoff)
 
 **What's NOT included** (by design):
-- ❌ Direct messages (DMs) - only fixed rooms
+- ❌ Direct messages (DMs)
 - ❌ Message editing/deletion
-- ❌ User registration - fixed users (alice, bob, charlie, dave, eve)
+- ❌ Self-service user registration
+- ❌ Manual room creation or generic standard rooms
 - ❌ File uploads or rich media
 - ❌ User avatars or profiles
 
@@ -87,7 +89,7 @@ SignalR Chat is a production-ready, real-time chat application built with ASP.NE
 
 ### Do I need Azure to develop locally?
 
-**No!** SignalR Chat supports **in-memory mode** for local development without any Azure dependencies.
+**No.** SignalR Chat supports **in-memory mode** for local development without Azure dependencies.
 
 **To run in true in-memory mode**, use the `Testing__InMemory=true` environment variable:
 
@@ -96,12 +98,15 @@ Testing__InMemory=true dotnet run --project ./src/Chat.Web --urls=http://localho
 ```
 
 **In-memory mode includes**:
-- ✅ All features work (messaging, read receipts, typing, presence)
+- ✅ Application bring-up without Azure services
+- ✅ Messaging, read receipts, typing, presence, and escalations after manual bootstrap
 - ✅ No Azure account needed
 - ✅ No connection strings required
 - ✅ OTP codes logged to terminal
 - ❌ Data lost on restart (no persistence)
 - ❌ Single instance only (can't test load balancing)
+
+Important: in-memory mode does not create sample users, sample rooms, or sample dispatch centers. You still need to provision a user and dispatch-center topology before chat becomes visible.
 
 **⚠️ Important**: Without `Testing__InMemory=true`, the application will connect to Azure resources if:
 - `.env.local` file exists with connection strings
@@ -133,16 +138,6 @@ Or use VS Code task: **"Run Chat (Azure local env)"**
 ### What's in `.env.local`?
 
 See **[Configuration Guide](../getting-started/configuration.md)** for the up-to-date `.env.local` template and supported keys.
-# Azure SignalR Service
-SIGNALR_CONNECTION_STRING="Endpoint=https://...;AccessKey=...;Version=1.0;"
-
-# Azure Communication Services (optional - for email OTP)
-ACS_CONNECTION_STRING="endpoint=https://...;accesskey=..."
-ACS_EMAIL_FROM="DoNotReply@yourdomain.azurecomm.net"
-
-# Application Insights (optional - for telemetry)
-APPLICATIONINSIGHTS_CONNECTION_STRING="InstrumentationKey=...;IngestionEndpoint=..."
-```
 
 See [Local Setup Guide](../development/local-setup.md#full-setup-azure-mode) for details.
 
@@ -172,29 +167,40 @@ See [Local Setup Guide](../development/local-setup.md#full-setup-azure-mode) for
 
 ### How do I add a new user?
 
-**In-memory mode**: Edit `Startup.cs` → `SeedData()` method
+Use the admin UI when you already have admin access, or insert the first bootstrap user directly in the `users` container.
 
-**Azure mode**: Add user to Cosmos DB `users` container:
+Minimum required fields are:
+
+- `userName`
+- `upn`
+- `dispatchCenterId`
+- `enabled`
+
+Example bootstrap document:
+
 ```json
 {
-  "id": "newuser",
-  "displayName": "New User",
-  "phoneNumber": "+1234567890"
+  "userName": "new.user@contoso.com",
+  "fullName": "New User",
+  "email": "new.user@contoso.com",
+  "upn": "new.user@contoso.com",
+  "enabled": true,
+  "dispatchCenterId": "dc-a"
 }
 ```
 
 ### How do I add a new chat room?
 
-**In-memory mode**: Edit `Startup.cs` → `SeedData()` method
+You do not create chat rooms directly on this branch.
 
-**Azure mode**: Add room to Cosmos DB `rooms` container:
-```json
-{
-  "id": "newroom",
-  "name": "New Room",
-  "description": "Room description"
-}
-```
+Rooms are derived from dispatch-center topology. To make a room appear:
+
+1. create two dispatch centers
+2. link them with `correspondingDispatchCenterIds`
+3. assign users to the relevant dispatch centers
+4. assign at least one officer on both sides
+
+The application then derives or updates the pair room automatically.
 
 ### How do I add a dispatch center?
 
@@ -375,7 +381,7 @@ ASP.NET Core automatically translates `__` → `:` when reading configuration.
 
 ### How does OTP authentication work?
 
-1. **User selects username** (alice, bob, charlie, dave, eve)
+1. **User enters an existing application username**
 2. **System generates 6-digit OTP** (valid 5 minutes)
 3. **OTP sent via**:
    - **In-memory mode**: Logged to terminal
@@ -383,6 +389,8 @@ ASP.NET Core automatically translates `__` → `:` when reading configuration.
 4. **User enters OTP** within 5 minutes
 5. **System verifies** using Argon2id hash
 6. **Cookie issued** for session (secure, httpOnly, sameSite)
+
+Important: successful OTP verification does not grant room access by itself. The user still needs a valid `dispatchCenterId`, and the dispatch-center topology must produce at least one active pair room.
 
 **Security features**:
 - ✅ Argon2id hashing (memory-hard, GPU-resistant)

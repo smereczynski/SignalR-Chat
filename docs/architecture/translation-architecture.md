@@ -464,46 +464,32 @@ public class TranslationQueueHealthCheck : IHealthCheck
 
 ## Testing Strategy
 
-### Unit Tests (23 tests)
+The active translation tests are intentionally limited to deterministic unit tests that protect translation-specific code without requiring live Azure resources.
 
-**TranslationModelsTests** (14 tests):
-- Message model properties and serialization
-- TranslationJob model with all fields
-- TranslationStatus enum values
-- Translation dictionaries and null handling
+### Active Tests
 
-**TranslationJobQueueTests** (9 tests):
-- Enqueue/dequeue operations
-- Priority handling (high vs normal)
-- Disabled state behavior
-- Queue length tracking
-- Null job handling
+**TranslationModelsTests**:
+- message translation properties and state transitions
+- serialization and dictionary handling
+- null and edge-case behavior
 
-**Location**: `tests/Chat.Tests/Translation*.cs`
+**TranslationJobQueueTests**:
+- enqueue and dequeue behavior
+- priority handling
+- disabled-state behavior
+- queue length and invalid-input handling
 
-### Integration Tests (8 tests)
+**AzureTranslatorServiceValidationTests**:
+- invalid request rejection before HTTP dispatch
+- request-shape validation for source-language handling
 
-**TranslationServiceIntegrationTests**:
-- End-to-end translation flow with Azure AI Foundry
-- Multi-language translation (room language set)
-- Cache behavior (hit, miss, TTL expiry)
-- Tone preservation (casual, professional, friendly)
-- Long text handling
-- Force refresh bypassing cache
-- Invalid input handling
+**Location**: `tests/Chat.Tests/`
 
-**Location**: `tests/Chat.Tests/TranslationServiceIntegrationTests.cs`
+### Removed Integration Coverage
 
-**Prerequisites**:
-- Azure AI Foundry deployment
-- Valid API key in environment variables
-- Redis connection for caching
+The previous `TranslationServiceIntegrationTests` suite was removed because it depended on local secrets, Redis availability, and Azure Translator resources while living in the default test project. That made normal test runs look healthier than they really were.
 
-### Test Results
-
-- **Unit Tests**: 23/23 passing ✅
-- **Integration Tests**: 8/8 passing ✅
-- **Total Translation Tests**: 31/31 passing (100%) ✅
+If end-to-end translation coverage is added again, it should be explicitly opt-in, deterministic to run, and reported clearly by the test runner.
 
 ## Performance Characteristics
 

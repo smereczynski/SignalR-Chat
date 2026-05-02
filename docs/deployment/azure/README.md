@@ -1,55 +1,28 @@
 # Azure Deployment
 
-This directory contains documentation for deploying SignalR Chat to Microsoft Azure.
+This directory contains Azure infrastructure documentation for the current dispatch-center pair chat application.
 
-## 📚 Documentation
+## Docs
 
-- **[Bicep Templates](bicep-templates.md)** - Infrastructure as Code (IaC) using Azure Bicep
-  - Resource architecture and naming conventions
-  - Network configuration (VNets, subnets, private endpoints)
-  - Environment specifications (dev, staging, prod)
-  - Deployment procedures via GitHub Actions
-  - Validation and troubleshooting
+- [Bicep Templates](bicep-templates.md)
+- [Bootstrap](../bootstrap.md)
+- [GitHub Actions](../github-actions.md)
+- [Production Checklist](../production-checklist.md)
 
-## 🚀 Quick Links
+## Infrastructure Context
 
-### First-Time Deployment
-1. [Bootstrap Guide](../bootstrap.md) - Complete deployment from scratch
-2. [GitHub Secrets Setup](../github-secrets.md) - Configure Azure credentials
-3. [GitHub Variables](../github-variables.md) - Environment configuration
-4. [Bicep Templates](bicep-templates.md) - Infrastructure details
+Azure hosts the application services that support:
 
-### CI/CD
-- [GitHub Actions](../github-actions.md) - Automated deployment workflows
-- [Production Checklist](../production-checklist.md) - Pre-launch verification
+- Entra ID and OTP-backed authentication
+- Cosmos DB persistence for users, dispatch centers, rooms, messages, and escalations
+- Redis-backed OTP, presence, and queue state
+- SignalR transport
+- optional translation and notification integrations
 
-### Maintenance
-- [Post-Deployment Steps](../post-deployment-manual-steps.md) - Manual configuration
-- [Windows to Linux Migration](../windows-to-linux-migration.md) - Platform migration guide
+Rooms are still derived from dispatch-center topology at runtime. Infrastructure does not pre-seed chat rooms.
 
-## 🏗️ Infrastructure Components
+## Deployment Checklist
 
-The Azure deployment includes:
-
-- **Networking**: VNet with 2 subnets (App Service + Private Endpoints)
-- **Compute**: App Service Plan (Linux) + Web App (.NET 10.0)
-- **Database**: Cosmos DB NoSQL (messages, users, rooms)
-- **Cache**: Azure Managed Redis
-- **Real-time**: Azure SignalR Service
-- **Communication**: Azure Communication Services (Email/SMS)
-- **Translation**: Azure AI Foundry
-- **Monitoring**: Log Analytics + Application Insights
-
-## 💰 Cost Estimates
-
-| Environment | Monthly Cost |
-|-------------|--------------|
-| Development | $150-250 |
-| Staging | $350-500 |
-| Production | $1200-1800 |
-
-See [Bicep Templates](bicep-templates.md#environments) for detailed resource specifications.
-
----
-
-**Last Updated**: 2025-12-02
+- [x] Cosmos and Redis required for persistent runtime behavior
+- [x] app configuration must support Entra ID and OTP
+- [x] bootstrap must insert the first user and dispatch-center topology

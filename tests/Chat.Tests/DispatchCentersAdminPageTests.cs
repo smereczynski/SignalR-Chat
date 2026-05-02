@@ -6,25 +6,63 @@ using Chat.Web.Pages.Admin.DispatchCenters;
 using Chat.Web.Repositories;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.AspNetCore.Mvc.ViewFeatures;
+using Moq;
 using Xunit;
 
 namespace Chat.Tests;
 
 public class DispatchCentersAdminPageTests
 {
+    private static DispatchCentersCreateModel BuildCreatePage(
+        InMemoryDispatchCentersRepository dispatchRepo,
+        InMemoryUsersRepository usersRepo,
+        InMemoryRoomsRepository roomsRepo)
+    {
+        var topology = new Chat.Web.Services.DispatchCenterTopologyService(
+            dispatchRepo,
+            usersRepo,
+            roomsRepo,
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<Chat.Web.Services.DispatchCenterTopologyService>.Instance);
+
+        return new DispatchCentersCreateModel(dispatchRepo, usersRepo, topology)
+        {
+            TempData = new Mock<ITempDataDictionary>().Object
+        };
+    }
+
+    private static DispatchCentersAssignUsersModel BuildAssignUsersPage(
+        InMemoryDispatchCentersRepository dispatchRepo,
+        InMemoryUsersRepository usersRepo,
+        InMemoryRoomsRepository roomsRepo)
+    {
+        var topology = new Chat.Web.Services.DispatchCenterTopologyService(
+            dispatchRepo,
+            usersRepo,
+            roomsRepo,
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<Chat.Web.Services.DispatchCenterTopologyService>.Instance);
+
+        return new DispatchCentersAssignUsersModel(dispatchRepo, usersRepo, topology)
+        {
+            TempData = new Mock<ITempDataDictionary>().Object
+        };
+    }
+
     [Fact]
     public async Task CreatePage_OnPost_CreatesDispatchCenterAndRedirects()
     {
         var dispatchRepo = new InMemoryDispatchCentersRepository();
-        var page = new DispatchCentersCreateModel(dispatchRepo)
+        var usersRepo = new InMemoryUsersRepository();
+        var roomsRepo = new InMemoryRoomsRepository();
+        await usersRepo.UpsertAsync(new ApplicationUser { UserName = "officer-main" });
+        var page = BuildCreatePage(dispatchRepo, usersRepo, roomsRepo);
+        page.Input = new DispatchCenterInputModel
         {
-            Input = new DispatchCenterInputModel
-            {
-                Name = "Main DC",
-                Country = "PL",
-                IfMain = true,
-                CorrespondingDispatchCenterIds = new List<string>()
-            }
+            Name = "Main DC",
+            Country = "PL",
+            IfMain = true,
+            OfficerUserNames = new List<string> { "officer-main" },
+            CorrespondingDispatchCenterIds = new List<string>()
         };
 
         var result = await page.OnPostAsync();
@@ -43,16 +81,25 @@ public class DispatchCentersAdminPageTests
     public async Task EditPage_OnPost_WithSelfReference_ReturnsPageWithModelError()
     {
         var dispatchRepo = new InMemoryDispatchCentersRepository();
+        var usersRepo = new InMemoryUsersRepository();
+        var roomsRepo = new InMemoryRoomsRepository();
+        var topology = new Chat.Web.Services.DispatchCenterTopologyService(
+            dispatchRepo,
+            usersRepo,
+            roomsRepo,
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<Chat.Web.Services.DispatchCenterTopologyService>.Instance);
+        await usersRepo.UpsertAsync(new ApplicationUser { UserName = "officer-main" });
 
         await dispatchRepo.UpsertAsync(new DispatchCenter
         {
             Id = "dc-1",
             Name = "Main",
             Country = "PL",
-            IfMain = true
+            IfMain = true,
+            OfficerUserNames = new List<string> { "officer-main" }
         });
 
-        var page = new DispatchCentersEditModel(dispatchRepo)
+        var page = new DispatchCentersEditModel(dispatchRepo, usersRepo, roomsRepo, topology)
         {
             Id = "dc-1",
             Input = new DispatchCenterInputModel
@@ -60,6 +107,7 @@ public class DispatchCentersAdminPageTests
                 Name = "Main",
                 Country = "PL",
                 IfMain = true,
+                OfficerUserNames = new List<string> { "officer-main" },
                 CorrespondingDispatchCenterIds = new List<string> { "dc-1" }
             }
         };
@@ -75,6 +123,9 @@ public class DispatchCentersAdminPageTests
     public async Task CreatePage_OnPost_DuplicateMainPerCountry_ReturnsPageWithModelError()
     {
         var dispatchRepo = new InMemoryDispatchCentersRepository();
+        var usersRepo = new InMemoryUsersRepository();
+        var roomsRepo = new InMemoryRoomsRepository();
+        await usersRepo.UpsertAsync(new ApplicationUser { UserName = "officer-krakow" });
 
         await dispatchRepo.UpsertAsync(new DispatchCenter
         {
@@ -84,15 +135,14 @@ public class DispatchCentersAdminPageTests
             IfMain = true
         });
 
-        var page = new DispatchCentersCreateModel(dispatchRepo)
+        var page = BuildCreatePage(dispatchRepo, usersRepo, roomsRepo);
+        page.Input = new DispatchCenterInputModel
         {
-            Input = new DispatchCenterInputModel
-            {
-                Name = "Krakow Main",
-                Country = "pl",
-                IfMain = true,
-                CorrespondingDispatchCenterIds = new List<string>()
-            }
+            Name = "Krakow Main",
+            Country = "pl",
+            IfMain = true,
+            OfficerUserNames = new List<string> { "officer-krakow" },
+            CorrespondingDispatchCenterIds = new List<string>()
         };
 
         var result = await page.OnPostAsync();
@@ -109,6 +159,7 @@ public class DispatchCentersAdminPageTests
     {
         var dispatchRepo = new InMemoryDispatchCentersRepository();
         var usersRepo = new InMemoryUsersRepository();
+        var roomsRepo = new InMemoryRoomsRepository();
 
         await dispatchRepo.UpsertAsync(new DispatchCenter
         {
@@ -119,14 +170,12 @@ public class DispatchCentersAdminPageTests
             Users = new List<string> { "bob" }
         });
 
-        await usersRepo.UpsertAsync(new ApplicationUser { UserName = "alice", DispatchCenterIds = new List<string>() });
-        await usersRepo.UpsertAsync(new ApplicationUser { UserName = "bob", DispatchCenterIds = new List<string> { "dc-ops" } });
+        await usersRepo.UpsertAsync(new ApplicationUser { UserName = "alice" });
+        await usersRepo.UpsertAsync(new ApplicationUser { UserName = "bob", DispatchCenterId = "dc-ops" });
 
-        var page = new DispatchCentersAssignUsersModel(dispatchRepo, usersRepo)
-        {
-            Id = "dc-ops",
-            SelectedUsers = new List<string> { "alice" }
-        };
+        var page = BuildAssignUsersPage(dispatchRepo, usersRepo, roomsRepo);
+        page.Id = "dc-ops";
+        page.SelectedUsers = new List<string> { "alice" };
 
         var result = await page.OnPostAsync();
 
@@ -142,7 +191,7 @@ public class DispatchCentersAdminPageTests
         var alice = await usersRepo.GetByUserNameAsync("alice");
         var bob = await usersRepo.GetByUserNameAsync("bob");
 
-        Assert.Contains("dc-ops", alice.DispatchCenterIds);
-        Assert.DoesNotContain("dc-ops", bob.DispatchCenterIds);
+        Assert.Equal("dc-ops", alice.DispatchCenterId);
+        Assert.Null(bob.DispatchCenterId);
     }
 }
