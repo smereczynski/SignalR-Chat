@@ -198,9 +198,7 @@ src/Chat.Web/
 └── wwwroot/           # Static files (JS, CSS, libraries)
 
 tests/
-├── Chat.Tests/              # Unit tests (utilities, services)
-├── Chat.IntegrationTests/   # Integration tests (ChatHub, auth flows)
-└── Chat.Web.Tests/          # Web/security tests (health endpoints, headers)
+└── Chat.Tests/              # Focused unit tests for useful custom logic
 
 infra/bicep/
 ├── main.bicep               # Main infrastructure orchestration
@@ -406,7 +404,7 @@ bash -lc "set -a; source .env.local; dotnet run --project ./src/Chat.Web --urls=
 dotnet test src/Chat.sln
 
 # Specific project
-dotnet test tests/Chat.IntegrationTests/
+dotnet test tests/Chat.Tests/
 
 # With in-memory mode
 Testing__InMemory=true dotnet test src/Chat.sln

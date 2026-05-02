@@ -45,7 +45,8 @@ dotnet run --project ./src/Chat.Web --urls=https://localhost:5099
 Current verification status on this branch:
 
 - `dotnet build src/Chat.sln` passes
-- `dotnet test src/Chat.sln --no-build --nologo` passes
+- `dotnet test tests/Chat.Tests/Chat.Tests.csproj --no-restore --nologo` passes
+- `dotnet test src/Chat.sln --no-build --nologo` also passes and currently resolves to the same active test surface
 - Development startup succeeds without the previous `CosmosClients not yet initialized` failure
 - topology reconciliation runs on startup and rebuilds derived pair rooms
 

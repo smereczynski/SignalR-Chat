@@ -49,57 +49,17 @@ public class AdminDashboardTests
     }
 
     [Fact]
-    public async Task OnGet_UserWithoutDispatchCenter_CountedAsWarning()
+    public async Task OnGet_MixedWarnings_AggregatesAllCounters()
     {
         var users = new InMemoryUsersRepository();
         await users.UpsertAsync(new ApplicationUser { UserName = "alice", DispatchCenterId = null });
 
-        var page = BuildPage(users: users);
-        await page.OnGetAsync();
-
-        Assert.Equal(1, page.Stats.UsersWithoutDispatchCenter);
-        Assert.True(page.Stats.HasWarnings);
-    }
-
-    [Fact]
-    public async Task OnGet_DispatchCenterWithoutOfficers_CountedAsWarning()
-    {
         var dcs = new InMemoryDispatchCentersRepository();
-        await dcs.UpsertAsync(new DispatchCenter { Id = "dc-1", Name = "DC One", Country = "PL", OfficerUserNames = new List<string>() });
+        await dcs.UpsertAsync(new DispatchCenter { Id = "dc-1", Name = "DC One", Country = "PL", OfficerUserNames = new List<string>(), CorrespondingDispatchCenterIds = new List<string>() });
 
-        var page = BuildPage(dcs: dcs);
-        await page.OnGetAsync();
-
-        Assert.Equal(1, page.Stats.DispatchCentersWithoutOfficers);
-    }
-
-    [Fact]
-    public async Task OnGet_DispatchCenterWithoutPairs_CountedAsWarning()
-    {
-        var dcs = new InMemoryDispatchCentersRepository();
-        await dcs.UpsertAsync(new DispatchCenter { Id = "dc-1", Name = "DC One", Country = "PL", CorrespondingDispatchCenterIds = new List<string>() });
-
-        var page = BuildPage(dcs: dcs);
-        await page.OnGetAsync();
-
-        Assert.Equal(1, page.Stats.DispatchCentersWithoutPairs);
-    }
-
-    [Fact]
-    public async Task OnGet_InactivePairRoom_CountedAsWarning()
-    {
         var rooms = new InMemoryRoomsRepository();
         await rooms.UpsertAsync(new Room { Name = "pair:A::B", IsActive = false });
 
-        var page = BuildPage(rooms: rooms);
-        await page.OnGetAsync();
-
-        Assert.Equal(1, page.Stats.InactivePairRooms);
-    }
-
-    [Fact]
-    public async Task OnGet_EscalatedEscalation_CountedAsOpen()
-    {
         var escalations = new InMemoryEscalationsRepository();
         await escalations.CreateAsync(new Escalation
         {
@@ -110,9 +70,14 @@ public class AdminDashboardTests
             DueAt = System.DateTime.UtcNow
         });
 
-        var page = BuildPage(escalations: escalations);
+        var page = BuildPage(users: users, dcs: dcs, rooms: rooms, escalations: escalations);
         await page.OnGetAsync();
 
+        Assert.True(page.Stats.HasWarnings);
+        Assert.Equal(1, page.Stats.UsersWithoutDispatchCenter);
+        Assert.Equal(1, page.Stats.DispatchCentersWithoutOfficers);
+        Assert.Equal(1, page.Stats.DispatchCentersWithoutPairs);
+        Assert.Equal(1, page.Stats.InactivePairRooms);
         Assert.Equal(1, page.Stats.OpenEscalations);
     }
 

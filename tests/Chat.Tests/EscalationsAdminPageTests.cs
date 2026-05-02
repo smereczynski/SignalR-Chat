@@ -48,49 +48,25 @@ public class EscalationsAdminPageTests
     }
 
     [Fact]
-    public async Task OnGet_StatusFilter_ReturnsOnlyMatchingEscalations()
+    public async Task OnGet_CombinedFilters_ReturnOnlyMatchingEscalation()
     {
         var repo = new InMemoryEscalationsRepository();
-        await repo.CreateAsync(MakeEscalation("e1", EscalationStatus.Escalated));
-        await repo.CreateAsync(MakeEscalation("e2", EscalationStatus.Resolved));
+        var matching = MakeEscalation("e1", EscalationStatus.Escalated, EscalationTriggerType.Manual, "pair:A::B");
+        matching.SourceDispatchCenterId = "dc-a";
+        await repo.CreateAsync(matching);
+        await repo.CreateAsync(MakeEscalation("e2", EscalationStatus.Escalated, EscalationTriggerType.Automatic, "pair:A::B"));
+        await repo.CreateAsync(MakeEscalation("e3", EscalationStatus.Resolved, EscalationTriggerType.Manual, "pair:A::B"));
+        await repo.CreateAsync(MakeEscalation("e4", EscalationStatus.Escalated, EscalationTriggerType.Manual, "pair:B::C"));
 
         var page = BuildPage(repo);
-        await page.OnGetAsync(roomName: null, status: "Escalated", triggerType: null, sourceDispatchCenterId: null, targetDispatchCenterId: null);
+        await page.OnGetAsync(roomName: "pair:A::B", status: "Escalated", triggerType: "Manual", sourceDispatchCenterId: "dc-a", targetDispatchCenterId: null);
 
         Assert.Single(page.Escalations);
         Assert.Equal("e1", page.Escalations[0].Id);
     }
 
     [Fact]
-    public async Task OnGet_RoomNameFilter_ReturnsOnlyMatchingRoom()
-    {
-        var repo = new InMemoryEscalationsRepository();
-        await repo.CreateAsync(MakeEscalation("e1", EscalationStatus.Escalated, roomName: "pair:A::B"));
-        await repo.CreateAsync(MakeEscalation("e2", EscalationStatus.Escalated, roomName: "pair:B::C"));
-
-        var page = BuildPage(repo);
-        await page.OnGetAsync(roomName: "pair:A::B", status: null, triggerType: null, sourceDispatchCenterId: null, targetDispatchCenterId: null);
-
-        Assert.Single(page.Escalations);
-        Assert.Equal("e1", page.Escalations[0].Id);
-    }
-
-    [Fact]
-    public async Task OnGet_TriggerTypeFilter_ReturnsOnlyMatchingTrigger()
-    {
-        var repo = new InMemoryEscalationsRepository();
-        await repo.CreateAsync(MakeEscalation("e1", EscalationStatus.Escalated, EscalationTriggerType.Automatic));
-        await repo.CreateAsync(MakeEscalation("e2", EscalationStatus.Escalated, EscalationTriggerType.Manual));
-
-        var page = BuildPage(repo);
-        await page.OnGetAsync(roomName: null, status: null, triggerType: "Manual", sourceDispatchCenterId: null, targetDispatchCenterId: null);
-
-        Assert.Single(page.Escalations);
-        Assert.Equal("e2", page.Escalations[0].Id);
-    }
-
-    [Fact]
-    public async Task OnGet_SourceDispatchCenterFilter_ReturnsOnlyMatchingSource()
+    public async Task OnGet_DispatchCenterFilter_KeepsStableKnownRoomsAndNames()
     {
         var repo = new InMemoryEscalationsRepository();
         var dcs = new InMemoryDispatchCentersRepository();
@@ -99,8 +75,10 @@ public class EscalationsAdminPageTests
 
         var e1 = MakeEscalation("e1", EscalationStatus.Escalated);
         e1.SourceDispatchCenterId = "dc-a";
+        e1.RoomName = "pair:A::B";
         var e2 = MakeEscalation("e2", EscalationStatus.Escalated);
         e2.SourceDispatchCenterId = "dc-b";
+        e2.RoomName = "pair:B::C";
         await repo.CreateAsync(e1);
         await repo.CreateAsync(e2);
 
@@ -109,27 +87,8 @@ public class EscalationsAdminPageTests
 
         Assert.Single(page.Escalations);
         Assert.Equal("e1", page.Escalations[0].Id);
-    }
-
-    [Fact]
-    public async Task OnGet_TargetDispatchCenterFilter_ReturnsOnlyMatchingTarget()
-    {
-        var repo = new InMemoryEscalationsRepository();
-        var dcs = new InMemoryDispatchCentersRepository();
-        await dcs.UpsertAsync(new DispatchCenter { Id = "dc-a", Name = "Alpha" });
-        await dcs.UpsertAsync(new DispatchCenter { Id = "dc-b", Name = "Beta" });
-
-        var e1 = MakeEscalation("e1", EscalationStatus.Escalated);
-        e1.TargetDispatchCenterId = "dc-b";
-        var e2 = MakeEscalation("e2", EscalationStatus.Escalated);
-        e2.TargetDispatchCenterId = "dc-a";
-        await repo.CreateAsync(e1);
-        await repo.CreateAsync(e2);
-
-        var page = BuildPage(repo, dcs);
-        await page.OnGetAsync(roomName: null, status: null, triggerType: null, sourceDispatchCenterId: null, targetDispatchCenterId: "dc-b");
-
-        Assert.Single(page.Escalations);
-        Assert.Equal("e1", page.Escalations[0].Id);
+        Assert.Equal("Alpha", page.DispatchCenterNames["dc-a"]);
+        Assert.Contains("pair:A::B", page.KnownRooms);
+        Assert.Contains("pair:B::C", page.KnownRooms);
     }
 }

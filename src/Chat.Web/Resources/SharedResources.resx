@@ -647,7 +647,4 @@
   <data name="UsersAssignedSuccessfully" xml:space="preserve">
     <value>User assignment saved successfully.</value>
   </data>
-  <data name="EscalationOfficers" xml:space="preserve">
-    <value>Escalation Officers</value>
-  </data>
 </root>

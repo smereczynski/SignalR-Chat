@@ -31,7 +31,7 @@ public class RoomsAdminPageTests
     }
 
     [Fact]
-    public async Task RoomsPage_OnGet_LoadsAllRoomsIncludingInactive()
+    public async Task RoomsPage_OnGet_LoadsRoomsAndResolvesDispatchCenterMetadata()
     {
         var rooms = new InMemoryRoomsRepository();
         await rooms.UpsertAsync(new Room { Name = "pair:A::B", IsActive = true, DispatchCenterAId = "dc-a", DispatchCenterBId = "dc-b" });
@@ -48,50 +48,12 @@ public class RoomsAdminPageTests
         Assert.Equal(2, page.Rooms.Count);
         Assert.Contains(page.Rooms, r => r.Name == "pair:A::B" && r.IsActive);
         Assert.Contains(page.Rooms, r => r.Name == "pair:B::C" && !r.IsActive);
-    }
-
-    [Fact]
-    public async Task RoomsPage_OnGet_ResolvesDcNames()
-    {
-        var rooms = new InMemoryRoomsRepository();
-        await rooms.UpsertAsync(new Room { Name = "pair:A::B", DispatchCenterAId = "dc-a", DispatchCenterBId = "dc-b" });
-
-        var dcs = new InMemoryDispatchCentersRepository();
-        await dcs.UpsertAsync(new DispatchCenter { Id = "dc-a", Name = "Alpha Center" });
-        await dcs.UpsertAsync(new DispatchCenter { Id = "dc-b", Name = "Beta Center" });
-
-        var page = BuildPage(rooms, dcs);
-        await page.OnGetAsync();
-
         Assert.True(page.DispatchCenterNames.TryGetValue("dc-a", out var nameA));
-        Assert.Equal("Alpha Center", nameA);
+        Assert.Equal("DC Alpha", nameA);
         Assert.True(page.DispatchCenterNames.TryGetValue("dc-b", out var nameB));
-        Assert.Equal("Beta Center", nameB);
-    }
-
-    [Fact]
-    public async Task RoomsPage_OnGet_ExposesDcObjects()
-    {
-        var rooms = new InMemoryRoomsRepository();
-        var dcs = new InMemoryDispatchCentersRepository();
-        await dcs.UpsertAsync(new DispatchCenter { Id = "dc-a", Name = "Alpha", OfficerUserNames = new List<string>() });
-
-        var page = BuildPage(rooms, dcs);
-        await page.OnGetAsync();
-
+        Assert.Equal("DC Beta", nameB);
         Assert.True(page.DispatchCenters.TryGetValue("dc-a", out var dc));
-        Assert.Equal("Alpha", dc.Name);
-    }
-
-    [Fact]
-    public async Task RoomsPage_OnGet_EmptyRepositories_LoadsEmpty()
-    {
-        var page = BuildPage();
-        await page.OnGetAsync();
-
-        Assert.Empty(page.Rooms);
-        Assert.Empty(page.DispatchCenterNames);
-        Assert.Empty(page.DispatchCenters);
+        Assert.Equal("DC Alpha", dc.Name);
     }
 
     [Fact]

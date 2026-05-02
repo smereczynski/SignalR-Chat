@@ -319,7 +319,9 @@ namespace Chat.Web.Repositories
         {
             using var activity = Tracing.ActivitySource.StartActivity("cosmos.users.getid", ActivityKind.Client);
             activity?.SetTag("app.userName", userName);
-            var q = _users.GetItemQueryIterator<UserDoc>(new QueryDefinition("SELECT c.id FROM c WHERE c.userName = @u").WithParameter("@u", userName));
+            var q = _users.GetItemQueryIterator<UserDoc>(
+                new QueryDefinition("SELECT c.id FROM c WHERE LOWER(c.userName) = LOWER(@u)")
+                    .WithParameter("@u", userName));
             return await CosmosQueryHelper.ExecuteSingleResultQueryAsync(q, d => d.id, activity, _logger, "cosmos.users.getid").ConfigureAwait(false);
         }
 
@@ -327,8 +329,10 @@ namespace Chat.Web.Repositories
         {
             using var activity = Tracing.ActivitySource.StartActivity("cosmos.users.get", ActivityKind.Client);
             activity?.SetTag("app.userName", userName);
-            // Use cross-partition query to find user by userName
-            var q = _users.GetItemQueryIterator<UserDoc>(new QueryDefinition("SELECT * FROM c WHERE c.userName = @u").WithParameter("@u", userName));
+            // Use case-insensitive lookup so auth/presence behavior does not differ from in-memory mode.
+            var q = _users.GetItemQueryIterator<UserDoc>(
+                new QueryDefinition("SELECT * FROM c WHERE LOWER(c.userName) = LOWER(@u)")
+                    .WithParameter("@u", userName));
             return await CosmosQueryHelper.ExecuteSingleResultQueryAsync(q, MapUser, activity, _logger, "cosmos.users.get").ConfigureAwait(false);
         }
 
