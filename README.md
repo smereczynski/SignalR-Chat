@@ -1,67 +1,70 @@
 # SignalR Chat
 
-SignalR Chat is a dispatch-center pair chat application built with ASP.NET Core, SignalR, Cosmos DB, Redis, and Azure-hosted services. The current branch implements strict dispatch-center topology, multi-officer escalations, Entra ID admin login, and OTP failover authentication.
+SignalR Chat is a real-time communication platform designed with railroad operations in mind. It models communication around dispatch centers, supports operational escalation flows, and helps geographically or linguistically diverse teams stay aligned without turning the product into a generic public chat tool.
 
-## Current Product Model
+The project is maintained by Microsoft MVP contributors and is built to be practical for organizations that need a clear operational model, strong Azure alignment, and freedom to adapt the solution for their own environment.
 
-- Users belong to exactly one dispatch center through `ApplicationUser.DispatchCenterId`.
-- Dispatch centers communicate only with configured corresponding dispatch centers.
-- Rooms are derived from dispatch-center pairs and synchronized automatically.
-- Each dispatch center can have multiple escalation officers.
-- Escalations target all officers assigned to the counterpart dispatch center.
-- OTP remains available as a failover login path.
+## What The Project Solves
 
-There are no standard chat rooms, no seeded rooms, and no legacy room-assignment compatibility in the current implementation.
+Railroad and transport operations often need structured communication between specific operational units rather than open-ended chat rooms. SignalR Chat uses a dispatch-center model where communication paths are intentional, operational ownership is clear, and escalation can follow real organizational relationships.
 
-## Quick Links
+In this model:
+
+- users belong to a dispatch center
+- communication happens between paired dispatch centers
+- rooms are derived from operational relationships rather than created ad hoc
+- escalations can notify the relevant counterpart officers when messages need attention
+
+This makes the application a better fit for operational control environments, including railroad management scenarios, than a generic room-based messenger.
+
+## AI-Powered Translation
+
+One of the most important capabilities in this project is AI-assisted translation.
+
+SignalR Chat can translate messages in the background with Azure AI services so teams using different languages can still collaborate in the same operational flow. The goal is not just language conversion, but smoother coordination across borders, regions, vendors, and partner organizations where multilingual communication is a daily reality.
+
+Translation is treated as a first-class capability in the product direction, not an afterthought. That matters for organizations that want operational messaging to remain usable as they scale across multiple languages.
+
+## Azure-First By Design
+
+SignalR Chat is designed to run well on Azure and takes advantage of Azure services that are a strong fit for high availability and disaster recovery planning.
+
+The platform is built around Azure-hosted components for:
+
+- real-time messaging
+- scalable application hosting
+- persistent data storage
+- caching and operational resilience
+- observability and production diagnostics
+- backup and disaster recovery procedures
+
+For teams that care about HA/DR, Azure is the best-fit target environment for this project because the architecture and deployment guidance are already centered on Azure-native services and operational practices.
+
+## Licensing And Reuse
+
+This repository is published under the MIT license. That gives railroad managers, infrastructure operators, public-sector entities, and private companies broad freedom to use, adapt, extend, and redistribute the software for their own operational purposes.
+
+If you want to tailor the platform to your own dispatching model, internal terminology, security requirements, or regional rollout plan, the license is intentionally permissive enough to support that.
+
+See [LICENSE](LICENSE) for the full terms.
+
+## Who This Is For
+
+SignalR Chat is especially relevant for organizations that need:
+
+- dispatch-center-based operational communication
+- controlled rather than open-ended room topology
+- multilingual collaboration supported by AI translation
+- Azure-based deployment with a path toward strong resilience
+- a customizable codebase they can adapt to their own workflows
+
+## Start Here
 
 - [Documentation Home](docs/README.md)
 - [Architecture Overview](docs/architecture/overview.md)
-- [Dispatch-Center Escalation Implementation](docs/features/dispatch-center-escalation-implementation-plan.md)
-- [Local Setup](docs/development/local-setup.md)
-- [Bootstrap Guide](docs/deployment/bootstrap.md)
+- [Translation Architecture](docs/architecture/translation-architecture.md)
+- [Installation Guide](docs/getting-started/installation.md)
+- [Configuration Guide](docs/getting-started/configuration.md)
+- [Production Checklist](docs/deployment/production-checklist.md)
+- [Disaster Recovery Guide](docs/operations/disaster-recovery.md)
 - [Changelog](CHANGELOG.md)
-
-## Local Development
-
-For the current branch behavior, use the dispatch-center setup described in [Local Setup](docs/development/local-setup.md).
-
-At minimum you need:
-
-1. Redis and Cosmos DB configuration
-2. a manually inserted user with `upn` and `dispatchCenterId`
-3. dispatch centers with corresponding relations
-4. officers assigned on both sides of a desired pair
-
-Then run:
-
-```bash
-dotnet build src/Chat.sln
-dotnet run --project ./src/Chat.Web --urls=https://localhost:5099
-```
-
-## Verification
-
-Current verification status on this branch:
-
-- `dotnet build src/Chat.sln` passes
-- `dotnet test tests/Chat.Tests/Chat.Tests.csproj --no-restore --nologo` passes
-- `dotnet test src/Chat.sln --no-build --nologo` also passes and currently resolves to the same active test surface
-- Development startup succeeds without the previous `CosmosClients not yet initialized` failure
-- topology reconciliation runs on startup and rebuilds derived pair rooms
-
-## Sprint Implementation Checklist
-
-- [x] Replaced fragile Cosmos startup initialization with deterministic startup behavior
-- [x] Added startup dispatch-center topology reconciliation
-- [x] Preserved pair-room authorization as the single access model
-- [x] Aligned in-memory repository behavior with Cosmos UPN lookup semantics
-- [x] Renamed admin user assignment flow to dispatch-center-specific naming
-- [x] Added clearer chat empty states for missing dispatch-center topology
-- [x] Rewrote stale dispatch-center, architecture, setup, bootstrap, and admin docs
-- [x] Removed stale documentation references to seeded standard rooms and legacy room assignment
-
-## Notes
-
-- This repository may still contain unrelated in-progress branch changes outside the work summarized above.
-- Some historical docs and test fixtures still mention generic room names for isolated examples; current product behavior is dispatch-center pair chat only.
