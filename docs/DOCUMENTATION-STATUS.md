@@ -1,11 +1,11 @@
 # Documentation Status
 
-**Updated**: 2026-04-06  
-**Branch**: `feat/dispatch-center-escalations-v1`
+**Updated**: 2026-05-02  
+**Scope**: current repository documentation state
 
 ## Summary
 
-Documentation has been realigned to the current branch direction:
+Documentation has been realigned to the current repository direction:
 
 - dispatch-center pair chat
 - multi-officer escalations
@@ -33,7 +33,7 @@ Documentation has been realigned to the current branch direction:
 
 ## Remaining Guidance
 
-When updating docs in this branch, treat any mention of the following as stale unless it is explicitly historical:
+When updating docs, treat any mention of the following as stale unless it is explicitly historical:
 
 - `FixedRooms`
 - `DefaultRoom`

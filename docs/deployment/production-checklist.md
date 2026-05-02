@@ -25,7 +25,7 @@ Ensure all required variables and secrets are set for your environment before pr
   - Set in Azure: App Service → Configuration → Application Settings
   - Key: `Otp__Pepper`
   - ⚠️ **NEVER** commit to source control
-  - 📖 [Pepper management guide](../features/authentication.md#pepper-management)
+  - 📖 [Authentication guide](../features/authentication.md)
 
 - [ ] **Configure Connection Strings in Azure**
   - Use **Connection Strings** section (not Application Settings)
@@ -35,12 +35,12 @@ Ensure all required variables and secrets are set for your environment before pr
     - `Redis` - Redis connection string
     - `AzureCommunicationServices` - ACS connection string (optional)
     - `AzureSignalR` - SignalR Service connection string (optional)
-  - 📖 [Connection strings guide](../deployment/azure/app-service.md#connection-strings)
+  - 📖 [Configuration guide](../getting-started/configuration.md#connection-strings)
 
 - [ ] **Application Insights Connection String**
   - Set `APPLICATIONINSIGHTS_CONNECTION_STRING` in App Service
   - Enables telemetry in production
-  - 📖 [Monitoring setup](../operations/application-insights.md)
+  - 📖 [Monitoring & observability](../operations/monitoring.md)
 
 ### Security Headers
 
@@ -67,23 +67,23 @@ Ensure all required variables and secrets are set for your environment before pr
 - [ ] **Configure SignalR Service network ACLs**
   - Public endpoint: ClientConnection only (no ServerConnection)
   - Private endpoint: All traffic types
-  - 📖 [SignalR networking](../deployment/azure/networking.md)
+  - 📖 [Azure deployment](azure/README.md)
 
 ## ⚙️ Configuration
 
 ### Rate Limiting
 
 - [ ] **OTP endpoint rate limiting**
-  - Verify: 5 requests per minute per user
-  - Verify: 20 requests per 5 seconds per IP
+  - Verify: auth endpoints are protected by the ASP.NET fixed-window rate limiter
+  - Verify: request bursts can return HTTP 429
   - Test with: `hey -n 30 -c 10 https://your-app.azurewebsites.net/api/auth/start`
-  - 📖 [Rate limiting guide](../features/rate-limiting.md)
+  - 📖 [Authentication guide](../features/authentication.md#rate-limiting)
 
 - [ ] **OTP attempt limiting**
   - Verify: 5 failed attempts per user
   - Verify: 5-minute cooldown period
   - Config: `Otp__MaxAttempts` (default: 5)
-  - 📖 [OTP security](../features/authentication.md#brute-force-protection)
+  - 📖 [Authentication guide](../features/authentication.md#rate-limiting)
 
 ### TTL & Cleanup
 
@@ -99,15 +99,15 @@ Ensure all required variables and secrets are set for your environment before pr
 
 - [ ] **Configure Azure Communication Services** (if using SMS/email)
   - Set `CUSTOMCONNSTR_AzureCommunicationServices`
-  - Set `Communication__EmailSender` (email address)
-  - Set `Communication__SmsSender` (phone number)
+  - Set `Acs__EmailFrom` (email address)
+  - Set `Acs__SmsFrom` (phone number)
   - Verify sender identities in ACS
-  - 📖 [Notification setup](../features/notifications.md)
+  - 📖 [Configuration guide](../getting-started/configuration.md#notification-configuration)
 
 - [ ] **Configure notification delay**
   - Set `Notifications__UnreadDelaySeconds` (default: 60)
   - Lower for urgent notifications, higher for less noise
-  - 📖 [Notification timing](../features/notifications.md#configuration)
+  - 📖 [Configuration guide](../getting-started/configuration.md#notification-configuration)
 
 ## 🏥 Health & Monitoring
 
@@ -117,7 +117,7 @@ Ensure all required variables and secrets are set for your environment before pr
   - Liveness: `/healthz` (responds 200 OK always)
   - Readiness: `/healthz/ready` (checks Cosmos + Redis)
   - Set in: App Service → Health check → Path: `/healthz/ready`
-  - 📖 [Health check guide](../operations/health-checks.md)
+  - 📖 [Monitoring & observability](../operations/monitoring.md#7-health--diagnostics-endpoints)
 
 - [ ] **Verify health check intervals**
   - App Service default: 1-minute interval
@@ -129,12 +129,12 @@ Ensure all required variables and secrets are set for your environment before pr
 - [ ] **Enable Application Insights**
   - Set `APPLICATIONINSIGHTS_CONNECTION_STRING`
   - Verify logs appear in Azure Monitor
-  - 📖 [Application Insights setup](../operations/application-insights.md)
+  - 📖 [Monitoring & observability](../operations/monitoring.md#21-application-insights--log-analytics)
 
 - [ ] **Configure log retention**
   - Log Analytics: 30d (dev), 90d (staging), 365d (prod)
   - Set in: Log Analytics Workspace → Usage and estimated costs
-  - 📖 [Log retention policy](../operations/logging.md#retention)
+  - 📖 [Monitoring & observability](../operations/monitoring.md#9-production-guidance)
 
 - [ ] **Set up alerts** (recommended)
   - High error rate (>5% in 5 minutes)
@@ -142,7 +142,7 @@ Ensure all required variables and secrets are set for your environment before pr
   - Health check failures (3 consecutive)
   - Cosmos DB throttling (429 responses)
   - Redis connection failures
-  - 📖 [Alerting guide](../operations/monitoring.md#alerts)
+  - 📖 [Monitoring & observability](../operations/monitoring.md)
 
 ## 🚀 Performance
 
@@ -152,12 +152,12 @@ Ensure all required variables and secrets are set for your environment before pr
   - Dev: P0V4 (1 vCore, 3.5 GB RAM)
   - Staging: P0V4 (1 vCore, 3.5 GB RAM)
   - Production: P0V4+ (scale out horizontally)
-  - 📖 [SKU sizing guide](../deployment/azure/app-service.md#sku-selection)
+  - 📖 [Azure deployment](azure/README.md)
 
 - [ ] **Enable App Service VNet integration**
   - Verify: App Service → Networking → VNet integration
   - Ensures traffic routes through private endpoints
-  - 📖 [VNet integration](../deployment/azure/networking.md#vnet-integration)
+  - 📖 [Azure deployment](azure/README.md)
 
 ### Cosmos DB
 
@@ -180,14 +180,14 @@ Ensure all required variables and secrets are set for your environment before pr
   - Staging: Balanced_B3 (6 GB)
   - Production: Balanced_B5 (26 GB)
   - Enable clustering for high availability
-  - 📖 [Redis sizing](../deployment/azure/README.md#redis-sizing)
+  - 📖 [Azure deployment](azure/README.md)
 
 ### Azure SignalR Service
 
 - [ ] **Choose appropriate tier** (if using)
   - All environments: Standard_S1 (1000 connections)
   - Scale up to S2 (5000 connections) if needed
-  - 📖 [SignalR scaling](../features/real-time-messaging.md#azure-signalr-service)
+  - 📖 [Azure deployment](azure/README.md)
 
 ## 🌐 Networking
 
@@ -198,7 +198,7 @@ Ensure all required variables and secrets are set for your environment before pr
   - Redis: .38
   - SignalR: .39 (if using)
   - App Service: .40
-  - 📖 [Private endpoint setup](../deployment/azure/networking.md#private-endpoints)
+  - 📖 [Azure deployment](azure/README.md)
 
 - [ ] **Verify DNS resolution**
   - Test from App Service console:
@@ -206,14 +206,14 @@ Ensure all required variables and secrets are set for your environment before pr
     nslookup your-cosmos-account.documents.azure.com
     # Should resolve to 10.0.0.36 (private IP)
     ```
-  - 📖 [DNS troubleshooting](../deployment/troubleshooting.md#dns-issues)
+  - 📖 [Configuration guide](../getting-started/configuration.md#troubleshooting)
 
 ### Network Security Groups
 
 - [ ] **Verify NSG rules**
   - App Service subnet: Allow outbound to private endpoint subnet
   - Private endpoint subnet: Allow inbound from App Service subnet
-  - 📖 [NSG configuration](../deployment/azure/networking.md#network-security-groups)
+  - 📖 [Azure deployment](azure/README.md)
 
 ## 🧪 Testing
 
@@ -222,7 +222,7 @@ Ensure all required variables and secrets are set for your environment before pr
 - [ ] **Run all tests locally**
   ```bash
   dotnet test src/Chat.sln
-  # Verify: 124 tests passing
+  # Verify: all tests passing
   ```
 
 - [ ] **Build in Release mode**
@@ -233,7 +233,7 @@ Ensure all required variables and secrets are set for your environment before pr
 - [ ] **Test with production-like configuration**
   - Use staging environment with production SKUs
   - Load test with expected user count
-  - 📖 [Load testing guide](../operations/performance.md#load-testing)
+  - 📖 [Testing guide](../development/testing.md)
 
 ### Post-Deployment Verification
 

@@ -1,12 +1,12 @@
 ## 1. Post‑Login Session Handling
 
 ### 1.1 Flow Recap
-1. User selects a predefined username (no password).
-2. Client calls `POST /api/auth/start` → server generates an OTP, stores it in Redis with TTL.
-3. User submits `POST /api/auth/verify { userName, code }`.
-4. Server validates the code (and deletes or lets it expire).
-5. On success, server creates an authenticated principal and issues an auth **cookie**.
-6. Browser then establishes the SignalR hub connection automatically sending the cookie (unless a token-based negotiate override is used).
+1. User arrives at the login page and can either start Microsoft Entra sign-in or use the OTP fallback.
+2. For OTP fallback, user enters an email-style username for an existing enabled application user.
+3. Client calls `POST /api/auth/start` → server generates an OTP, stores it in Redis with TTL.
+4. User submits `POST /api/auth/verify { userName, code }`.
+5. Server validates the code, removes the stored OTP on success, and issues an auth **cookie**.
+6. Browser then establishes the SignalR hub connection automatically sending the cookie.
 
 ### 1.2 Session Representation
 Likely (and recommended):
@@ -119,26 +119,26 @@ High priority to address:
 
 ### 2.6 Mitigation Roadmap
 
-#### 2.6.1 Completed (v0.9.4)
+#### 2.6.1 Implemented Controls
 
-1. ✅ **Hashed OTP Storage** (Issue #26)
+1. ✅ **Hashed OTP Storage**
    - Argon2id with pepper + salt implemented
-   - Format: `OtpHash:v2:argon2id:m=65536,t=4,p=4:{saltB64}:{hashB64}`
+   - Format: `OtpHash:v2:argon2id:m={kb},t={it},p={par}:{saltB64}:{phcEncodedHash}`
    - Pepper: Environment variable `Otp__Pepper` (32+ bytes)
    - Location: `Argon2OtpHasher.cs`
 
-2. ✅ **OTP Attempt Rate Limiting** (Issue #26)
+2. ✅ **OTP Attempt Rate Limiting**
    - Redis-backed per-user counter: `otp_attempts:{username}`
    - Default threshold: 5 attempts per OTP lifetime (300s)
    - Metrics: `chat.otp.verifications.ratelimited`
    - Fail-open on Redis errors
 
-3. ✅ **HTTPS-only Enforcement** (Issue #64)
+3. ✅ **HTTPS-only Enforcement**
    - HSTS configured: `max-age=31536000; includeSubDomains; preload`
    - `app.UseHttpsRedirection()` and `app.UseHsts()` in Startup.cs
    - Cookie flags: `Secure=true, HttpOnly=true, SameSite=Lax`
 
-4. ✅ **Content Security Policy** (Issue #61)
+4. ✅ **Content Security Policy**
    - SecurityHeadersMiddleware with per-request nonce generation
    - CSP header: `default-src 'self'; script-src 'self' 'nonce-{nonce}'; ...`
    - WebSocket (wss:) and HTTPS connections allowed for SignalR
@@ -154,56 +154,54 @@ High priority to address:
    - No OTP codes or sensitive headers logged
    - Sanitized usernames in structured logs
 
-7. ✅ **MarkRead Rate Limiting** (Issue #25)
+7. ✅ **MarkRead Rate Limiting**
    - Per-user rate limiter for message read operations
 
-8. ✅ **Thread-Safe ChatHub** (Issue #24)
+8. ✅ **Thread-Safe ChatHub**
    - ConcurrentDictionary-based connection tracking
 
-#### 2.6.2 Short Term (High Priority - Open Issues)
+#### 2.6.2 Recommended Next Hardening Steps
 
-1. **Secure RNG for OTP Generation** (Issue #62 - P1)
-   - Replace `new Random()` with `RandomNumberGenerator.GetInt32()`
+1. ✅ **Secure RNG for OTP Generation**
+   - OTP generation uses `RandomNumberGenerator.GetInt32()`
    - Prevents predictable OTP sequences
-   - **STATUS**: Needs verification of current implementation
+   - Implemented in `AuthController`
 
-2. **Origin Validation for SignalR Hub** (Issue #63 - P1)
+2. **Origin Validation for SignalR Hub**
    - Validate `Origin` header against whitelist on hub negotiate
    - Prevent unauthorized cross-origin connections
 
-3. **TestAuthHandler Production Guard** (Issue #65 - P1)
+3. **TestAuthHandler Production Guard**
    - Runtime check preventing test auth in production
    - Fail-fast on misconfiguration
 
-4. **Improve Exception Handling in Argon2OtpHasher** (Issue #27 - P1)
+4. **Improve Exception Handling in Argon2OtpHasher**
    - Structured error handling for crypto failures
    - Proper logging without leaking secrets
 
-5. **Constant-Time Comparison for OTP** (Issue #67 - P2)
+5. **Constant-Time Comparison for OTP**
    - Ensure timing-attack resistance in verification
    - Note: Argon2.Verify() provides this, but verify implementation
 
 6. **Rotate Cookies on Critical Actions**
    - Generate new `SessionId` cookie after successful OTP
    - Use secure flags: `Secure=true, SameSite=Strict`
-   - **STATUS**: Not yet implemented
+#### 2.6.3 Medium-Term Improvements
 
-#### 2.6.3 Mid Term (Moderate Priority)
-
-1. **Session Revocation Mechanism** (Not yet implemented)
+1. **Session Revocation Mechanism**
    - Add session GUID claim to JWT/cookie
    - Implement Redis-backed blacklist for revoked sessions
    - Allow manual session invalidation
 
-2. **Structured Logging for OTP Flow** (Issue #34 - P2)
+2. **Structured Logging for OTP Flow**
    - Replace string interpolation with structured logging
    - Consistent field names across auth flow
 
-3. **Telemetry Rate Limiting** (Issue #68 - P2)
+3. **Telemetry Rate Limiting**
    - Add rate limiting to telemetry endpoints
    - Prevent abuse of diagnostic APIs
 
-4. **Telemetry Cache Size Limits** (Issue #69 - P2)
+4. **Telemetry Cache Size Limits**
    - Implement bounded cache for telemetry data
    - Prevent memory exhaustion
 
@@ -211,21 +209,21 @@ High priority to address:
    - Threshold-based alerts for suspicious patterns
    - Integration with monitoring systems
 
-#### 2.6.4 Future
+#### 2.6.4 Longer-Term Options
 
 1. **Distributed Rate Limiting**
    - Move to backplane for consistent rate limiting
    - Handle multi-instance scenarios
 
-2. **Managed Identity Migration** (Issue #71 - P2)
+2. **Managed Identity Migration**
    - Implement DefaultAzureCredential
    - Remove connection strings from configuration
 
-3. **Infrastructure as Code** (Issue #84 - P1)
+3. **Infrastructure as Code**
    - Implement Azure Bicep templates
    - Automate resource provisioning
 
-4. **CD Pipeline Refactoring** (Issue #85 - P1)
+4. **CD Pipeline Refactoring**
    - Modernize GitHub Actions workflows
    - Improve deployment reliability
 
@@ -280,15 +278,15 @@ Return generic: `{ "error": "invalid_or_expired" }` to avoid oracle distinctions
 
 ## 5. Security Headers Implementation
 
-**Status: ✅ IMPLEMENTED** (via `SecurityHeadersMiddleware`, v0.9.4)
+**Status: ✅ Implemented**
 
 | Header | Implemented Value | Purpose | Status |
 |--------|------------------|---------|--------|
-| Content-Security-Policy | `default-src 'self'; script-src 'self' 'nonce-{RANDOM}'; style-src 'self' 'unsafe-inline'; connect-src 'self' wss: https:; img-src 'self' data: https:; font-src 'self' data:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'` | Restrict resource loading, prevent XSS | ✅ Issue #61 |
+| Content-Security-Policy | `default-src 'self'; script-src 'self' 'nonce-{RANDOM}'; style-src 'self' 'unsafe-inline'; connect-src 'self' wss: https:; img-src 'self' data: https:; font-src 'self' data:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'` | Restrict resource loading, prevent XSS | ✅ Implemented |
 | X-Content-Type-Options | `nosniff` | Prevent MIME type sniffing | ✅ Implemented |
 | X-Frame-Options | `DENY` | Prevent clickjacking | ✅ Implemented |
 | Referrer-Policy | `strict-origin-when-cross-origin` | Control referrer information leakage | ✅ Implemented |
-| Strict-Transport-Security | `max-age=31536000; includeSubDomains; preload` | Enforce HTTPS in production | ✅ Issue #64 |
+| Strict-Transport-Security | `max-age=31536000; includeSubDomains; preload` | Enforce HTTPS in production | ✅ Implemented |
 | Permissions-Policy | *Optional* | Restrict browser features | ⏳ Not implemented |
 
 **Implementation Details**:
