@@ -11,6 +11,7 @@ namespace Chat.Web.Pages.Admin.Users;
 [Authorize(Policy = "RequireAdminRole")]
 public class UsersAssignDispatchCenterModel : PageModel
 {
+    private const string IndexPage = "Index";
     private readonly IUsersRepository _users;
     private readonly IDispatchCentersRepository _dispatchCenters;
     private readonly Services.DispatchCenterTopologyService _topology;
@@ -35,10 +36,10 @@ public class UsersAssignDispatchCenterModel : PageModel
 
     public async Task<IActionResult> OnGet()
     {
-        if (string.IsNullOrWhiteSpace(UserName)) return RedirectToPage("Index");
+        if (string.IsNullOrWhiteSpace(UserName)) return RedirectToPage(IndexPage);
 
         var user = await _users.GetByUserNameAsync(UserName);
-        if (user == null) return RedirectToPage("Index");
+        if (user == null) return RedirectToPage(IndexPage);
 
         DispatchCenters = (await _dispatchCenters.GetAllAsync()).OrderBy(x => x.Name).ToList();
         SelectedDispatchCenterId = user.DispatchCenterId ?? string.Empty;
@@ -48,21 +49,21 @@ public class UsersAssignDispatchCenterModel : PageModel
     public async Task<IActionResult> OnPost()
     {
         var user = await _users.GetByUserNameAsync(UserName);
-        if (user == null) return RedirectToPage("Index");
+        if (user == null) return RedirectToPage(IndexPage);
 
         if (string.IsNullOrWhiteSpace(SelectedDispatchCenterId))
         {
             await _topology.RemoveUserFromDispatchCenterAsync(user.DispatchCenterId, user.UserName);
-            return RedirectToPage("Index");
+            return RedirectToPage(IndexPage);
         }
 
         var dispatchCenter = await _dispatchCenters.GetByIdAsync(SelectedDispatchCenterId);
         if (dispatchCenter == null)
         {
-            return RedirectToPage("Index");
+            return RedirectToPage(IndexPage);
         }
 
         await _topology.AssignUserAsync(SelectedDispatchCenterId, user.UserName);
-        return RedirectToPage("Index");
+        return RedirectToPage(IndexPage);
     }
 }

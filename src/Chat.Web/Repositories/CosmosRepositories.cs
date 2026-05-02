@@ -622,6 +622,8 @@ namespace Chat.Web.Repositories
 
     public class CosmosMessagesRepository : IMessagesRepository
     {
+        private const string MessageIdTagName = "app.message.id";
+        private const string SelectMessageByIdQuery = "SELECT TOP 1 * FROM c WHERE c.id = @id";
         private readonly Container _messages;
         private readonly IRoomsRepository _roomsRepo;
         private readonly ILogger<CosmosMessagesRepository> _logger;
@@ -731,8 +733,8 @@ namespace Chat.Web.Repositories
         public async Task<Message> GetByIdAsync(int id)
         {
             using var activity = Tracing.ActivitySource.StartActivity("cosmos.messages.getbyid", ActivityKind.Client);
-            activity?.SetTag("app.message.id", id);
-            var q = _messages.GetItemQueryIterator<MessageDoc>(new QueryDefinition("SELECT TOP 1 * FROM c WHERE c.id = @id").WithParameter("@id", id.ToString()));
+            activity?.SetTag(MessageIdTagName, id);
+            var q = _messages.GetItemQueryIterator<MessageDoc>(new QueryDefinition(SelectMessageByIdQuery).WithParameter("@id", id.ToString()));
             return await CosmosQueryHelper.ExecuteSingleResultQueryAsync(q, MapMessage, activity, _logger, "cosmos.messages.getbyid").ConfigureAwait(false);
         }
 
@@ -764,9 +766,9 @@ namespace Chat.Web.Repositories
         public async Task<Message> MarkReadAsync(int id, string userName, string dispatchCenterId)
         {
             using var activity = Tracing.ActivitySource.StartActivity("cosmos.messages.markread", ActivityKind.Client);
-            activity?.SetTag("app.message.id", id);
+            activity?.SetTag(MessageIdTagName, id);
             if (string.IsNullOrWhiteSpace(userName)) return null;
-            var q = _messages.GetItemQueryIterator<MessageDoc>(new QueryDefinition("SELECT TOP 1 * FROM c WHERE c.id = @id").WithParameter("@id", id.ToString()));
+            var q = _messages.GetItemQueryIterator<MessageDoc>(new QueryDefinition(SelectMessageByIdQuery).WithParameter("@id", id.ToString()));
             MessageDoc d = null;
             while (q.HasMoreResults && d == null)
             {
@@ -817,10 +819,10 @@ namespace Chat.Web.Repositories
             MessageTranslationUpdate update)
         {
             using var activity = Tracing.ActivitySource.StartActivity("cosmos.messages.updatetranslation", ActivityKind.Client);
-            activity?.SetTag("app.message.id", id);
+            activity?.SetTag(MessageIdTagName, id);
             activity?.SetTag("app.translation.status", update.Status.ToString());
             
-            var q = _messages.GetItemQueryIterator<MessageDoc>(new QueryDefinition("SELECT TOP 1 * FROM c WHERE c.id = @id").WithParameter("@id", id.ToString()));
+            var q = _messages.GetItemQueryIterator<MessageDoc>(new QueryDefinition(SelectMessageByIdQuery).WithParameter("@id", id.ToString()));
             MessageDoc d = null;
             while (q.HasMoreResults && d == null)
             {
@@ -877,8 +879,8 @@ namespace Chat.Web.Repositories
         public async Task<Message> UpdateEscalationAsync(int id, MessageEscalationStatus status, string escalationId)
         {
             using var activity = Tracing.ActivitySource.StartActivity("cosmos.messages.updateescalation", ActivityKind.Client);
-            activity?.SetTag("app.message.id", id);
-            var q = _messages.GetItemQueryIterator<MessageDoc>(new QueryDefinition("SELECT TOP 1 * FROM c WHERE c.id = @id").WithParameter("@id", id.ToString()));
+            activity?.SetTag(MessageIdTagName, id);
+            var q = _messages.GetItemQueryIterator<MessageDoc>(new QueryDefinition(SelectMessageByIdQuery).WithParameter("@id", id.ToString()));
             MessageDoc d = null;
             while (q.HasMoreResults && d == null)
             {

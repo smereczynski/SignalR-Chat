@@ -435,7 +435,7 @@ namespace Chat.Web.Hubs
             {
                 try
                 {
-                    var sourceLanguage = Chat.Web.Utilities.LanguageCode.NormalizeToLanguageCode(domainUser?.PreferredLanguage) ?? "auto";
+                    var sourceLanguage = Chat.Web.Utilities.LanguageCode.NormalizeToLanguageCode(domainUser.PreferredLanguage) ?? "auto";
                     sourceLanguageForUi = sourceLanguage;
                     var targets = Chat.Web.Utilities.LanguageCode.BuildTargetLanguages(room.Languages, sourceLanguage);
 

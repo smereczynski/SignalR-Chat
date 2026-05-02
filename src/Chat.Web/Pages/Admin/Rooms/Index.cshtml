@@ -82,9 +82,11 @@
                     <td>
                         @if (!r.IsActive)
                         {
-                            var pairRemoved = dcA == null || dcB == null
-                                || !(dcA.CorrespondingDispatchCenterIds?.Contains(r.DispatchCenterBId ?? "", System.StringComparer.OrdinalIgnoreCase) ?? false)
-                                && !(dcB.CorrespondingDispatchCenterIds?.Contains(r.DispatchCenterAId ?? "", System.StringComparer.OrdinalIgnoreCase) ?? false);
+                            var dispatchCenterAId = r.DispatchCenterAId ?? string.Empty;
+                            var dispatchCenterBId = r.DispatchCenterBId ?? string.Empty;
+                            var aHasPair = dcA?.CorrespondingDispatchCenterIds?.Contains(dispatchCenterBId, System.StringComparer.OrdinalIgnoreCase) == true;
+                            var bHasPair = dcB?.CorrespondingDispatchCenterIds?.Contains(dispatchCenterAId, System.StringComparer.OrdinalIgnoreCase) == true;
+                            var pairRemoved = dcA == null || dcB == null || (!aHasPair && !bHasPair);
 
                             if (pairRemoved)
                             {
@@ -92,16 +94,16 @@
                             }
                             else
                             {
-                                var aMissingOfficers = (dcA?.OfficerUserNames?.Count ?? 0) == 0;
-                                var bMissingOfficers = (dcB?.OfficerUserNames?.Count ?? 0) == 0;
+                                var aMissingOfficers = dcA!.OfficerUserNames.Count == 0;
+                                var bMissingOfficers = dcB!.OfficerUserNames.Count == 0;
                                 <small>
                                     @Localizer["MissingOfficers"]:
-                                    @if (aMissingOfficers && dcA != null)
+                                    @if (aMissingOfficers)
                                     {
                                         <a href="/Admin/DispatchCenters/Edit/@dcA.Id" class="text-warning">@dcA.Name</a>
                                         @if (bMissingOfficers){ <text>,</text> }
                                     }
-                                    @if (bMissingOfficers && dcB != null)
+                                    @if (bMissingOfficers)
                                     {
                                         <a href="/Admin/DispatchCenters/Edit/@dcB.Id" class="text-warning">@dcB.Name</a>
                                     }

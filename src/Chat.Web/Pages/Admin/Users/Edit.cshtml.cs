@@ -11,6 +11,7 @@ namespace Chat.Web.Pages.Admin.Users;
 [Authorize(Policy = "RequireAdminRole")]
 public class UsersEditModel : PageModel
 {
+    private const string IndexPage = "Index";
     private readonly IUsersRepository _users;
 
     public UsersEditModel(IUsersRepository users) => _users = users;
@@ -41,11 +42,11 @@ public class UsersEditModel : PageModel
     public async Task<IActionResult> OnGetAsync()
     {
         if (string.IsNullOrWhiteSpace(UserName))
-            return RedirectToPage("Index");
+            return RedirectToPage(IndexPage);
 
         var user = await _users.GetByUserNameAsync(UserName).ConfigureAwait(false);
         if (user == null)
-            return RedirectToPage("Index");
+            return RedirectToPage(IndexPage);
 
         Input = new InputModel
         {
@@ -63,14 +64,14 @@ public class UsersEditModel : PageModel
     public async Task<IActionResult> OnPostAsync()
     {
         if (string.IsNullOrWhiteSpace(UserName))
-            return RedirectToPage("Index");
+            return RedirectToPage(IndexPage);
 
         if (!ModelState.IsValid)
             return Page();
 
         var user = await _users.GetByUserNameAsync(UserName).ConfigureAwait(false);
         if (user == null)
-            return RedirectToPage("Index");
+            return RedirectToPage(IndexPage);
 
         user.FullName = string.IsNullOrWhiteSpace(Input.FullName) ? null : Input.FullName.Trim();
         user.Email = string.IsNullOrWhiteSpace(Input.Email) ? null : Input.Email.Trim();
@@ -80,6 +81,6 @@ public class UsersEditModel : PageModel
         user.Enabled = Input.Enabled;
 
         await _users.UpsertAsync(user).ConfigureAwait(false);
-        return RedirectToPage("Index");
+        return RedirectToPage(IndexPage);
     }
 }

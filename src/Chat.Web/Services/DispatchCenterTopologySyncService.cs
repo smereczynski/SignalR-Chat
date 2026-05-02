@@ -34,7 +34,7 @@ namespace Chat.Web.Services
             catch (Exception ex)
             {
                 _logger.LogCritical(ex, "Dispatch-center topology reconciliation failed during startup");
-                throw;
+                throw new InvalidOperationException("Dispatch-center topology reconciliation failed during startup.", ex);
             }
         }
 

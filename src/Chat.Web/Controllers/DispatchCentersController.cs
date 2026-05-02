@@ -8,6 +8,7 @@ using Chat.Web.Utilities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
+using System.Text.Json.Serialization;
 
 namespace Chat.Web.Controllers
 {
@@ -38,6 +39,7 @@ namespace Chat.Web.Controllers
             public string Id { get; set; }
             public string Name { get; set; }
             public string Country { get; set; }
+            [JsonRequired]
             public bool IfMain { get; set; }
             public List<string> OfficerUserNames { get; set; } = new();
             public List<string> CorrespondingDispatchCenterIds { get; set; } = new();

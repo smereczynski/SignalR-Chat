@@ -37,7 +37,16 @@
                             <span class="badge bg-secondary">@Localizer["No"]</span>
                         }
                     </td>
-                    <td class="text-muted">@(string.IsNullOrWhiteSpace(u.DispatchCenterId) ? "—" : (Model.DispatchCenterNames.TryGetValue(u.DispatchCenterId, out var dcName) ? dcName : u.DispatchCenterId))</td>
+                    @{
+                        var dispatchCenterDisplayName = "—";
+                        if (!string.IsNullOrWhiteSpace(u.DispatchCenterId))
+                        {
+                            dispatchCenterDisplayName = Model.DispatchCenterNames.TryGetValue(u.DispatchCenterId, out var dcName)
+                                ? dcName
+                                : u.DispatchCenterId;
+                        }
+                    }
+                    <td class="text-muted">@dispatchCenterDisplayName</td>
                     <td>
                         <form method="post" asp-page-handler="ToggleEnabled" class="d-inline">
                             <input type="hidden" name="userName" value="@u.UserName" />
