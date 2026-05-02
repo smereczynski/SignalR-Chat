@@ -21,23 +21,25 @@
         <div class="header">
             <h5>@Localizer["ChatRooms"]</h5>
             <div class="actions">
-                <a role="button" class="ms-3" id="expand-users-list">
+                <button type="button" class="ms-3" id="expand-users-list" aria-label="@Localizer["WhosHere", 0]">
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-users"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
-                </a>
-                <a role="button" id="expand-sidebar">
+                </button>
+                <button type="button" id="expand-sidebar" aria-label="@Localizer["ChatRooms"]">
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-menu"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
-                </a>
+                </button>
             </div>
         </div>
         <ul class="rooms list-unstyled" id="rooms-list" data-role="rooms-list">
             <li>
-                <a href="#" data-roomId="" data-role="room-link"></a>
+                <a href="#" data-roomId="" data-role="room-link" aria-label="@Localizer["ChatRooms"]">
+                    <span class="visually-hidden">@Localizer["ChatRooms"]</span>
+                </a>
             </li>
         </ul>
         <div class="profile">
             <div class="d-flex align-items-center flex-grow-1">
                 <span class="avatar me-2 text-uppercase d-none" id="profileAvatarInitial">?</span>
-                <img class="avatar me-2 d-none" id="profileAvatarImg" />
+                <img class="avatar me-2 d-none" id="profileAvatarImg" alt="" />
                 <span id="profileName"></span>
             </div>
             <div class="d-flex align-items-center gap-2">
@@ -61,7 +63,7 @@
     </div>
     <div class="main-content d-none" data-role="room-panel">
         <div class="header">
-            <h5 id="joinedRoom"></h5>
+            <h5 id="joinedRoom"><span class="visually-hidden">@Localizer["SelectRoomToJoin"]</span></h5>
             <div class="room-actions" data-role="room-actions"></div>
         </div>
         <div class="messages-container position-relative">
@@ -70,7 +72,7 @@
                 <li>
                     <div class="message-item">
                         <span class="avatar avatar-lg mx-2 text-uppercase d-none"></span>
-                        <img class="avatar avatar-lg mx-2 d-none" />
+                        <img class="avatar avatar-lg mx-2 d-none" alt="" />
                         <div class="message-content">
                             <div class="message-info d-flex flex-wrap align-items-center">
                                 <span class="author"></span>
@@ -86,9 +88,9 @@
             <input id="message-input" type="text" value="" maxlength="500" placeholder="@Localizer["MessageInputPlaceholder"]" />
             <div class="actions d-flex align-items-center gap-2">
                 <span id="queue-badge" class="badge bg-secondary d-none" title="@Localizer["MessagesWaitingToSend"]">0</span>
-                <a role="button" id="btn-send-message">
+                <button type="button" id="btn-send-message" aria-label="Send message">
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-send"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
-                </a>
+                </button>
             </div>
         </div>
     </div>
@@ -102,7 +104,7 @@
             <li>
                 <div class="user">
                     <span class="avatar me-2 text-uppercase d-none"></span>
-                    <img class="avatar me-2 d-none" />
+                    <img class="avatar me-2 d-none" alt="" />
                     <div class="user-info">
                         <span class="name"></span>
                     </div>
